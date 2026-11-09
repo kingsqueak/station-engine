@@ -58,7 +58,12 @@ public static class TciProtocol
     // Protocol constants
     public const string ProtocolName = "ExpertSDR3";
     public const string ProtocolVersion = "2.0";
-    public const string DeviceName = "Zeus";
+    // SimpleHPSDR fork: the host names the device TCI clients see.
+    public const string DeviceNameEnvironmentVariable = "STATION_ENGINE_TCI_DEVICE";
+    public static readonly string DeviceName =
+        Environment.GetEnvironmentVariable(DeviceNameEnvironmentVariable) is { Length: > 0 } name
+            ? name.Trim()
+            : "Zeus";
 
     /// <summary>
     /// Build a TCI command string: <c>command:arg1,arg2,...;</c>

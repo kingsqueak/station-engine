@@ -89,8 +89,13 @@ public readonly record struct DisplayHardwareProfile(
             model.Contains(marker, StringComparison.OrdinalIgnoreCase));
     }
 
+    // SimpleHPSDR fork: STATION_ENGINE_NATIVE_G2=1 says this is a G2's own computer
+    // without Zeus Link's G2 package installed.
+    public const string NativeG2EnvironmentVariable = "STATION_ENGINE_NATIVE_G2";
+
     private static bool ReadG2PackageMarker()
     {
+        if (Environment.GetEnvironmentVariable(NativeG2EnvironmentVariable) == "1") return true;
         try { return File.ReadAllText("/usr/share/zeus-link-g2/package-kind").Trim() == "deb-g2"; }
         catch (IOException) { return false; }
         catch (UnauthorizedAccessException) { return false; }
