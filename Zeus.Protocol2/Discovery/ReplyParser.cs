@@ -90,6 +90,10 @@ public static class ReplyParser
             && codeVersion == 120 && numReceivers == 2
             && raw[21] == 1 && raw[22] == 0 && betaVersion == 0;
         var board = publishedBrick2 ? HpsdrBoardKind.Hermes : MapBoard(rawBoardId);
+        // SimpleHPSDR: any Brick2 (MAC 02:B2:xx) is Hermes-class, whatever
+        // firmware version or board byte it reports (BrickRadios).
+        if (Zeus.Contracts.BrickRadios.FromMac(macBytes) == Zeus.Contracts.BrickModel.Brick2)
+            board = HpsdrBoardKind.Hermes;
         var firmwareString = FormatFirmware(codeVersion, betaVersion);
 
         var details = new DiscoveryDetails(

@@ -82,6 +82,11 @@ public static class ReplyParser
         var hl2Minor = raw[21];
 
         var board = ClassifyBoard(rawBoardId, codeVersion);
+        // SimpleHPSDR: a Brick2 (MAC 02:B2:xx) is Hermes-class whatever board
+        // byte its firmware reports; 0x06 with a code version >= 40 would
+        // otherwise read as a Hermes-Lite 2.
+        if (Zeus.Contracts.BrickRadios.FromMac(macBytes) == Zeus.Contracts.BrickModel.Brick2)
+            board = HpsdrBoardKind.Hermes;
         var isHl2 = board == HpsdrBoardKind.HermesLite2;
 
         var fixedIp = isHl2 && (hl2Flags & Hl2FixedIpBit) != 0;

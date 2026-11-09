@@ -67,7 +67,35 @@ internal static class BoardCapabilitiesTable
     /// variants additionally advertise the bench-confirmed 1536 kHz P2 RX/DDC
     /// ceiling instead of the conservative 384 kHz fallback.
     /// </summary>
-    public static BoardCapabilities For(HpsdrBoardKind board, OrionMkIIVariant variant) => board switch
+    // SimpleHPSDR: the Brick SDR connected now (from its MAC at connect), or
+    // None. A Brick announces itself as a plain Hermes / Angelia, so this is
+    // what tells the capabilities apart; the engine drives one radio at a time.
+    private static int s_connectedBrick;
+    public static BrickModel ConnectedBrick
+    {
+        get => (BrickModel)Volatile.Read(ref s_connectedBrick);
+        set => Volatile.Write(ref s_connectedBrick, (int)value);
+    }
+
+    // Brick2: Hermes-class with one SMA antenna port (no Alex antenna relays or
+    // RX aux inputs), a 15 W PA on 160-6 m, and its own 0-31 dB step attenuator.
+    // Built on first use: HermesClass is declared further down, and static
+    // fields initialise in source order.
+    private static BoardCapabilities? s_brick2;
+    private static BoardCapabilities Brick2 => s_brick2 ??= HermesClass with
+    {
+        MaxPowerWatts = 15,
+        HasTxAntennaRelays = false,
+        HasRxAntennaRelays = false,
+        RxAuxInputs = RxAuxInputs.None,
+    };
+
+    public static BoardCapabilities For(HpsdrBoardKind board, OrionMkIIVariant variant) =>
+        board is HpsdrBoardKind.Hermes && ConnectedBrick == BrickModel.Brick2
+            ? Brick2
+            : ForBoard(board, variant);
+
+    private static BoardCapabilities ForBoard(HpsdrBoardKind board, OrionMkIIVariant variant) => board switch
     {
         // --- Hermes-class single-RX, Alex-class BPF, Hermes-side L/R swap ---
         // Thetis clsHardwareSpecific.cs:87-121 sets RxADC=1, MKIIBPF=0,

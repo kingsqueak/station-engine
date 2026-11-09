@@ -7817,6 +7817,7 @@ public partial class DspPipelineService : BackgroundService,
         // (Hermes-on-P2 48 kHz IQ gain correction; future per-board branches)
         // are gated correctly.
         client.SetBoardKind(boardKind);
+        client.SetBrickModel(BoardCapabilitiesTable.ConnectedBrick);
         // 0x0A wire-byte alias variant (issue #218). For non-OrionMkII
         // boards the value is ignored; for OrionMkII it picks the right
         // calibration/PA constants AND unlocks the Anvelina-PRO3 DX OC

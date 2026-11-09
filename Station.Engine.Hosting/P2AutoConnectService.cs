@@ -13,7 +13,8 @@ namespace Zeus.Server;
 internal sealed record Protocol2ConnectionProbe(
     bool Busy,
     HpsdrBoardKind BoardKind,
-    string? Firmware);
+    string? Firmware,
+    System.Net.NetworkInformation.PhysicalAddress? Mac = null);
 
 internal interface IProtocol2ConnectionConnector
 {
@@ -55,7 +56,8 @@ internal sealed class Protocol2ConnectionConnector(
             : new Protocol2ConnectionProbe(
                 probe.Details.Busy,
                 probe.Board,
-                probe.FirmwareString);
+                probe.FirmwareString,
+                probe.Mac);
     }
 
     public Task<int> ConnectAsync(
@@ -256,6 +258,8 @@ internal class P2AutoConnectService : BackgroundService
         var boardKind = probe.BoardKind == HpsdrBoardKind.Unknown
             ? HpsdrBoardKind.OrionMkII
             : probe.BoardKind;
+        // SimpleHPSDR: a Brick is known by its MAC (BrickRadios).
+        BoardCapabilitiesTable.ConnectedBrick = BrickRadios.FromMac(probe.Mac);
         _log.LogInformation(
             "p2.autoconnect connecting endpoint={Endpoint} rateKhz={RateKhz} board={Board}",
             endpoint,

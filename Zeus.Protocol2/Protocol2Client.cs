@@ -1929,6 +1929,48 @@ public sealed partial class Protocol2Client : IDisposable, IAsyncDisposable
     /// specific board families can be applied without polluting the hot path
     /// with an out-of-band lookup.
     /// </summary>
+    // SimpleHPSDR: the Brick SDR on the other end, if any (from its MAC).
+    private volatile BrickModel _brick;
+
+    /// <summary>Brick SDR handling (see <see cref="WriteBrickDdcWords"/>). A
+    /// Brick2's PA is always enabled.</summary>
+    public void SetBrickModel(BrickModel brick)
+    {
+        _brick = brick;
+        if (brick == BrickModel.Brick2) _paEnabled = true;
+        if (CanSendCmdHighPriority) SendCmdHighPriority(run: true);
+    }
+
+    internal BrickModel BrickModelForTesting => _brick;
+
+    // Brick frequency words beyond the normal receiver slots. Writing a phase
+    // word into a DDC slot that isn't enabled changes nothing else, so both are
+    // safe on firmware that ignores them.
+    //  - Brick3 (Angelia class, receivers at DDC2/3): its STM32 picks the band
+    //    and filters from the DDC0/DDC1 words, which are otherwise only written
+    //    for PureSignal or diversity. In receive, mirror RX1 (and RX2, or RX1
+    //    again) into them. (deskHPSDR p2_angelia_ddc0_map.)
+    //  - Brick2 (Hermes class, RX1 on DDC0): while keyed on a frequency that
+    //    needs a different low-pass filter from RX1's (cross-band split), put
+    //    the transmit frequency in DDC0. deskHPSDR reports no RF otherwise
+    //    (its brick_ddc0_fix, off by default there); scoped here to the
+    //    cross-band case it describes. Unconfirmed on hardware.
+    internal void WriteBrickDdcWords(byte[] p, bool txKeyed, bool psWire, bool timeMuxPsBurst,
+        bool diversityPair, uint rxPhase)
+    {
+        switch (_brick)
+        {
+            case BrickModel.Brick3 when RxBaseDdc(_boardKind) >= 2 && !diversityPair && !(psWire && txKeyed):
+                WriteBeU32(p, 9, rxPhase);
+                WriteBeU32(p, 13, Volatile.Read(ref _rx2Enabled) != 0 ? FrequencyHzToPhaseWord(_rx2FreqHz) : rxPhase);
+                break;
+            case BrickModel.Brick2 when RxBaseDdc(_boardKind) == 0 && txKeyed && !timeMuxPsBurst && !psWire
+                                        && LpfBits(_txDucFreqHz) != LpfBits(_rxFreqHz):
+                WriteBeU32(p, 9, FrequencyHzToPhaseWord(_txDucFreqHz));
+                break;
+        }
+    }
+
     public void SetBoardKind(HpsdrBoardKind kind)
     {
         var previousGeometry = WidebandGeometryFor(_boardKind, _variant);
@@ -2342,7 +2384,7 @@ public sealed partial class Protocol2Client : IDisposable, IAsyncDisposable
 
     public void SetPaEnabled(bool enabled)
     {
-        _paEnabled = enabled;
+        _paEnabled = enabled || _brick == BrickModel.Brick2;
         if (_rxTask is not null) SendCmdGeneral();
     }
 
@@ -4720,6 +4762,8 @@ public sealed partial class Protocol2Client : IDisposable, IAsyncDisposable
             WriteBeU32(p, 9, rxPhase);
             WriteBeU32(p, 13, rxPhase);
         }
+
+        WriteBrickDdcWords(p, txKeyed, psWire, timeMuxPsBurst, diversityPair, rxPhase);
 
         // Drive level (0..255) at byte 345. Set by RadioService after applying
         // per-band PA gain calibration. Honored by the radio only while run=1

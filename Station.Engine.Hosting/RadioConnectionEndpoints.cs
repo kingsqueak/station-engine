@@ -464,6 +464,7 @@ public static class RadioConnectionEndpoints
             ["gatewareBuild"] = radio.Details.GatewareBuild.ToString(),
             ["rawReplyHex"] = Convert.ToHexString(radio.Details.RawReply),
         };
+        if (BrickRadios.Name(radio.Mac) is { } brick) details["model"] = brick;
         if (radio.Details.FixedIpEnabled) details["fixedIpEnabled"] = "true";
         if (radio.Details.FixedIpOverridesDhcp) details["fixedIpOverridesDhcp"] = "true";
         if (radio.Details.MacAddressModified) details["macAddressModified"] = "true";
@@ -492,6 +493,7 @@ public static class RadioConnectionEndpoints
         };
         if (radio.Details.BetaVersion != 0)
             details["betaVersion"] = radio.Details.BetaVersion.ToString();
+        if (BrickRadios.Name(radio.Mac) is { } brick) details["model"] = brick;
         return details;
     }
 
@@ -642,6 +644,8 @@ public static class RadioConnectionEndpoints
         // A manually entered IP carries no board byte; the busy probe's
         // reply names the board, so use it rather than Unknown (#3070).
         var boardKind = ResolveP2BoardKind(req.BoardId, probe);
+        // SimpleHPSDR: a Brick is known by its MAC (BrickRadios).
+        BoardCapabilitiesTable.ConnectedBrick = BrickRadios.FromMac(probe?.Mac);
 
         try
         {

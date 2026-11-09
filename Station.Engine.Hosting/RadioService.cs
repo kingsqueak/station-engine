@@ -1640,6 +1640,8 @@ public sealed partial class RadioService : IDisposable
         HpsdrBoardKind discoveredKind = HpsdrBoardKind.Unknown, string? firmware = null,
         PhysicalAddress? mac = null)
     {
+        // SimpleHPSDR: a Brick is known by its MAC (BrickRadios).
+        BoardCapabilitiesTable.ConnectedBrick = BrickRadios.FromMac(mac);
         var (generation, operatorActionToken) = BeginOperatorConnectionAction();
         var attempt = new P1ConnectionAttempt(
             endpoint,
@@ -6435,8 +6437,11 @@ public sealed partial class RadioService : IDisposable
                 maxPowerWatts)
             : TxDriveOutput.Off;
         byte driveByte = driveOutput.DriveByte;
+        // SimpleHPSDR: a Brick2's PA has no off switch to speak of (deskHPSDR
+        // pins it on too); safety and per-band PA-off still apply.
+        bool paSetting = cfg.Global.PaEnabled || BoardCapabilitiesTable.ConnectedBrick == BrickModel.Brick2;
         bool paEnabled = allowed
-            && cfg.Global.PaEnabled && !bandCfg.DisablePa
+            && paSetting && !bandCfg.DisablePa
             && (!txThroughTransverter || !txXvtrBand.DisablePa);
 
         _log.LogInformation(
