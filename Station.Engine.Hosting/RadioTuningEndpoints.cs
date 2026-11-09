@@ -60,16 +60,18 @@ public static class RadioTuningEndpoints
             string? radioKey,
             string? layoutId,
             TransverterSettingsStore store,
-            LayoutStore layouts) =>
-            Results.Ok(store.GetForLayout(
-                layouts,
-                radioKey ?? "default",
-                layoutId ?? "default")));
+            LayoutStore layouts,
+            RadioService radio) =>
+        {
+            var (key, layout) = ResolveTransverterWorkspace(radioKey, layoutId, layouts, radio, create: false);
+            return Results.Ok(store.GetForLayout(layouts, key, layout));
+        });
 
         endpoints.MapPut("/api/radio/transverter", (
             TransverterSettingsSetRequest req,
             TransverterSettingsStore store,
             LayoutStore layouts,
+            RadioService radio,
             TxService tx) =>
         {
             if (tx.IsMoxOn || tx.IsTunOn || tx.IsTwoToneOn)
@@ -85,6 +87,9 @@ public static class RadioTuningEndpoints
                 req.Bands is null && req.Enabled ? 0 : req.ActiveBandId);
             if (!TransverterFrequencyConverter.TryValidate(settings, out var error))
                 return Results.BadRequest(new { error });
+
+            var (radioKey, layoutId) = ResolveTransverterWorkspace(req.RadioKey, req.LayoutId, layouts, radio, create: true);
+            req = req with { RadioKey = radioKey, LayoutId = layoutId };
 
             // Suppress intermediate notifications so TCI never observes the new
             // workspace flag with the old IF/RF anchors (or vice versa).
@@ -277,5 +282,44 @@ public static class RadioTuningEndpoints
         });
 
         return endpoints;
+    }
+
+    // SimpleHPSDR fork: the transverter switch and active band live in a web-UI
+    // workspace, and the engine only obeys the connected radio's active one. A
+    // client without workspaces (SimpleHPSDR, scripts) sends the defaults, which
+    // named a workspace that never exists, so every change failed with
+    // "radio/layout workspace not found" and reads never showed the radio's state.
+    // Defaults now mean the connected radio and its active workspace, and setting
+    // creates an empty workspace when the radio has none. Named ones are unchanged.
+    internal static (string RadioKey, string LayoutId) ResolveTransverterWorkspace(
+        string? radioKey,
+        string? layoutId,
+        LayoutStore layouts,
+        RadioService radio,
+        bool create)
+    {
+        static bool IsDefault(string? s) =>
+            string.IsNullOrWhiteSpace(s) || string.Equals(s.Trim(), "default", StringComparison.Ordinal);
+
+        // The same key the engine reads the live state under (GetForConnectedRadio),
+        // "Unknown" while no radio is connected.
+        var key = IsDefault(radioKey) ? radio.ConnectedBoardKind.ToString() : radioKey!;
+        var layout = layoutId ?? "default";
+        if (!IsDefault(layout)) return (key, layout);
+
+        var existing = layouts.GetForRadio(key);
+        if (existing.Layouts.Any(l => l.Id == layout)) return (key, layout);
+        if (existing.ActiveLayoutId is { Length: > 0 } active && existing.Layouts.Any(l => l.Id == active))
+            return (key, active);
+        if (existing.Layouts.Count > 0)
+        {
+            // Workspaces but none active: make the first one active, or the
+            // change would land in a workspace the engine doesn't read.
+            var first = existing.Layouts[0].Id;
+            if (create) layouts.SetActive(key, first);
+            return (key, first);
+        }
+        if (create) layouts.UpsertNamed(key, "default", "Default", "{}");
+        return (key, "default");
     }
 }
