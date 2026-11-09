@@ -7,7 +7,6 @@ using Microsoft.AspNetCore.Cors.Infrastructure;
 using Microsoft.Extensions.Primitives;
 using Zeus.Contracts;
 using Zeus.Server.Diagnostics;
-using Zeus.Server.Tdoa;
 
 namespace Zeus.Server;
 
@@ -165,21 +164,17 @@ public static class StationEngineEndpoints
         endpoints.MapTxSpectrum();
         endpoints.MapWaveform();
         endpoints.MapBandwidthSpectrum();
-        endpoints.MapTdoaEndpoints();
-        endpoints.MapTdoaContributionEndpoints();
         // Same field gap as ImdMeasure: the SPA's Windows Firewall control
         // (/api/system/windows-firewall[+ /allow]) was product-host-only, so
         // it 404'd against a standalone engine in attach mode.
         endpoints.MapWindowsFirewallEndpoints();
         endpoints.MapStationEngineCapabilitiesEndpoint();
         endpoints.MapLanProxyEndpoint();
-        endpoints.MapGodsEyeEndpoints();
         endpoints.MapNativeAudioEndpoints();
         endpoints.MapRadioStateEndpoint();
         endpoints.MapRadioConnectionEndpoints();
         endpoints.MapVfoEndpoints();
         endpoints.MapReceiverConfigurationEndpoints();
-        // SimpleHPSDR fork: no KiwiSDR routes.
         endpoints.MapRadioTuningEndpoints();
         endpoints.MapReceiverLoEndpoint();
         endpoints.MapCtunEndpoint();
@@ -262,7 +257,6 @@ public static class StationEngineEndpoints
         // Public Listening for the Zeus Link product host (ADR-0010): private,
         // token-gated loopback routes. The Desktop host keeps its in-process
         // feed and never maps these.
-        PublicListen.PublicListenStationEndpoints.MapPublicListenStationEndpoints(endpoints);
 
         endpoints.Map(
             "/ws",
@@ -288,14 +282,9 @@ public static class StationEngineEndpoints
         // restricted, token-gated loopback socket that is never an operator
         // client (it never joins StreamingHub._clients). Any other feed value
         // is refused rather than falling through to an operator session.
+        // SimpleHPSDR fork: no Public Listening, so every feed socket is refused.
         if (PublicListen.PublicListenStationEndpoints.IsFeedSocketRequest(context.Request))
         {
-            if (context.Request.Query["feed"] is { Count: 1 } feed
-                && string.Equals(feed[0], "listener", StringComparison.Ordinal))
-            {
-                await PublicListen.PublicListenStationEndpoints.HandleFeedSocketAsync(context).ConfigureAwait(false);
-            }
-            else
             {
                 context.Response.StatusCode = StatusCodes.Status400BadRequest;
             }

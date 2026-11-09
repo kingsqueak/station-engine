@@ -166,9 +166,6 @@ internal static class PrefsCollectionShapeGuard
 
     private static readonly TypedRead[] TypedReads =
     [
-        new(KiwiSettingsStore.CollectionName, static db =>
-            _ = db.GetCollection<KiwiSettingsEntry>(KiwiSettingsStore.CollectionName)
-                .FindAll().FirstOrDefault()),
         new(DisplaySettingsStore.CollectionName, static db =>
             _ = db.GetCollection<DisplaySettingsEntry>(DisplaySettingsStore.CollectionName)
                 .FindAll().FirstOrDefault()),

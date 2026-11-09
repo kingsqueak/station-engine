@@ -3,7 +3,6 @@
 
 using Zeus.Dsp.Wdsp;
 using Zeus.Protocol1;
-using Zeus.Server.Tdoa;
 
 namespace Zeus.Server;
 
@@ -101,15 +100,10 @@ public static class StationEngineHostingExtensions
         // 404s from the standalone station engine.
         // Keep the established zeus-prefs.db ownership so existing saved URLs,
         // passwords, feature-profile exports, and restores remain intact.
-        services.AddSingleton<KiwiSettingsStore>();
-        services.AddSingleton<KiwiSdrService>();
-        services.AddSingleton<KiwiDirectoryService>();
-        services.AddSingleton<IExternalReceiverSource>(sp =>
-            sp.GetRequiredService<KiwiSdrService>());
-        services.AddSingleton<IExternalReceiverControlPort>(sp =>
-            sp.GetRequiredService<KiwiSdrService>());
-        services.AddSingleton<IExternalRxAudioSource>(sp =>
-            sp.GetRequiredService<KiwiSdrService>());
+        // SimpleHPSDR fork: no KiwiSDR receiver; the external-receiver ports are the null ones.
+        services.AddSingleton<IExternalReceiverSource, NullExternalReceiverSource>();
+        services.AddSingleton<IExternalReceiverControlPort, NullExternalReceiverControlPort>();
+        services.AddSingleton<IExternalRxAudioSource, NullExternalRxAudioSource>();
         services.AddSingleton<IExternalRadioSidecar, NullExternalRadioSidecar>();
         services.AddSingleton<IInitialTxAudioConfigSource, NullInitialTxAudioConfigSource>();
 
@@ -175,20 +169,6 @@ public static class StationEngineHostingExtensions
         services.AddSingleton<BottomPinStore>();
         services.AddSingleton<PanWfSplitStore>();
         services.AddSingleton<OperatorIdentityStore>();
-        // God's Eye on the engine surface is enabled unconditionally. The
-        // Features-menu gate lives in the product host, which owns the
-        // entitlement registry the predicate reads; the engine has no such
-        // registry, and every other part of its God's Eye surface (layers,
-        // settings, the APRS tracker) already behaves as enabled. Leaving the
-        // predicate null instead fell through to the fail-closed default in
-        // AddGodsEyeServices, which /api/godseye/provider-credentials consults
-        // — so an engine in attach mode served empty provider keys while
-        // /api/godseye/settings reported the same keys as configured. The
-        // APRS tracker reads the same predicate through its own gate, which
-        // already defaulted fail-open, so it is unaffected either way.
-        services.AddGodsEyeServices(options.GodsEyeDatabasePath ?? PrefsDbPath.EngineGet(),
-            featureEnabled: _ => true,
-            fallbackGrid: provider => provider.GetService<OperatorIdentityStore>()?.Get().Grid);
         // Zeus Link bundle settings mirror (feature toggles + amplifier
         // configs as one opaque product JSON document). Product database, same
         // reasoning as the operator UI families above: it must ride the
@@ -248,10 +228,6 @@ public static class StationEngineHostingExtensions
         services.AddSingleton<FrequencyCalibrationService>();
         services.AddSingleton<PaCalibrationService>();
         services.AddSingleton<ImdMeasureService>();
-        services.AddSingleton<TdoaSolver>();
-        services.AddSingleton<IKiwiTdoaCaptureTransport, KiwiTdoaCaptureTransport>();
-        services.AddSingleton<ITdoaContributionSource, KiwiTdoaContributionSource>();
-        services.AddSingleton<TdoaContributionCoordinator>();
         services.AddSingleton<TxService>();
         services.AddSingleton<TuneCarrierCommandCoordinator>();
         // The pipeline builds one TX-gated modem around the registered
@@ -300,9 +276,6 @@ public static class StationEngineHostingExtensions
         // FFT/wideband/frame-rate/decimation/waterfall settings) is live from
         // boot instead of silently running at defaults until the first edit.
         services.AddHostedService<DisplaySettingsApplyService>();
-        // SimpleHPSDR fork: the KiwiSDR client stays registered (other services
-        // take it through the external-receiver ports) but never starts, and its
-        // routes aren't mapped.
         services.AddHostedService(sp => sp.GetRequiredService<DspPipelineService>());
         if (!string.IsNullOrWhiteSpace(options.P2AutoConnectEndpoint))
         {

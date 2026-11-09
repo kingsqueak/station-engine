@@ -85,5 +85,5 @@ internal sealed record StationEngineFeatureMatrix(
     bool UiPersistence = true,
     bool FrontPanel = false,
     bool LanBrowser = false,
-    bool GodsEye = true,
+    bool GodsEye = false,
     bool Plugins = false);
