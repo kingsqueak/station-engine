@@ -60,7 +60,16 @@ public sealed record WindowsFirewallApplyResult(
 
 public sealed class WindowsFirewallService : IWindowsFirewallService
 {
-    public const string RuleName = "ZeusSDR (HPSDR receive)";
+    public const string RuleNameEnvironmentVariable = "STATION_ENGINE_FIREWALL_RULE";
+
+    // A host can name its own rule, so granting it never replaces Zeus's rule.
+    public static string RuleName { get; } =
+        Environment.GetEnvironmentVariable(RuleNameEnvironmentVariable) is { Length: > 0 } name
+            ? name.Trim()
+            : "ZeusSDR (HPSDR receive)";
+
+    // Only clean up Zeus's pre-rebrand rule when the rule is Zeus's own.
+    internal static bool RemovesLegacyRule => RuleName == "ZeusSDR (HPSDR receive)";
 
     // The firewall rule shipped under the pre-rebrand product name. We delete it
     // whenever we (re)apply the rule so an upgraded-over install doesn't leave an
@@ -359,6 +368,7 @@ internal sealed class ProcessWindowsFirewallCommandRunner : IWindowsFirewallComm
     {
         // Remove any pre-rebrand rule first so upgraders don't accumulate a
         // stale "OpenHPSDR Zeus (HPSDR receive)" duplicate. Idempotent.
+        if (WindowsFirewallService.RemovesLegacyRule)
         await RunNetshAsync(
             [
                 "advfirewall",
@@ -440,7 +450,9 @@ internal sealed class ProcessWindowsFirewallCommandRunner : IWindowsFirewallComm
                 "$rule = " + PowerShellLiteral(ruleName),
                 "$legacyRule = " + PowerShellLiteral(WindowsFirewallService.LegacyRuleName),
                 "$program = " + PowerShellLiteral(programPath),
-                "& $netsh advfirewall firewall delete rule (\"name=\" + $legacyRule) | Out-Null",
+                WindowsFirewallService.RemovesLegacyRule
+                    ? "& $netsh advfirewall firewall delete rule (\"name=\" + $legacyRule) | Out-Null"
+                    : "",
                 "& $netsh advfirewall firewall delete rule (\"name=\" + $rule) | Out-Null",
                 "$ErrorActionPreference = 'Stop'",
                 "& $netsh advfirewall firewall add rule (\"name=\" + $rule) dir=in action=allow (\"program=\" + $program) enable=yes",
