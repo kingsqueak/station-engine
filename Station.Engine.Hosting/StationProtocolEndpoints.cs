@@ -341,7 +341,6 @@ public static class StationProtocolEndpoints
         });
 
         // Engine-hosted WSPR decoder (GPL); the product reads its spots here.
-        endpoints.MapWsprDecoderEndpoints();
 
         return endpoints;
     }

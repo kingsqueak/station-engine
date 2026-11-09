@@ -12,7 +12,6 @@ using Zeus.Server;
 using Zeus.Server.Cat;
 using Zeus.Server.Diagnostics;
 using Zeus.Server.Tci;
-using Zeus.Plugins.Host;
 
 namespace Zeus.StationEngine;
 
@@ -259,13 +258,6 @@ public partial class Program
         // the rule genuinely has to be re-pointed; see
         // docs/designs/windows-firewall-zero-prompt.md.
         if (!options.ReceiveOnly) builder.Services.AddWindowsFirewallStartupGrant();
-        builder.Services.AddZeusPlugins(
-            prefsDbPathProvider: PrefsDbPath.EngineGet,
-            options: new PluginManagerOptions
-            {
-                HostDataDirectory = Path.GetDirectoryName(PrefsDbPath.LogbookPath()),
-                PluginRoot = StationFeaturePluginRoot(),
-            });
         // The later registration intentionally replaces the engine's inert
         // fallback so optional hardware follows Zeus Link's first-party
         // Features state, including live enable/disable without restart.
@@ -292,7 +284,6 @@ public partial class Program
             Environment.GetEnvironmentVariable(StationAccessTokenEnvironmentVariable),
             allRequests: options.ReceiveOnly);
         if (options.ReceiveOnly) app.Use(ReceiveOnlyRuntime.RestrictRequests);
-        app.Use(RejectRemotePluginMutations);
         app.UseWebSockets(new WebSocketOptions
         {
             KeepAliveInterval = TimeSpan.FromSeconds(20),
@@ -306,36 +297,9 @@ public partial class Program
                 options.BindMode,
                 options.LanHttpsPort),
             allowLanHttpsSameHost: options.LanHttpsPort is not null);
-        var pluginManager = app.Services.GetRequiredService<PluginManager>();
-        if (!options.ReceiveOnly) pluginManager.StartAsync(default).GetAwaiter().GetResult();
-        PluginEndpoints.MapAll(app, pluginManager);
+        // SimpleHPSDR fork: no plugin or VST host. Zeus's could install plugins
+        // from its online registry and load DLLs and VST/AU effects from a folder.
         return app;
-    }
-
-    internal static async Task RejectRemotePluginMutations(
-        HttpContext context,
-        RequestDelegate next)
-    {
-        var path = context.Request.Path;
-        var pathText = path.Value ?? string.Empty;
-        var mutatesPluginState = path.StartsWithSegments("/api/plugins/install")
-            || string.Equals(pathText, "/api/plugins/checkout", StringComparison.OrdinalIgnoreCase)
-            || (HttpMethods.IsDelete(context.Request.Method)
-                && pathText.StartsWith("/api/plugins/", StringComparison.OrdinalIgnoreCase)
-                && pathText.Count(character => character == '/') == 3);
-        var remoteAddress = context.Connection.RemoteIpAddress;
-        if (mutatesPluginState
-            && (remoteAddress is null || !IPAddress.IsLoopback(remoteAddress)))
-        {
-            context.Response.StatusCode = StatusCodes.Status403Forbidden;
-            await context.Response.WriteAsJsonAsync(new
-            {
-                error = "Plugin installation and removal are available only from this station computer.",
-            }).ConfigureAwait(false);
-            return;
-        }
-
-        await next(context).ConfigureAwait(false);
     }
 
     internal static int ParsePort(IReadOnlyList<string> args) => ParseOptions(args).Port;
@@ -558,18 +522,6 @@ public partial class Program
         Console.Error.WriteLine(
             $"prefs.guard falling back to temporary prefs DB at {fallback}; settings will not persist this session.");
         return fallback;
-    }
-
-    private static string StationFeaturePluginRoot()
-    {
-        var configured = Environment.GetEnvironmentVariable(PluginRoot.EnvVar);
-        if (!string.IsNullOrWhiteSpace(configured))
-            return configured;
-
-        var desktopPluginRoot = PluginRoot.DefaultPath();
-        var zeusDataDirectory = Path.GetDirectoryName(desktopPluginRoot)
-            ?? throw new InvalidOperationException("Could not resolve the Zeus data directory.");
-        return Path.Combine(zeusDataDirectory, "features");
     }
 
     private static TciRuntimeConfig? LoadPersistedTci()

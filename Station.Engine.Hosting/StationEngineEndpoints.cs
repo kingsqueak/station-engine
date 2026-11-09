@@ -180,7 +180,7 @@ public static class StationEngineEndpoints
         endpoints.MapRadioConnectionEndpoints();
         endpoints.MapVfoEndpoints();
         endpoints.MapReceiverConfigurationEndpoints();
-        endpoints.MapKiwiEndpoints();
+        // SimpleHPSDR fork: no KiwiSDR routes.
         endpoints.MapRadioTuningEndpoints();
         endpoints.MapReceiverLoEndpoint();
         endpoints.MapCtunEndpoint();
@@ -203,7 +203,7 @@ public static class StationEngineEndpoints
         endpoints.MapSpectralZoomEndpoint();
         endpoints.MapWorkspaceZoomEndpoint();
         endpoints.MapOperatorUiSettingsEndpoints();
-        endpoints.MapDisplayIntelligenceSettingsEndpoints();
+        // SimpleHPSDR fork: no wideband signal-marker settings routes.
         endpoints.MapOperatorSettingsEndpoints();
         // The attached SPA sends the same waterfall render-state beacon as the
         // full host. Without the shared route Zeus Link logs a 404 after every

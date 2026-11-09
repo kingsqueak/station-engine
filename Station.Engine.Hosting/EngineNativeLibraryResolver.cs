@@ -38,8 +38,6 @@ internal static class EngineNativeLibraryResolver
             return MiniAudioInterop.ResolveLibrary(assembly);
         if (libraryName == RadeNativeMethods.LibraryName)
             return RadeNativeLoader.ResolveLibrary(assembly);
-        if (libraryName == WsprNativeMethods.LibraryName)
-            return WsprNativeLoader.ResolveLibrary(assembly);
         if (libraryName == AsioInterop.LibraryName)
             return AsioInterop.ResolveLibrary(assembly);
         return IntPtr.Zero;
