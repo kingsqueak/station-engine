@@ -15,17 +15,10 @@ namespace Zeus.Server;
 /// <summary>Maps the standalone station engine's HTTP and WebSocket surface.</summary>
 public static class StationEngineEndpoints
 {
-    internal static readonly HashSet<string> AllowedBrowserOrigins = new(StringComparer.Ordinal)
-    {
-        "https://app.zeussdr.com",
-        // Staging Pages alias for the develop-branch SPA. Production stays
-        // app.zeussdr.com, which deploys only from main; this alias lets a
-        // staging-channel engine install serve the develop web app without a
-        // local dev server.
-        "https://staging.zeus-web-app-7ag.pages.dev",
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    };
+    // SimpleHPSDR fork: no web page may drive this engine. Upstream allowed Zeus's
+    // hosted web app (app.zeussdr.com), its staging site and a local Vite dev server,
+    // which let those pages call the engine on localhost, transmit included.
+    internal static readonly HashSet<string> AllowedBrowserOrigins = new(StringComparer.Ordinal);
 
     public static void ConfigureCors(
         CorsPolicyBuilder policy,
@@ -104,8 +97,6 @@ public static class StationEngineEndpoints
     /// </summary>
     internal static bool IsNativeMicOriginAllowed(string origin, int? productPort)
     {
-        if (origin is "https://app.zeussdr.com"
-            or "https://staging.zeus-web-app-7ag.pages.dev") return true;
         if (productPort is not > 0) return false;
         return Uri.TryCreate(origin, UriKind.Absolute, out var uri)
             && uri.Scheme == Uri.UriSchemeHttp

@@ -15,10 +15,11 @@ public static class NativeWrapperCorsPolicy
     public const string Name = "ZeusNativeWrapper";
     public const string AndroidOrigin = "http://localhost";
     public const string IosOrigin = "capacitor://localhost";
+    // SimpleHPSDR fork: Zeus's hosted web app is no longer allowed.
     public const string HostedPwaOrigin = "https://app.zeussdr.com";
 
     public static bool IsAllowedOrigin(string origin) =>
-        origin is AndroidOrigin or IosOrigin or HostedPwaOrigin;
+        origin is AndroidOrigin or IosOrigin;
 
     public static void Configure(CorsPolicyBuilder policy)
     {
