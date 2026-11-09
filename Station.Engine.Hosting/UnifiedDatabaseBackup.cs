@@ -382,6 +382,14 @@ internal static class UnifiedDatabaseBackup
 
     internal static IReadOnlyList<StoreSpec> DiscoverStores()
     {
+        // Zeus Link's stores belong to another program when the engine has its own folder.
+        if (Zeus.Contracts.EngineDataRoot.IsIsolated)
+            return
+            [
+                new("preferences", "litedb", PrefsDbPath.Get(), StationOwned: true),
+                new("station-engine", "litedb", PrefsDbPath.EngineGet(), StationOwned: true),
+                new("logbook", "litedb", PrefsDbPath.LogbookPath(), StationOwned: true),
+            ];
         return
         [
             new("preferences", "litedb", PrefsDbPath.Get(), StationOwned: true),

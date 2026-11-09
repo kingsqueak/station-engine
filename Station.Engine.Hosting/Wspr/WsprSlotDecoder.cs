@@ -261,7 +261,10 @@ internal static partial class WsprDataDirectory
     {
         string root = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
         if (string.IsNullOrEmpty(root)) return null;
-        string dir = Path.Combine(root, "ZeusSDR", "wspr");
+        // With a data folder of its own, the engine keeps clear of Zeus's ProgramData folder too.
+        string dir = Zeus.Contracts.EngineDataRoot.IsIsolated
+            ? Path.Combine(root, "StationEngine", "wspr")
+            : Path.Combine(root, "ZeusSDR", "wspr");
         try
         {
             Directory.CreateDirectory(dir);

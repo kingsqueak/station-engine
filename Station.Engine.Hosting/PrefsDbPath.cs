@@ -39,13 +39,7 @@ public static class PrefsDbPath
     // %LOCALAPPDATA%/Zeus — the directory that has always held zeus-prefs.db.
     public static string DataDir
     {
-        get
-        {
-            var appDataDir = Environment.GetFolderPath(
-                Environment.SpecialFolder.LocalApplicationData,
-                Environment.SpecialFolderOption.Create);
-            return Path.Combine(appDataDir, "Zeus");
-        }
+        get => Zeus.Contracts.EngineDataRoot.Resolve();
     }
 
     public static string Get() =>

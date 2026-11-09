@@ -212,10 +212,7 @@ public static class LanCertificate
 
     private static string ResolveCertPath()
     {
-        var directory = Environment.GetFolderPath(
-            Environment.SpecialFolder.LocalApplicationData,
-            Environment.SpecialFolderOption.Create);
-        return Path.Combine(directory, "Zeus", "certs", CertFileName);
+        return Path.Combine(Zeus.Contracts.EngineDataRoot.Resolve(), "certs", CertFileName);
     }
 
     private static FileStream AcquireCertificateLock(string certificatePath)

@@ -293,9 +293,7 @@ public sealed class WdspWisdomInitializer
     }
 
     private static string GetDefaultWisdomDirectory() =>
-        Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Zeus");
+        Zeus.Contracts.EngineDataRoot.Resolve();
 
     private string ResolveCurrentStamp()
     {
