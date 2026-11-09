@@ -54,7 +54,8 @@ namespace Zeus.Dsp.Wdsp;
 /// <summary>
 /// Owns the one-shot WDSPwisdom FFTW plan-cache initialisation. Singleton —
 /// the WDSP wisdom file at $LOCALAPPDATA/Zeus/wdspWisdom01 is process-global
-/// state, so there's nothing to parallelise.
+/// state. SimpleHPSDR: a fresh build is spread over worker processes
+/// (<see cref="WdspWisdomParallel"/>), then WDSP loads the merged file.
 /// </summary>
 public sealed class WdspWisdomInitializer
 {
@@ -94,6 +95,9 @@ public sealed class WdspWisdomInitializer
     private readonly object _gate = new();
     private readonly object _statusGate = new();
     private Task? _task;
+    // SimpleHPSDR: plan on several cores when building (real WDSP only, not test fakes).
+    private readonly bool _parallel;
+    private string? _statusOverride;   // the parallel build's progress, shown instead of WDSP's
     private int _phase = (int)WisdomPhase.Idle;
     private string _status = string.Empty;
 
@@ -104,6 +108,7 @@ public sealed class WdspWisdomInitializer
             NativeMethods.WDSPwisdom,
             GetNativeWisdomStatus)
     {
+        _parallel = true;
     }
 
     internal WdspWisdomInitializer(
@@ -253,6 +258,23 @@ public sealed class WdspWisdomInitializer
             // instead of "<dir>wdspWisdom01" which lands the wisdom file one
             // level up.
             var dirForNative = dir + Path.DirectorySeparatorChar;
+
+            // SimpleHPSDR: no wisdom yet, so build it on several cores first;
+            // WDSPwisdom below then only loads it. Falls back to WDSP's own
+            // one-at-a-time planning if that isn't possible here.
+            if (_parallel && !File.Exists(wisdomPath)
+                && WdspNativeLoader.TryGetResolvedNativeLibraryPath(out var wdspPath) && wdspPath is not null
+                && WdspNativeLoader.FftwDependencyFilePaths(wdspPath)
+                    .FirstOrDefault(p => Path.GetFileName(p).StartsWith("libfftw3.", StringComparison.Ordinal)) is { } fftwPath)
+            {
+                Volatile.Write(ref _statusOverride, "Planning FFTs in parallel: starting");
+                try
+                {
+                    WdspWisdomParallel.TryBuild(wisdomPath, fftwPath, _log,
+                        s => Volatile.Write(ref _statusOverride, s));
+                }
+                finally { Volatile.Write(ref _statusOverride, null); }
+            }
 
             _log.LogInformation("wdsp.wisdom initialising dir={Dir}", dirForNative);
             int result = _runWisdom(dirForNative);
@@ -455,7 +477,7 @@ public sealed class WdspWisdomInitializer
         {
             while (Phase == WisdomPhase.Building)
             {
-                var s = _getWisdomStatus();
+                var s = Volatile.Read(ref _statusOverride) ?? _getWisdomStatus();
                 s = s.TrimEnd('\r', '\n', ' ', '\t');
                 lock (_statusGate)
                 {

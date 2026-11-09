@@ -28,6 +28,11 @@ public partial class Program
 
     public static async Task<int> Main(string[] args)
     {
+        // SimpleHPSDR: a worker planning part of the FFTW wisdom (started by
+        // the engine itself); nothing else of the engine starts.
+        if (args.Length > 0 && args[0] == Zeus.Dsp.Wdsp.WdspWisdomParallel.WorkerArgument)
+            return Zeus.Dsp.Wdsp.WdspWisdomParallel.RunWorker(args);
+
         // Must run before any TX pacing starts — see RaiseTimerResolutionOnWindows.
         var timerResolution = RaiseTimerResolutionOnWindows();
 
