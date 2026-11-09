@@ -50,30 +50,6 @@ namespace Zeus.Contracts;
 // nothing in the frontend that just wants "is the rotator pointing somewhere?"
 // has to learn about slots. Multi-rotator config (issue #917) lives in the
 // RotctldMultiConfig / RotctldSlot records below.
-public sealed record RotctldConfig(
-    bool Enabled = false,
-    string Host = "127.0.0.1",
-    int Port = 4533,
-    int PollingIntervalMs = 500);
-
-public sealed record RotctldStatus(
-    bool Enabled,
-    bool Connected,
-    string Host,
-    int Port,
-    double? CurrentAz,
-    double? TargetAz,
-    bool Moving,
-    string? Error,
-    int ActiveSlotId = 1,
-    int SlotCount = 1);
-
-public sealed record RotctldSetAzRequest(double Azimuth);
-
-public sealed record RotctldTestRequest(string Host, int Port);
-
-public sealed record RotctldTestResult(bool Ok, string? Error);
-
 // Multi-rotator config (issue #917).
 //
 // Stations that run several towers — e.g. an HF beam, a VHF Yagi, and a 6 m
@@ -104,4 +80,3 @@ public sealed record RotctldMultiConfig(
     bool AutoRoute,
     IReadOnlyList<RotctldSlot> Slots);
 
-public sealed record RotctldSetActiveRequest(int SlotId);

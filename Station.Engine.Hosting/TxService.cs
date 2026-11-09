@@ -189,7 +189,6 @@ public sealed class TxService
     // and digital/FreeDV timing is owned by external modem sequencing.
     private static bool IsPreKeyVoiceMode(RxMode mode) => IsVoiceTxMode(mode);
 
-    private static bool IsRogerBeepMode(RxMode mode) => IsVoiceTxMode(mode);
 
     /// <summary>Voice (phone) modulation modes: the modes whose TX chain carries
     /// operator speech. Shared by the pre-key delay, roger beep and CW ID.</summary>
@@ -1055,11 +1054,6 @@ public sealed class TxService
                 }
             }
             catch (Exception ex) { _log.LogWarning(ex, "tx.tail.voice.failed"); }
-        }
-        if (state.RogerBeepEnabled && IsRogerBeepMode(state.Mode))
-        {
-            try { _pipeline.DrainRogerBeepTail(); }
-            catch (Exception ex) { _log.LogWarning(ex, "tx.tail.roger.failed"); }
         }
     }
 

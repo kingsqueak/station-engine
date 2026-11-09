@@ -214,9 +214,6 @@ public sealed class RadioStateEntry
     // Post-TX RX resume mute delay ms (0..5000). Default preserves the legacy
     // fixed post-TX mute window that hid receiver splash on key-up.
     public int TxPostTxRxMuteDelayMs { get; set; } = 200;
-    // Old-school end-of-over roger beep. Default false preserves existing
-    // transmit behaviour for legacy rows.
-    public bool RogerBeepEnabled { get; set; }
     // TX timeout seconds. 0 = disabled (no guard); otherwise 30..600. Default
     // 120 = the historical FR-6 limit, so legacy rows missing this field
     // hydrate with the same guard that has always been in force. Issue #1270.

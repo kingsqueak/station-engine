@@ -978,7 +978,6 @@ public sealed partial class RadioService : IDisposable
             CtunEnabled: rsSnap?.CtunEnabled ?? false,
             FullDuplexMultiRxEnabled: rsSnap?.FullDuplexMultiRxEnabled ?? false,
             PreampOn: rsSnap?.PreampOn ?? false,
-            RogerBeepEnabled: false,   // SimpleHPSDR fork: never on, whatever was saved
             // Clamp so a hand-edited row can't exceed the Thetis udRIT/udXIT range.
             RitEnabled: rsSnap?.RitEnabled ?? false,
             RitHz: Math.Clamp(rsSnap?.RitHz ?? 0L, -RitXitMaxHz, RitXitMaxHz),
@@ -5223,22 +5222,6 @@ public sealed partial class RadioService : IDisposable
         return Snapshot();
     }
 
-    /// <summary>
-    /// Enable/disable the old-school end-of-over roger beep. Persisted with the
-    /// radio-state snapshot; default OFF preserves existing TX behaviour.
-    /// </summary>
-    public StateDto SetRogerBeepEnabled(bool enabled)
-    {
-        Mutate(s => s with { RogerBeepEnabled = enabled });
-        return Snapshot();
-    }
-
-    public bool RogerBeepEnabled
-    {
-        // SimpleHPSDR fork: the roger beep is always off, whatever was saved.
-        get => false;
-    }
-
     /// <summary>Operator-set pre-key delay (ms), not PS-clamped.</summary>
     public int TxMoxPreKeyDelayMs => Volatile.Read(ref _txMoxPreKeyDelayMs);
 
@@ -7933,7 +7916,6 @@ public sealed partial class RadioService : IDisposable
                 TxMoxPreKeyDelayMs = snap.TxMoxPreKeyDelayMs,
                 TxMoxTailDelayMs = snap.TxMoxTailDelayMs,
                 TxPostTxRxMuteDelayMs = snap.TxPostTxRxMuteDelayMs,
-                RogerBeepEnabled = snap.RogerBeepEnabled,
                 TxTimeoutSec = snap.TxTimeoutSec,
                 RadioLoHz = snap.RadioLoHz,
                 // RX2 tuning persists from the canonical Receivers[1] entry (the

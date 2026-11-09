@@ -98,30 +98,7 @@ internal sealed class WidebandSpectrumAnalyzer
         Span<float> wfDb,
         int zoomLevel,
         long targetCenterHz,
-        double frameIntervalMs = 100.0) =>
-        Analyze(samples, sampleRateHz, panDb, wfDb, zoomLevel, targetCenterHz,
-            frameIntervalMs, signalDetector: null, markers: default, out _);
-
-    /// <summary>
-    /// Full analysis pass plus optional signal detection. When
-    /// <paramref name="signalDetector"/> is provided, markers for the
-    /// detected signals are written to <paramref name="markers"/> (strongest
-    /// SNR first) and <paramref name="markerCount"/> reports how many were
-    /// written. Detection runs on the same DC-suppressed, Welch-averaged
-    /// spectrum the display is drawn from, so markers always agree with the
-    /// rendered trace.
-    /// </summary>
-    public WidebandSpectrumViewport Analyze(
-        ReadOnlySpan<short> samples,
-        int sampleRateHz,
-        Span<float> panDb,
-        Span<float> wfDb,
-        int zoomLevel,
-        long targetCenterHz,
-        double frameIntervalMs,
-        WidebandSignalDetector? signalDetector,
-        Span<WidebandSignalMarker> markers,
-        out int markerCount)
+        double frameIntervalMs = 100.0)
     {
         if (panDb.Length < DisplayWidth || wfDb.Length < DisplayWidth)
             throw new ArgumentException("Output spans must be at least DisplayWidth samples long.");
@@ -187,18 +164,6 @@ internal sealed class WidebandSpectrumAnalyzer
         }
 
         double binHz = sampleRateHz / (double)_segmentLength;
-
-        // Signal detection rides the same spectrum the display renders:
-        // DC-suppressed, Welch-averaged, pre-smoothing bin power.
-        if (signalDetector != null)
-        {
-            markerCount = signalDetector.Detect(
-                _binPower.AsSpan(0, bins), binHz, frameIntervalMs, markers);
-        }
-        else
-        {
-            markerCount = 0;
-        }
 
         double nyquistHz = sampleRateHz / 2.0;
         double startHz = viewport.CenterHz - (viewport.SpanHz / 2.0);

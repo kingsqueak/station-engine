@@ -226,63 +226,6 @@ public sealed record NrConfig(
 // Direct Smart NR diagnostic surface. The Smart NR analyzer still lives in
 // the frontend DSP-scene path; this DTO exposes that live condition together
 // with the backend NR runtime facts used by hardware diagnostics.
-public sealed record SmartNrConditionDto(
-    int SchemaVersion,
-    bool Available,
-    string Status,
-    bool Fresh,
-    bool Stale,
-    long? AgeMs,
-    DateTimeOffset? AtUtc,
-    DateTimeOffset? SourceAtUtc,
-    long? SourceAgeMs,
-    long? SourceClockSkewMs,
-    string? SourceClientId,
-    string? Mode,
-    string? Profile,
-    string? Reason,
-    string? Recommendation,
-    bool? HeldByRxChain,
-    string? RxChainLabel,
-    string? RxChainRecommendation,
-    string? RxChainTone,
-    int? RxChainScore,
-    double? MaxSnrDb,
-    double? CoherentMaxSnrDb,
-    double? OccupiedPct,
-    double? CoherentOccupiedPct,
-    double? ImpulsivePct,
-    int? PeakCount,
-    int? CoherentPeakCount,
-    bool? CoherentSubthresholdSignal,
-    FrontendDspSceneTopPeakDto[] TopPeaks,
-    bool? AdjacentNoiseUsable,
-    int? AdjacentNoiseBins,
-    int? AdjacentNoiseLeftBins,
-    int? AdjacentNoiseRightBins,
-    double? AdjacentNoiseFloorDb,
-    double? AdjacentNoiseP10Db,
-    double? AdjacentNoiseP50Db,
-    double? AdjacentNoiseP90Db,
-    double? AdjacentNoiseLeftFloorDb,
-    double? AdjacentNoiseRightFloorDb,
-    double? AdjacentNoiseSlopeDbPerKhz,
-    double? AdjacentNoiseRejectedPct,
-    bool WdspActive,
-    bool WdspNativeLoadable,
-    bool WdspEmnrPost2Available,
-    bool WdspNr4SbnrAvailable,
-    string Nr4Readiness,
-    string RequestedNrMode,
-    string EffectiveNrMode,
-    string? ExpectedNrMode,
-    bool? RuntimeAligned,
-    string RuntimeAlignmentStatus,
-    string RuntimeAlignmentRecommendation,
-    SmartNrRxChainRuntimeDto RxChain,
-    string DiagnosticRecommendation,
-    DateTimeOffset GeneratedUtc);
-
 public sealed record FrontendDspSceneTopPeakDto(
     long FrequencyHz,
     int OffsetHz,
@@ -293,107 +236,6 @@ public sealed record FrontendDspSceneTopPeakDto(
 
 // Machine-readable benchmark plan for WDSP modernization. These scenarios are
 // evidence requirements, not runtime DSP behavior.
-public sealed record DspBenchmarkScenarioDto(
-    int SchemaVersion,
-    string Id,
-    string Name,
-    string Phase,
-    string SignalPath,
-    string FixtureStatus,
-    string[] AppliesTo,
-    string[] RequiredComparisons,
-    string[] RequiredMetrics,
-    string[] AcceptanceGates,
-    string[] RequiredArtifacts,
-    string[] FailureModes,
-    string[] RelatedTools);
-
-public sealed record DspBenchmarkMetricDto(
-    int SchemaVersion,
-    string Id,
-    string Name,
-    string Direction,
-    string AcceptanceThreshold,
-    string AcceptanceComparator,
-    string Unit,
-    string SafetyClass,
-    string[] AcceptanceScopes,
-    string Rationale,
-    string[] RelatedScenarios);
-
-public sealed record DspBenchmarkMetricCatalogDto(
-    int SchemaVersion,
-    DateTimeOffset GeneratedUtc,
-    string Status,
-    string RolloutPolicy,
-    string[] DirectionValues,
-    string[] ComparatorValues,
-    DspBenchmarkMetricDto[] Metrics);
-
-public sealed record DspBenchmarkPlanDto(
-    int SchemaVersion,
-    DateTimeOffset GeneratedUtc,
-    string Status,
-    string RolloutGate,
-    string FirstHardwareTarget,
-    string[] RequiredHardwareBeforeGraduation,
-    string[] RequiredComparisons,
-    string[] GlobalAcceptanceGates,
-    DspBenchmarkScenarioDto[] Scenarios);
-
-public sealed record DspBenchmarkCaptureArtifactDto(
-    int SchemaVersion,
-    string Id,
-    string Kind,
-    string Source,
-    string Purpose,
-    string Cadence,
-    bool Required,
-    string[] ScenarioIds);
-
-public sealed record DspBenchmarkCaptureManifestDto(
-    int SchemaVersion,
-    DateTimeOffset GeneratedUtc,
-    string ManifestId,
-    string Status,
-    bool ReadyForCapture,
-    string CaptureGate,
-    string HardwareTarget,
-    string LiveDiagnosticsStatus,
-    int LiveReadinessScore,
-    string LiveDiagnosticsEndpoint,
-    string BenchmarkPlanEndpoint,
-    string ExternalEngineCandidatesEndpoint,
-    string[] ScenarioIds,
-    string[] RequiredComparisons,
-    string[] GlobalAcceptanceGates,
-    string[] PreflightChecks,
-    string[] StopConditions,
-    string[] Constraints,
-    string[] RecommendedActions,
-    DspBenchmarkCaptureArtifactDto[] RequiredArtifacts,
-    string[] OperatorNotes);
-
-public sealed record DspModernizationEvidenceSnapshotDto(
-    int SchemaVersion,
-    DateTimeOffset GeneratedUtc,
-    string SnapshotId,
-    string Status,
-    int EvidenceCompletenessScore,
-    bool ReadyForLiveBenchmark,
-    bool ReadyForCapture,
-    string RolloutGate,
-    string HardwareTarget,
-    string[] IncludedEndpoints,
-    string[] IncludedArtifacts,
-    string[] MissingEvidence,
-    string[] NextActions,
-    SmartNrConditionDto SmartNrCondition,
-    DspLiveDiagnosticsDto LiveDiagnostics,
-    DspBenchmarkPlanDto BenchmarkPlan,
-    DspBenchmarkCaptureManifestDto CaptureManifest,
-    DspExternalEngineCandidateDto[] ExternalEngineCandidates);
-
 // Read-only catalog entry for optional external DSP/ML engines. These are
 // candidates for post-demod audio bakeoffs, not replacements for WDSP IQ
 // processing or approval to change operator defaults.
@@ -541,46 +383,6 @@ public sealed record DspLiveDiagnosticsDto(
 // what Zeus currently exposes as a safe control. This is deliberately
 // diagnostics-only: write controls must be added through board-gated APIs
 // after the exact wire mapping is verified.
-public sealed record HardwareSampleRateCapabilityDto(
-    int RateHz,
-    string Label,
-    bool SupportedByBoard,
-    bool SupportedByActiveProtocol,
-    bool CurrentlySelected,
-    string Status,
-    string Notes);
-
-public sealed record HardwarePotentialItemDto(
-    string Id,
-    string Title,
-    string Category,
-    string ManualCapability,
-    string CurrentExposure,
-    string ImplementationStatus,
-    string SafetyClass,
-    bool UserConfigurable,
-    string[] TelemetryPaths,
-    string[] CurrentControls,
-    string[] Blockers,
-    string NextStep);
-
-public sealed record HardwarePotentialDto(
-    int SchemaVersion,
-    DateTimeOffset GeneratedUtc,
-    string ConnectedBoard,
-    string EffectiveBoard,
-    string OrionMkIIVariant,
-    bool G2Class,
-    string ActiveProtocol,
-    int CurrentSampleRateHz,
-    int MaxRxSampleRateHz,
-    int[] FullRxSampleRateLadderHz,
-    HardwareSampleRateCapabilityDto[] SampleRates,
-    HardwarePotentialItemDto[] Items,
-    string[] DitherRandomAudit,
-    string[] FilterAndWindowAudit,
-    string DiagnosticRecommendation);
-
 public sealed record SmartNrRxChainRuntimeDto(
     int SchemaVersion,
     string Source,
@@ -676,92 +478,9 @@ public sealed record PttEnableSetRequest(bool Enabled);
 // operator's stored settings (DevicePath empty + Baud 0 = auto-detect); the
 // Connected/Active*/PanelType trio is the live bridge status (Connected =
 // serial line open; PanelType 5 = a recognised G2-Ultra handshake).
-public sealed record G2PanelSettingsDto(
-    bool Enabled,
-    string? DevicePath,
-    int Baud,
-    bool Connected,
-    string? ActiveDevicePath,
-    int ActiveBaud,
-    int PanelType);
-
 // Request body for PUT /api/radio/front-panel. Every field optional — only the
 // supplied ones change. DevicePath "" clears the override (back to auto-detect);
 // Baud 0 = auto.
-public sealed record G2PanelSettingsSetRequest(
-    bool? Enabled = null,
-    string? DevicePath = null,
-    int? Baud = null);
-
-public sealed record HardwareKeyingStatusDto(
-    int SchemaVersion,
-    string? ActiveProtocol,
-    long P1Packets,
-    DateTimeOffset? P1LastUpdatedUtc,
-    bool? P1HardwarePtt,
-    bool? P1CwKeyDown,
-    long P2Packets,
-    DateTimeOffset? P2LastUpdatedUtc,
-    bool? P2PttIn,
-    bool? P2DotIn,
-    bool? P2DashIn,
-    bool? P2SidetoneActive,
-    ExternalPttStatusDto ExternalPtt,
-    string DiagnosticRecommendation,
-    DateTimeOffset GeneratedUtc);
-
-public sealed record RadioPowerReadingDto(
-    long Packets,
-    DateTimeOffset? LastUpdatedUtc,
-    ushort? ExciterAdc,
-    ushort? FwdAdc,
-    ushort? RevAdc,
-    double? FwdWatts,
-    double? RefWatts,
-    double? Swr);
-
-public sealed record RadioPowerCalibrationDto(
-    int SchemaVersion,
-    string? ActiveProtocol,
-    string ConnectedBoard,
-    string EffectiveBoard,
-    string OrionMkIIVariant,
-    string CalibrationBoard,
-    double BridgeVolt,
-    double RefVoltage,
-    int AdcCalOffset,
-    double CalibrationMaxWatts,
-    bool CalibrationFallbackApplied,
-    double CapabilityMaxPowerWatts,
-    RadioPowerReadingDto P1,
-    RadioPowerReadingDto P2,
-    string DiagnosticRecommendation,
-    DateTimeOffset GeneratedUtc);
-
-public sealed record RadioSupplyReadingDto(
-    long Packets,
-    DateTimeOffset? LastUpdatedUtc,
-    ushort? SupplyVoltsAdc,
-    double? SupplyVolts,
-    double? RawScaledSupplyVolts,
-    bool SupplyVoltsTrusted,
-    string ScaleStatus);
-
-public sealed record RadioSupplyAlarmsDto(
-    int SchemaVersion,
-    string? ActiveProtocol,
-    string EffectiveBoard,
-    string OrionMkIIVariant,
-    bool SupportsSupplyTelemetry,
-    int AdcSupplyMv,
-    bool ActiveThresholdsConfigured,
-    bool AlarmActive,
-    string AlarmStatus,
-    RadioSupplyReadingDto P1,
-    RadioSupplyReadingDto P2,
-    string DiagnosticRecommendation,
-    DateTimeOffset GeneratedUtc);
-
 /// <summary>
 /// Live PA input-voltage reading for the Meter Group "Input Voltage" meter.
 /// Mirrors Thetis's Volts meter: AIN3 ("MKII PA Volts"), only on boards that
@@ -792,59 +511,6 @@ public sealed record RadioPaThermalDiagnosticsDto(
     double WarningTempC,
     double CriticalTempC,
     string ManualReference,
-    string DiagnosticRecommendation,
-    DateTimeOffset GeneratedUtc);
-
-public sealed record RadioNetworkCountersDto(
-    bool Attached,
-    long TotalFrames,
-    long DroppedFrames,
-    double DropRatioPct,
-    long? HiPriorityPackets,
-    long? PsPairedPackets);
-
-public sealed record RadioNetworkProfileDto(
-    int SchemaVersion,
-    string ConnectionStatus,
-    string? Endpoint,
-    string? ActiveProtocol,
-    int SampleRateHz,
-    string ConnectedBoard,
-    string EffectiveBoard,
-    string OrionMkIIVariant,
-    string Transport,
-    RadioNetworkCountersDto P1,
-    RadioNetworkCountersDto P2,
-    string HealthStatus,
-    string DiagnosticRecommendation,
-    DateTimeOffset GeneratedUtc);
-
-public sealed record UserIoLineDto(
-    string Id,
-    string Kind,
-    string Label,
-    ushort? RawAdc,
-    double? NormalizedPct,
-    bool? DigitalState);
-
-public sealed record UserIoLabelsDto(
-    int SchemaVersion,
-    string? ActiveProtocol,
-    bool P2Attached,
-    long P2Packets,
-    DateTimeOffset? P2LastUpdatedUtc,
-    IReadOnlyList<UserIoLineDto> Lines,
-    string DiagnosticRecommendation,
-    DateTimeOffset GeneratedUtc);
-
-public sealed record UserIoActionsDto(
-    int SchemaVersion,
-    string? ActiveProtocol,
-    bool P2Attached,
-    long P2Packets,
-    DateTimeOffset? P2LastUpdatedUtc,
-    bool ActionBindingsConfigured,
-    IReadOnlyList<UserIoLineDto> Lines,
     string DiagnosticRecommendation,
     DateTimeOffset GeneratedUtc);
 
@@ -1947,11 +1613,6 @@ public sealed record StateDto(
     // engine seam and "missing from older server" for clients.
     TxPhaseRotatorConfig? TxPhaseRotator = null,
 
-    // Old-school end-of-over roger beep. Appended to avoid shifting older
-    // positional StateDto construction sites. Default OFF preserves existing
-    // transmit behaviour until the operator explicitly enables it.
-    bool RogerBeepEnabled = false,
-
     // RX1's per-receiver split projection. RX2+ carry the same fields directly
     // on ReceiverDto. Session-only: a process always starts in simplex.
     bool SplitEnabled = false,
@@ -2127,38 +1788,6 @@ public sealed record ReceiverSetRequest(
     // set only through NrMode above. Index 0 updates StateDto.Nr.
     NrConfig? Nr = null);
 
-/// <summary>Body of <c>POST /api/kiwi</c> — configure the KiwiSDR slice
-/// receiver. Every field is optional; only supplied fields change.
-/// <para><see cref="Url"/> is the KiwiSDR base URL or host:port (e.g.
-/// <c>sdr.example.org:8073</c> or <c>http://sdr.example.org:8073</c>). An empty
-/// <see cref="Password"/> string clears any stored password; null leaves it
-/// unchanged. Setting <see cref="Enabled"/> true with a URL present opens the
-/// connection; false tears it down.</para></summary>
-public sealed record KiwiSetRequest(
-    bool? Enabled = null,
-    string? Url = null,
-    string? Password = null,
-    bool? MuteDuringTx = null);
-
-/// <summary>Status of the KiwiSDR slice receiver — the body of
-/// <c>GET /api/kiwi</c> and the value returned from <c>POST /api/kiwi</c>.
-/// <see cref="HasPassword"/> avoids ever returning the stored secret to the
-/// client; <see cref="Status"/> is a short connection-state word
-/// ("disabled", "connecting", "connected", "error").
-/// <para><see cref="ZoomLevel"/> / <see cref="ZoomCap"/> are the Kiwi's OWN
-/// native waterfall zoom (z0..cap, each step halving the span) — not the
-/// radio-wide DDC zoom. The frontend needs them so the Kiwi slice window can
-/// render a zoom control that moves the Kiwi and nothing else.</para></summary>
-public sealed record KiwiConfigDto(
-    bool Enabled,
-    string? Url,
-    bool HasPassword,
-    string Status,
-    string? StatusDetail = null,
-    int ZoomLevel = 0,
-    int ZoomCap = 0,
-    bool MuteDuringTx = false);
-
 /// <summary>Operator settings for the POTA/SOTA Spots feature. Persisted in
 /// zeus-prefs.db (<c>SpotsSettingsStore</c>) and shared with the frontend.
 /// <para>The server-side poller honours <see cref="Enabled"/> /
@@ -2316,32 +1945,6 @@ public sealed record SpotsSettings(
     }
 }
 
-/// <summary>A POTA or SOTA activation spot, normalized for the Spots panel.
-/// <para><see cref="FreqHz"/> is absolute Hz — the upstream feeds disagree on
-/// units (POTA reports kHz, SOTA reports MHz) and both are converted to Hz by
-/// <c>ActivationSpotsService</c> so the frontend's click-to-tune can pass it
-/// straight to /api/vfo.</para>
-/// <para><see cref="Source"/> is "POTA", "SOTA", or "DX". <see cref="Reference"/> is
-/// the park (e.g. US-2518) or summit (e.g. W4A/HR-001) code; <see cref="Name"/>
-/// is its human name. <see cref="Mode"/> is the raw upstream mode string
-/// (SSB / CW / FT8 / …) — the UI maps it to an <c>RxMode</c> with a
-/// band-aware sideband at tune time. DX Summit's <c>info</c> field is exposed
-/// through <see cref="Comments"/> and used to derive a mode when it contains an
-/// explicit mode token.</para></summary>
-public sealed record ActivationSpotDto(
-    string Source,
-    string Activator,
-    long FreqHz,
-    string Mode,
-    string Reference,
-    string? Name,
-    string? Location,
-    string? Grid,
-    string? Comments,
-    string? Spotter,
-    string SpotTime,
-    int? SnrDb = null);
-
 /// <summary>Set the hardware NCO (radio LO) frequency in Hz. Does not move
 /// the operator's tuned frequency (VfoHz). Used by the panadapter pure-pan
 /// gesture when a drag would otherwise carry the viewport outside the IQ
@@ -2374,8 +1977,6 @@ public sealed record SampleRateSetRequest(int Rate);
 public sealed record PreampSetRequest(bool On);
 
 public sealed record AgcGainSetRequest(double TopDb);
-
-public sealed record AgcThresholdSetRequest(double ThresholdDbm);
 
 public sealed record RxAfGainSetRequest(double Db);
 
@@ -2416,9 +2017,6 @@ public sealed record TxTailDelaySetRequest(int DelayMs);
 /// <summary>Post-TX RX resume mute delay in milliseconds, 0..5000. See
 /// <see cref="StateDto.TxPostTxRxMuteDelayMs"/>.</summary>
 public sealed record TxRxResumeDelaySetRequest(int DelayMs);
-
-/// <summary>Body of <c>POST /api/tx/roger-beep</c>.</summary>
-public sealed record RogerBeepSetRequest(bool Enabled);
 
 /// <summary>TX timeout in whole seconds — how long a single MOX or TUN
 /// transmission may run before the protection guard fires. A value of 0
@@ -2513,8 +2111,6 @@ public sealed record ZoomSetRequest(int Level);
 // Workspace UI zoom — a whole-percent scale of the panel-grid cell pitch (see
 // StateDto.WorkspaceZoomPct). Distinct from ZoomSetRequest, which sets the
 // spectral analyzer zoom. The server clamps Pct into its allowed range.
-public sealed record WorkspaceZoomSetRequest(int Pct);
-
 public sealed record AutoAttSetRequest(bool Enabled);
 
 // RX ADC protection policy. This is the operator-facing superset of the
@@ -2876,16 +2472,6 @@ public sealed record NamedLayoutDto(
 
 public sealed record RadioLayoutsDto(string RadioKey, IReadOnlyList<NamedLayoutDto> Layouts, string ActiveLayoutId);
 
-public sealed record SaveNamedLayoutRequest(
-    string RadioKey,
-    string LayoutId,
-    string Name,
-    string LayoutJson,
-    string? Icon = null,
-    string? Description = null);
-
-public sealed record SetActiveLayoutRequest(string RadioKey, string LayoutId);
-
 // Saved-layouts library — a per-radio pool of reusable layout PRESETS, kept
 // separate from the working tabs (`RadioLayoutsDto`). The operator snapshots a
 // good workspace arrangement into a saved layout so they can restore it later
@@ -2901,14 +2487,6 @@ public sealed record SavedLayoutDto(
 
 public sealed record SavedLayoutsDto(string RadioKey, IReadOnlyList<SavedLayoutDto> SavedLayouts);
 
-public sealed record SaveSavedLayoutRequest(
-    string RadioKey,
-    string SavedId,
-    string Name,
-    string LayoutJson,
-    string? Icon = null,
-    string? Description = null);
-
 // Meter-group presets — one library shared across radios. ConfigJson is the
 // SPA's Meter Group tile config (MeterGroupConfig), opaque to the server.
 public sealed record MeterGroupPresetDto(
@@ -2918,11 +2496,6 @@ public sealed record MeterGroupPresetDto(
     long UpdatedUtc);
 
 public sealed record MeterGroupPresetsDto(IReadOnlyList<MeterGroupPresetDto> Presets);
-
-public sealed record SaveMeterGroupPresetRequest(
-    string PresetId,
-    string Name,
-    string ConfigJson);
 
 // Prefs-database (profile) selector. All Zeus settings/layouts/prefs persist in
 // a single LiteDB file resolved by PrefsDbPath.Get() at startup. The operator
@@ -3380,69 +2953,17 @@ public sealed record DisplaySettingsSetRequest(
 // baseband (0 .. sampleRate/2); levels are dB against the analyzer's
 // calibrated reference. Additive wire surface: polled over REST, never
 // embedded in the binary DisplayFrame stream.
-public sealed record WidebandSignalMarkerDto(
-    double CenterHz,
-    double LowHz,
-    double HighHz,
-    double PeakDb,
-    double NoiseFloorDb,
-    double SnrDb,
-    double Confidence);
-
 // Point-in-time snapshot of detected wideband signals plus the viewport they
 // were detected under, so a display client can project markers into pixels
 // and drop snapshots that went stale (transport off, markers toggled off).
-public sealed record WidebandSignalsSnapshotDto(
-    long TsUnixMs,
-    long CenterHz,
-    float HzPerPixel,
-    IReadOnlyList<WidebandSignalMarkerDto> Signals);
-
 // Server-side mirror of the frontend Signal Intelligence weak-signal display
 // controls. The DSP math remains in zeus-web's signal-estimator; this DTO lets
 // the active operator profile and tuning follow the radio across browsers and
 // lets diagnostics audit which weak-signal display policy is active.
-public sealed record DisplayIntelligenceSettingsDto(
-    string ProfileId,
-    bool PopEnabled,
-    bool SnapEnabled,
-    bool AutoNotchEnabled,
-    bool AutoProfileEnabled,
-    bool VisualAgcEnabled,
-    bool ImpulseRejectEnabled,
-    double PopFloorDb,
-    double PopSpanDb,
-    double PopGamma,
-    int PopRenderIntensity,
-    int WaterfallReliefDepth,
-    int WaterfallSmoothness,
-    double CoherenceHoldGate,
-    double CoherenceBoostDb,
-    double RidgeBoost,
-    double RidgeMaxBoostDb,
-    int VisualAgcStrength,
-    int ImpulseRejectDb,
-    int SnapRadiusHz,
-    double SnapMinSnrDb,
-    double PeakMinSnrDb,
-    // Nullable so settings written by older clients can inherit the legacy
-    // shared PopRenderIntensity for the new waterfall-specific control.
-    int? WaterfallPopRenderIntensity = null);
-
 // Per-mode disclosure state for the inline NR settings accordion that hangs
 // below the DSP NR toggle row. Three independent booleans — one per NR
 // algorithm. Persisted server-side (LiteDB) so the operator's "I always
 // have NR2 tunables open" preference follows them across browsers.
-public sealed record NrUiPrefsDto(
-    bool Nr1Expanded,
-    bool Nr2Expanded,
-    bool Nr4Expanded);
-
-public sealed record NrUiPrefsSetRequest(
-    bool Nr1Expanded,
-    bool Nr2Expanded,
-    bool Nr4Expanded);
-
 // Clock tile preferences (which clock is big, local zone / label / 12- or
 // 24-hour format, date lines, station-ID cues). Persisted server-side so the
 // choice survives a relaunch: the SPA's loopback origin changes between the
@@ -3451,35 +2972,6 @@ public sealed record NrUiPrefsSetRequest(
 // `LocalTimeZone` is an IANA id or "" for the computer's zone. `Saved` is
 // false until an operator has stored a value, so a client can seed the server
 // from its existing local copy instead of overwriting it with defaults.
-public sealed record ClockSettingsDto(
-    bool Saved,
-    string Primary,
-    bool ShowLocal,
-    string LocalTimeZone,
-    string LocalLabel,
-    string LocalHourFormat,
-    bool ShowZoneName,
-    bool ShowSeconds,
-    bool ShowUtcDate,
-    bool ShowLocalDate,
-    bool ShowWeekday,
-    bool TenMinuteNotify,
-    bool TenMinuteFlash);
-
-public sealed record ClockSettingsSetRequest(
-    string Primary,
-    bool ShowLocal,
-    string LocalTimeZone,
-    string LocalLabel,
-    string LocalHourFormat,
-    bool ShowZoneName,
-    bool ShowSeconds,
-    bool ShowUtcDate,
-    bool ShowLocalDate,
-    bool ShowWeekday,
-    bool TenMinuteNotify,
-    bool TenMinuteFlash);
-
 // Operator UI theme + per-token colour overrides. `Theme` is one of "dark"
 // | "light" — the theme overlay attribute set on <html data-theme="…">.
 // `Overrides` maps CSS custom-property names (e.g. "--accent") to upper-case
@@ -3487,14 +2979,6 @@ public sealed record ClockSettingsSetRequest(
 // Server-side LiteDB persistence (previously localStorage) so the operator's
 // look-and-feel follows them across browsers and devices pointed at the
 // same Zeus instance — same pattern as DisplaySettingsStore / NrUiPrefsStore.
-public sealed record ThemeSettingsDto(
-    string Theme,
-    IReadOnlyDictionary<string, string> Overrides);
-
-public sealed record ThemeSettingsSetRequest(
-    string Theme,
-    IReadOnlyDictionary<string, string> Overrides);
-
 // Per-slot pin state for the classic-layout bottom row (Logbook + TX
 // Stage Meters). True = panel is pinned (full body visible). False =
 // collapsed to a chip strip below the pinned tier. Persisted server-side
@@ -3504,19 +2988,11 @@ public sealed record BottomPinDto(
     bool Logbook,
     bool TxMeters);
 
-public sealed record BottomPinSetRequest(
-    bool Logbook,
-    bool TxMeters);
-
 // Vertical split between the panadapter and the waterfall in the Hero
 // panel. PanPercent is the panadapter share, clamped 10..90; the
 // waterfall takes the remainder. Single global value for now. Persisted
 // server-side in zeus-prefs.db (same pattern as BottomPinDto) so the
 // choice follows the operator across browsers / devices.
-public sealed record PanWfSplitDto(double PanPercent);
-
-public sealed record PanWfSplitSetRequest(double PanPercent);
-
 // Toolbar Mode/Band/Step favorite-slot pins plus the currently-selected
 // tuning step. Each favorite array holds exactly three slot keys; StepHz is
 // the live tuning step in Hz. Persisted server-side in zeus-prefs.db so the
@@ -3526,18 +3002,6 @@ public sealed record PanWfSplitSetRequest(double PanPercent);
 // arrays / StepHz mean the server has never stored a value; the frontend
 // falls back to its built-in defaults and pushes the current value up on the
 // next interaction.
-public sealed record ToolbarSettingsDto(
-    IReadOnlyList<string>? Mode,
-    IReadOnlyList<string>? Band,
-    IReadOnlyList<string>? Step,
-    int? StepHz);
-
-public sealed record ToolbarSettingsSetRequest(
-    IReadOnlyList<string>? Mode = null,
-    IReadOnlyList<string>? Band = null,
-    IReadOnlyList<string>? Step = null,
-    int? StepHz = null);
-
 // ---- PureSignal request records ----
 // PsControlSetRequest = master arm (Enabled) + mode (Auto vs Single).
 // PsAdvancedSetRequest = nullable so partial updates from the settings
@@ -3550,8 +3014,6 @@ public sealed record PsAdvancedSetRequest(
     double? LoopDelaySec = null,
     double? AmpDelayNs = null,
     double? HwPeak = null);
-
-public sealed record PsResetRequest();
 
 public sealed record PsSaveRequest(string Filename);
 
@@ -3799,24 +3261,6 @@ public sealed record DexpMeterDto(double? PeakDbv, bool GateOpen, bool Active)
 // the built-in defaults; the server persists edited overrides so Studio SSB,
 // eSSB, and DX punch profiles survive restart and can become a stable API
 // surface for settings/diagnostics.
-public sealed record TxStationProfileDto(
-    string Id,
-    string Label,
-    string Summary,
-    string ApplyTitle,
-    string AudioSuiteRoute,
-    bool AudioSuiteBypassed,
-    string? AudioSuiteProfileName,
-    double MicGainDb,
-    double LevelerMaxGainDb,
-    TxLevelingConfig TxLeveling,
-    CfcConfig CfcConfig,
-    int LowCutHz,
-    int HighCutHz,
-    int SpectralDensity);
-
-public sealed record TxStationProfilesResponse(IReadOnlyList<TxStationProfileDto> Profiles);
-
 // ---- TX Audio Profiles (unified) ----------------------------------------
 // A single operator-named macro that captures the ENTIRE TX-audio shaping
 // state in one recallable snapshot. This REPLACES both the named audio-suite
@@ -3833,133 +3277,18 @@ public sealed record TxStationProfilesResponse(IReadOnlyList<TxStationProfileDto
 // ProcessingMode is "native" or "vst" (lower-case) to keep Zeus.Contracts free
 // of any dependency on the server-side AudioProcessingMode enum — matching how
 // the existing audio-suite endpoints already serialise that field.
-public sealed record TxAudioProfileDto(
-    string Id,                       // slug, lowercased; PK; seeds: studio-ssb / essb-wide / dx-punch
-    string Name,                     // operator display name (captured by the Save dialog)
-    // ---- mic / leveler scalars (reuse RadioService Set* clamps) ----
-    int MicGainDb,                   // [-96,70]
-    double LevelerMaxGainDb,         // [0,20]
-    // ---- whole-config reuse ----
-    TxLevelingConfig TxLeveling,     // leveler on/decay, ALC max-gain/decay, CPDR on/gain
-    CfcConfig CfcConfig,             // enabled/postEq/preComp/prePeq + 10 bands x2
-    TxPhaseRotatorConfig TxPhaseRotator, // all-pass phase rotator + explicit mic polarity
-    // ---- TX bandpass + per-mode-family memory ----
-    int LowCutHz, int HighCutHz,     // operator-typed positive magnitudes; server re-signs per mode-family
-    // ---- audio processing mode + suite chain state ----
-    string ProcessingMode,           // "native" | "vst"
-    bool MasterBypass,
-    List<string> ChainOrder,         // active plugin ids, head-first
-    List<string> ChainParked,        // installed-but-out-of-chain ids
-    // ---- EVERY plugin's settings ----
-    Dictionary<string, string> VstPluginStates,                       // zeusId -> base64 getStateInformation
-    Dictionary<string, Dictionary<string, string>> NativePluginStates, // zeusId -> {settingKey -> jsonValue}
-    // ---- fidelity policy ----
-    int TargetSpectralDensity,       // [0,100]
-    DateTime CreatedUtc, DateTime UpdatedUtc,
-    // Product TX Suite uses this marker to distinguish real captured DSP
-    // values from the placeholder fields found in legacy product profiles.
-    int SchemaVersion = 2,
-    // DEXP (downward expander / noise gate), stored per profile like Thetis.
-    // Null — every profile saved before DEXP existed, and the built-in seeds —
-    // means "leave the operator's current DEXP untouched" on apply; it never
-    // forces DEXP off.
-    DexpConfig? Dexp = null,
-    // Mode families this profile is bound to ("SSB", "AM", "FM", "DIGI").
-    // Entering a bound family auto-applies the profile. A family is bound to
-    // at most one profile. Null/empty = unbound (legacy behaviour). Set via
-    // PUT /api/tx-audio-profiles/{id}/binding.
-    List<string>? BoundModes = null,
-    // Broadcast-AM modulator settings carried by the profile. Null = leave
-    // the live broadcast-AM config untouched on apply.
-    AmBroadcastConfig? AmBroadcast = null,
-    // Legacy symmetric AM carrier level (0..125 %). Null = leave the live
-    // carrier level untouched on apply.
-    int? CarrierLevelPercent = null,
-    // Last TX drive % (the DRV slider) used with this profile per mode family
-    // ("SSB" -> 35). Tracked while the profile is live in that family and
-    // restored on entering the family with it. A missing family leaves the
-    // live drive untouched.
-    Dictionary<string, int>? DriveByFamily = null,
-    LegacyTxEqConfig? LegacyTxEq = null,
-    FmTxAudioConfig? FmTxAudio = null,
-    BandpassWindow? TxFilterWindow = null,
-    FilterPhaseMode? TxFilterPhase = null);
-
-public sealed record TxAudioProfilesResponse(IReadOnlyList<TxAudioProfileDto> Profiles);
-
 // POST body for "save current live state as <Name>". The backend snapshots the
 // live state — the client never assembles the profile body (avoids the
 // frontend-clobbers-server pattern).
-public sealed record SaveTxAudioProfileRequest(string Name);
-
 // PUT body for the persisted "last loaded profile" pointer. Null/empty Id
 // clears it (nothing is applied at startup).
-public sealed record LastLoadedTxAudioProfileDto(string? Id);
-
 // PUT body for /api/tx-audio-profiles/{id}/binding. Modes are mode-family
 // names ("SSB", "AM", "FM", "DIGI") or individual mode names ("USB", "SAM",
 // ...) which resolve to their family. Empty/null unbinds the profile. Binding
 // a family here removes that family from every other profile.
-public sealed record TxAudioProfileBindingRequest(List<string>? Modes);
-
 public sealed record TxFidelityPolicyDto(
     string ProfileId,
     int TargetSpectralDensity);
-
-/// <summary>Status of the local install relative to the latest available Zeus
-/// PRODUCTION build, for the Settings -> Updates panel (GET /api/system/update).
-/// <para>The latest build is read from the download domain
-/// (downloads.zeussdr.com), published from <c>main</c> only. The
-/// <c>Release*</c> fields describe the platform-matched download asset when a
-/// network check has completed: <see cref="ReleaseDownloadUrl"/> +
-/// <see cref="ReleaseAssetName"/> + <see cref="ReleaseAssetDigest"/> (sha256).
-/// <see cref="UpdateAction"/> is "download" when a matching asset exists,
-/// "openRelease" when only the website is available, or "none".
-/// <see cref="MinVersion"/>/<see cref="ForceUpdate"/>/<see cref="ForceReason"/>
-/// describe the dormant mandatory-update gate when the release manifest sets a
-/// floor, or when a packaged install is older than the highest packaged version
-/// previously run on the machine.
-/// <see cref="IsGitRepo"/>/<see cref="Branch"/>/<see cref="CurrentShortSha"/> are
-/// diagnostics for source checkouts; the git fast-forward path was removed, so
-/// <see cref="Behind"/>/<see cref="Ahead"/>/<see cref="CanFastForward"/>/
-/// <see cref="UpstreamRef"/> are always 0/false/null. <see cref="Error"/> carries
-/// a human message when the network check failed; the rest of the fields hold the
-/// last locally-known values.</para></summary>
-public sealed record RepoUpdateStatus(
-    bool IsGitRepo,
-    string? Branch,
-    string? CurrentSha,
-    string? CurrentShortSha,
-    string? CurrentSubject,
-    string? UpstreamRef,
-    int Behind,
-    int Ahead,
-    bool Dirty,
-    bool CanFastForward,
-    string? LatestRemoteSha,
-    string? LatestRemoteSubject,
-    string? RemoteUrl,
-    string? CheckedUtc,
-    string? Error)
-{
-    public string InstalledVersion { get; init; } = "unknown";
-    public string RuntimePlatform { get; init; } = "unknown";
-    public string RuntimeArchitecture { get; init; } = "unknown";
-    public bool UpdateAvailable { get; init; }
-    public string UpdateAction { get; init; } = "none";
-    public string? LatestVersion { get; init; }
-    public string? MinVersion { get; init; }
-    public bool ForceUpdate { get; init; }
-    public string? ForceReason { get; init; }
-    public string? ReleaseTag { get; init; }
-    public string? ReleaseName { get; init; }
-    public string? ReleaseUrl { get; init; }
-    public string? ReleasePublishedUtc { get; init; }
-    public string? ReleaseAssetName { get; init; }
-    public string? ReleaseDownloadUrl { get; init; }
-    public long? ReleaseAssetSizeBytes { get; init; }
-    public string? ReleaseAssetDigest { get; init; }
-}
 
 // ---- External antenna ports (external-ports plan — antenna slice, #804) ----
 //

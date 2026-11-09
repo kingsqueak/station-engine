@@ -11,25 +11,6 @@
 
 namespace Zeus.Contracts;
 
-/// <summary>Index entry describing one registered diagnostics provider.</summary>
-public sealed record DiagnosticsProviderInfoDto(
-    int SchemaVersion,
-    string Id,
-    string RouteSegment,
-    string Category,
-    string Description,
-    int ProviderSchemaVersion,
-    string SnapshotUrl,
-    string SelfCheckUrl,
-    int SelfCheckCount);
-
-/// <summary>The catalogue of every provider on the v2 surface.</summary>
-public sealed record DiagnosticsIndexDto(
-    int SchemaVersion,
-    DateTimeOffset GeneratedUtc,
-    int ProviderCount,
-    DiagnosticsProviderInfoDto[] Providers);
-
 /// <summary>Result of a single self-check probe, flattened for the wire.</summary>
 public sealed record SelfCheckResultDto(
     int SchemaVersion,

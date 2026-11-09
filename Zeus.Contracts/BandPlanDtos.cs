@@ -75,11 +75,5 @@ public sealed record BandPlanSaveRequest(
     string RegionId,
     IReadOnlyList<BandSegment> Segments);
 
-/// <summary>
-/// Broadcast on MsgType.BandPlanChanged (0x18) when the active region changes
-/// or the plan is edited. Payload: [type:1][regionIdUtf8:variable].
-/// </summary>
-public sealed record BandPlanChangedPayload(string RegionId);
-
 /// <summary>Request body for POST /api/bands/guard.</summary>
 public sealed record BandGuardSetRequest(bool Ignore);

@@ -21,11 +21,6 @@ public enum MidiControlType : byte
     Wheel = 2,
 }
 
-/// <summary>A connected MIDI input device, as enumerated by the engine.</summary>
-public sealed record MidiDeviceDto(
-    string Name,
-    bool Connected);
-
 /// <summary>One operator-defined binding: a physical control on a named device
 /// mapped to a Zeus command. <paramref name="ControlId"/> is the engine's
 /// stable identifier for the control (e.g. "note:0:60" or "cc:0:7"). Min/Max
@@ -39,15 +34,6 @@ public sealed record MidiMappingDto(
     int Min = 0,
     int Max = 127,
     bool Toggle = false);
-
-/// <summary>A connected Stream Deck-compatible HID controller. Counts let the
-/// UI render its keys and rotary controls.</summary>
-public sealed record StreamDeckDeviceDto(
-    string Name,
-    string Serial,
-    int ButtonCount,
-    bool Connected,
-    int DialCount = 0);
 
 /// <summary>One Stream Deck button → command binding, keyed by device serial
 /// and zero-based button index.</summary>
@@ -91,19 +77,3 @@ public sealed record MidiLearnFrame(
     int Value,
     int Delta);
 
-/// <summary>The MIDI subsystem's runtime config payload — the enable flag plus
-/// the binding document — the body of <c>GET/PUT /api/midi/config</c>.</summary>
-public sealed record MidiConfigDto(
-    bool Enabled,
-    MidiBindingsDoc Bindings);
-
-/// <summary>MIDI subsystem status for the settings panel: whether each engine
-/// is available on this platform, the live device lists, and the enable
-/// flag.</summary>
-public sealed record MidiStatusDto(
-    bool Enabled,
-    bool MidiEngineAvailable,
-    bool StreamDeckEngineAvailable,
-    IReadOnlyList<MidiDeviceDto> MidiDevices,
-    IReadOnlyList<StreamDeckDeviceDto> StreamDeckDevices,
-    bool Learning);

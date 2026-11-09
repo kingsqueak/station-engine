@@ -55,13 +55,6 @@ using Zeus.Protocol1;
 
 namespace Zeus.Server;
 
-public sealed record Protocol3TxEngineConnection(
-    string Engine,
-    int EngineRateHz,
-    int TxIqRateHz,
-    bool External,
-    bool PureSignal);
-
 public partial class DspPipelineService : BackgroundService,
     Zeus.Protocol1.IRxPacketSink,
     Zeus.Protocol2.IRxPacketSink
@@ -90,8 +83,6 @@ public partial class DspPipelineService : BackgroundService,
     private readonly RxAudioMuteState? _rxAudioMute;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<DspPipelineService> _log;
-    private readonly ExternalDspEngineProviderLoader _externalDspProvider;
-    private Protocol3TxEngineConnection? _protocol3TxEngineConnection;
     // Live RX analyzer FFT size. Seeded from the profile/config snapshot and
     // replaced only by an explicit operator selection (SetRxAnalyzerFftSize).
     // Read with Volatile.Read: the settings endpoint thread writes it while
@@ -1170,23 +1161,6 @@ public partial class DspPipelineService : BackgroundService,
     private readonly object _widebandZoomRequestLock = new();
     internal const long WidebandDetailIqStaleMs = 750;
     private readonly WidebandSpectrumAnalyzer _widebandAnalyzer = new();
-    // Deterministic wideband signal detection (opt-in via display settings).
-    // Runs inside the analyzer loop on the same DC-suppressed, averaged
-    // spectrum the display renders; results are published as a snapshot under
-    // _widebandSignalSnapshotLock for the REST signals endpoint. Display-only:
-    // markers never touch the binary DisplayFrame stream or any RX/TX path.
-    private readonly WidebandSignalDetector _widebandSignalDetector =
-        new((WidebandSpectrumAnalyzer.AnalysisFftSize / 2) + 1);
-    private readonly WidebandSignalMarker[] _widebandMarkersBuf =
-        new WidebandSignalMarker[WidebandSignalDetector.MaxTrackedSignals];
-    private int _widebandSignalMarkersEnabled;
-    private readonly object _widebandSignalSnapshotLock = new();
-    private WidebandSignalMarker[] _widebandSignalSnapshot =
-        new WidebandSignalMarker[WidebandSignalDetector.MaxTrackedSignals];
-    private int _widebandSignalSnapshotCount;
-    private long _widebandSignalSnapshotMs;
-    private long _widebandSignalSnapshotCenterHz;
-    private float _widebandSignalSnapshotHzPerPixel;
     // Analyzer-loop fault containment: a bad frame must never kill the
     // display worker. Counted and log-throttled for diagnostics.
     private long _widebandAnalyzerErrorCount;
@@ -1615,9 +1589,6 @@ public partial class DspPipelineService : BackgroundService,
     private double _appliedPsAmpDelayNs = 150.0;
     private double _appliedPsHwPeak = 0.4072;
     private PsFeedbackSource _appliedPsFeedbackSource = PsFeedbackSource.Internal;
-    private int _appliedExternalPsFeedbackAttenuationDb = -1;
-    private int _appliedExternalPsCorrectionMode = -1;
-    private int _externalPsFailCloseLatched;
     // PS-Monitor toggle (issue #121). Pure source-routing flag — Tick reads
     // it on each tick to choose between the TX analyzer (predistorted IQ)
     // and the PS-feedback analyzer (post-PA loopback IQ). volatile because
@@ -2103,7 +2074,6 @@ public partial class DspPipelineService : BackgroundService,
         _loggerFactory = loggerFactory;
         _txIngestFactory = txIngestFactory;
         _log = loggerFactory.CreateLogger<DspPipelineService>();
-        _externalDspProvider = new ExternalDspEngineProviderLoader(configuration, _log);
         _txTurnaround = new TxTurnaroundTelemetry(_log);
         var displayHardware = DisplayHardwareProfile.Current();
         var displayPerformance = DisplayPerformanceOptions.Resolve(
@@ -2315,12 +2285,6 @@ public partial class DspPipelineService : BackgroundService,
         ResolveTxIngest()?.DrainVoiceTxTail(tailDelayMs, shouldAbort) ?? false;
 
     /// <summary>
-    /// Old-school roger beep tail. Called by TxService on an accepted local
-    /// MOX release, before the wire MOX bit drops.
-    /// </summary>
-    public virtual bool DrainRogerBeepTail() => ResolveTxIngest()?.DrainRogerBeepTail() ?? false;
-
-    /// <summary>
     /// Finish a CW station ID that is on the air at an accepted local MOX
     /// release, before the wire MOX bit drops. <paramref name="shouldAbort"/>
     /// cuts the hold short for an emergency release; <paramref name="onHold"/>
@@ -2496,7 +2460,6 @@ public partial class DspPipelineService : BackgroundService,
         ApplyTxDisplaySettings(dto);
         SetRxAnalyzerFftSize(dto.RxDisplayFftSize);
         SetWidebandDisplayEnabled(dto.WidebandDisplayEnabled);
-        SetWidebandSignalMarkersEnabled(dto.WidebandSignalMarkersEnabled);
         SetDisplayPerformance(
             dto.DisplayMaxFrameRateHz,
             dto.DisplayDecimation,
@@ -2544,43 +2507,6 @@ public partial class DspPipelineService : BackgroundService,
             if (channelId < 0 || rx.AppliedAnalyzerFftSize == fftSize) continue;
             engine.SetRxDisplayFftSize(channelId, fftSize);
             rx.AppliedAnalyzerFftSize = fftSize;
-        }
-    }
-
-    private void SetWidebandSignalMarkersEnabled(bool enabled)
-    {
-        Volatile.Write(ref _widebandSignalMarkersEnabled, enabled ? 1 : 0);
-        if (enabled) return;
-        // Toggled off: drop the published snapshot immediately so polling
-        // clients see an empty, current answer instead of stale markers.
-        lock (_widebandSignalSnapshotLock)
-        {
-            _widebandSignalSnapshotCount = 0;
-            _widebandSignalSnapshotMs = 0;
-        }
-    }
-
-    /// <summary>
-    /// Latest detected wideband signals plus the viewport they were detected
-    /// under. Empty when markers are disabled, wideband is off, or no signal
-    /// has been confirmed yet.
-    /// </summary>
-    public WidebandSignalsSnapshotDto GetWidebandSignalsSnapshot()
-    {
-        lock (_widebandSignalSnapshotLock)
-        {
-            var signals = new WidebandSignalMarkerDto[_widebandSignalSnapshotCount];
-            for (int i = 0; i < _widebandSignalSnapshotCount; i++)
-            {
-                var m = _widebandSignalSnapshot[i];
-                signals[i] = new WidebandSignalMarkerDto(
-                    m.CenterHz, m.LowHz, m.HighHz, m.PeakDb, m.NoiseFloorDb, m.SnrDb, m.Confidence);
-            }
-            return new WidebandSignalsSnapshotDto(
-                _widebandSignalSnapshotMs,
-                _widebandSignalSnapshotCenterHz,
-                _widebandSignalSnapshotHzPerPixel,
-                signals);
         }
     }
 
@@ -3373,7 +3299,6 @@ public partial class DspPipelineService : BackgroundService,
             _p2Client?.CurrentWidebandGeometry.UpdateRateMs
             ?? Zeus.Protocol2.Protocol2Client.ClassicWidebandUpdateRateMs;
         WidebandSpectrumViewport viewport;
-        int markerCount = 0;
         try
         {
             viewport = _widebandAnalyzer.Analyze(
@@ -3383,10 +3308,7 @@ public partial class DspPipelineService : BackgroundService,
                 _widebandWfBuf,
                 state.ZoomLevel,
                 WidebandViewportTargetCenterHz(state),
-                frameIntervalMs,
-                Volatile.Read(ref _widebandSignalMarkersEnabled) != 0 ? _widebandSignalDetector : null,
-                _widebandMarkersBuf,
-                out markerCount);
+                frameIntervalMs);
         }
         catch (Exception ex)
         {
@@ -3479,20 +3401,6 @@ public partial class DspPipelineService : BackgroundService,
         if (sourceGeneration == Interlocked.Read(ref _widebandSourceGeneration) &&
             Volatile.Read(ref _p2WidebandTransportEnabled) != 0)
         {
-            // Publish the markers snapshot only for frames that pass the
-            // ownership checks and actually reach operators, so markers
-            // always agree with the rendered trace they overlay.
-            if (Volatile.Read(ref _widebandSignalMarkersEnabled) != 0)
-            {
-                lock (_widebandSignalSnapshotLock)
-                {
-                    Array.Copy(_widebandMarkersBuf, _widebandSignalSnapshot, markerCount);
-                    _widebandSignalSnapshotCount = markerCount;
-                    _widebandSignalSnapshotMs = (long)nowMs;
-                    _widebandSignalSnapshotCenterHz = viewport.CenterHz;
-                    _widebandSignalSnapshotHzPerPixel = viewport.HzPerPixel;
-                }
-            }
             _hub.Broadcast(frame);
         }
     }
@@ -4210,10 +4118,6 @@ public partial class DspPipelineService : BackgroundService,
             schemaVersion = 1,
             engine = engine?.GetType().Name ?? "None",
             engineKind = wdspActive ? "WDSP" : offlinePreview ? "OfflinePreview" : synthetic ? "Synthetic" : engine is null ? "None" : "Other",
-            protocol3TxEngine = CurrentProtocol3TxEngine,
-            externalPureSignal = engine is ExternalProtocol3TxDspEngine { PureSignalEnabled: true } externalPs
-                ? externalPs.GetPureSignalStatus()
-                : (ExternalPureSignalStatus?)null,
             wdspActive = nrRuntime.WdspActive,
             synthetic,
             offlinePreview,
@@ -6833,42 +6737,11 @@ public partial class DspPipelineService : BackgroundService,
             _appliedPsAuto = s.PsAuto;
             _appliedPsSingle = s.PsSingle;
         }
-        if (engine is ExternalProtocol3TxDspEngine { PureSignalEnabled: true } externalPs)
-        {
-            int feedbackAttenuationDb = Math.Clamp(s.PsTxFeedbackAttenuationDb, 0, 31);
-            int requestedCorrectionMode = s.PsSingle ? 2 : s.PsAuto ? 1 : 0;
-            // Match the existing native control deferral above: source and
-            // attenuation may remain live controls, but switching the
-            // correction/calibration mode mid-over would split radio-route
-            // state from the corrector until key-up.
-            int correctionMode = _keyed && _appliedExternalPsCorrectionMode >= 0
-                ? _appliedExternalPsCorrectionMode
-                : requestedCorrectionMode;
-            if (resync ||
-                s.PsFeedbackSource != _appliedPsFeedbackSource ||
-                feedbackAttenuationDb != _appliedExternalPsFeedbackAttenuationDb ||
-                correctionMode != _appliedExternalPsCorrectionMode)
-            {
-                externalPs.SetPureSignalRouteSettings(
-                    new ExternalPureSignalRouteSettings(
-                        s.PsFeedbackSource == PsFeedbackSource.External,
-                        feedbackAttenuationDb,
-                        correctionMode));
-                _appliedExternalPsFeedbackAttenuationDb = feedbackAttenuationDb;
-                _appliedExternalPsCorrectionMode = correctionMode;
-            }
-        }
         var p1Active = _radio.ActiveClient;
         bool p1ArmMismatch = p1Active is not null
             && p1Active.PsEnabled != s.PsEnabled
             && IsPsArmWorkComplete();
-        bool externalArmMismatch = engine is ExternalProtocol3TxDspEngine
-            {
-                PureSignalEnabled: true
-            } externalArmEngine
-            && externalArmEngine.PureSignalArmed != s.PsEnabled
-            && IsPsArmWorkComplete();
-        if (resync || s.PsEnabled != _appliedPsEnabled || p1ArmMismatch || externalArmMismatch)
+        if (resync || s.PsEnabled != _appliedPsEnabled || p1ArmMismatch)
         {
             if (s.PsEnabled && _keyed)
             {
@@ -6901,7 +6774,6 @@ public partial class DspPipelineService : BackgroundService,
                 // there. The wire calls are board-gated no-ops on those
                 // boards (WriteAttenuatorPayload + SnapshotState).
                 bool psEngineSupported =
-                    engine is ExternalProtocol3TxDspEngine { PureSignalEnabled: true } ||
                     P1PsEngineArmSupported(
                         p1Connected: p1Active is not null,
                         _radio.ConnectedBoardKind);
@@ -7105,12 +6977,7 @@ public partial class DspPipelineService : BackgroundService,
         if (!await work.ConfigureAwait(false)) return false;
         if (_radio.Snapshot().PsEnabled || _radio.ActiveClient?.PsEnabled == true)
             return false;
-        lock (_engineLock)
-            return _engine is not ExternalProtocol3TxDspEngine
-                {
-                    PureSignalEnabled: true,
-                    PureSignalArmed: true,
-                };
+        return true;
     }
 
     private bool IsPsArmWorkComplete()
@@ -7118,32 +6985,6 @@ public partial class DspPipelineService : BackgroundService,
         lock (_psArmWorkSync) return _psArmWork.IsCompleted;
     }
 
-    internal void ReconcileExternalPureSignalStatusForTick(IDspEngine engine, StateDto state)
-    {
-        if (engine is not ExternalProtocol3TxDspEngine { PureSignalEnabled: true } externalPs ||
-            !state.PsEnabled)
-        {
-            Interlocked.Exchange(ref _externalPsFailCloseLatched, 0);
-            return;
-        }
-
-        if (!IsPsArmWorkComplete() || externalPs.GetPureSignalStatus().Armed)
-            return;
-        if (Interlocked.Exchange(ref _externalPsFailCloseLatched, 1) != 0)
-            return;
-
-        _log.LogWarning(
-            "ps.external.fail-close provider reported disarmed while runtime state was armed; clearing runtime arm state");
-        _ = Task.Run(() =>
-        {
-            try { _radio.FailClosedPureSignalRuntime(); }
-            catch (Exception ex)
-            {
-                Interlocked.Exchange(ref _externalPsFailCloseLatched, 0);
-                _log.LogWarning(ex, "ps.external.fail-close runtime disarm failed");
-            }
-        });
-    }
 
     private void SchedulePsArmTransition(
         bool enable, IProtocol1Client? p1, IDspEngine engine, bool engineArmSupported)
@@ -7196,23 +7037,6 @@ public partial class DspPipelineService : BackgroundService,
     private async Task<bool> RunPsArmTransitionAsync(
         bool enable, IProtocol1Client? p1, IDspEngine engine, bool engineArmSupported)
     {
-        // A capability-gated external P3 engine owns its matching p3app route
-        // transaction. Zeus still owns operator intent and serialization;
-        // startup remains disarmed and P1/P2 retain their wire-first ordering.
-        if (engine is ExternalProtocol3TxDspEngine { PureSignalEnabled: true })
-        {
-            bool applied = false;
-            lock (_engineLock)
-            {
-                if (ReferenceEquals(engine, _engine))
-                {
-                    engine.SetPsEnabled(enable);
-                    applied = true;
-                }
-            }
-            if (!enable) DrainPsFeedback();
-            return applied && externalPsStateMatches(engine, enable);
-        }
 
         if (enable)
         {
@@ -7265,9 +7089,6 @@ public partial class DspPipelineService : BackgroundService,
             return engineDisarmed && wireDisarmed;
         }
 
-        static bool externalPsStateMatches(IDspEngine engine, bool enabled) =>
-            engine is ExternalProtocol3TxDspEngine externalPs &&
-            externalPs.PureSignalArmed == enabled;
     }
 
     private async Task<bool> SetAndReconcileP1PsEnabledAsync(
@@ -8589,111 +8410,6 @@ public partial class DspPipelineService : BackgroundService,
             releaseToDrain = new { lastMs = (double?)null, p50Ms = (double?)null, p95Ms = (double?)null, samples = 0 },
         };
 
-    /// <summary>
-    /// Protocol 3 RX/display/audio is supplied by the hosted sidecar. Zeus still
-    /// owns the local TX-audio-to-IQ engine and opens it explicitly on connect so
-    /// MOX/TUN can produce 192 kHz IQ for the existing sidecar ingress. WDSP is
-    /// the unchanged default. An external engine is loaded only after explicit
-    /// configuration and is never silently replaced with WDSP if loading fails.
-    /// </summary>
-    public Protocol3TxEngineConnection ConnectP3TxEngine(int sampleRateHz)
-    {
-        int rateHz = sampleRateHz > 0 ? sampleRateHz : 192_000;
-        var mode = _externalDspProvider.Mode;
-
-        var current = Volatile.Read(ref _engine);
-        var existingConnection = Volatile.Read(ref _protocol3TxEngineConnection);
-        if (current is not null &&
-            existingConnection is not null &&
-            existingConnection.EngineRateHz == rateHz &&
-            existingConnection.External == (mode == Protocol3TxEngineMode.External))
-        {
-            return existingConnection;
-        }
-
-        IDspEngine next;
-        string engineName;
-        bool external;
-        if (mode == Protocol3TxEngineMode.External)
-        {
-            bool pureSignal = _externalDspProvider.Capabilities.HasFlag(
-                ExternalDspEngineCapabilities.PureSignal);
-            var externalEngine = _externalDspProvider.CreateEngine(
-                new ExternalDspEngineRequest(
-                    ExternalDspEngineRole.Transmit,
-                    rateHz,
-                    _panadapterWidth,
-                    TxOutputRateHz: 192_000,
-                    PureSignalEnabled: pureSignal),
-                out engineName);
-            next = new ExternalProtocol3TxDspEngine(externalEngine, pureSignal);
-            external = true;
-        }
-        else
-        {
-            next = new WdspDspEngine(_loggerFactory.CreateLogger<WdspDspEngine>(), Volatile.Read(ref _rxAnalyzerFftSize));
-            engineName = "WDSP";
-            external = false;
-        }
-
-        int channelId = -1;
-        try
-        {
-            channelId = next.OpenChannel(rateHz, _panadapterWidth);
-            SeedTxDisplayConfig(next);
-            // Saturn/G2 DUC-compatible host-IQ mode is 48 kHz mic to 192 kHz
-            // IQ, matching the proven P2 G2 path and the sidecar ingest rate.
-            next.OpenTxChannel(outputRateHz: 192_000);
-            try { ApplyStateToNewChannel(next, channelId); }
-            catch (EntryPointNotFoundException ex) when (!external)
-            {
-                _log.LogWarning(ex, "dsp.pipeline p3 wdsp missing entry point - partial config applied");
-            }
-
-        }
-        catch
-        {
-            TeardownEngine(next, channelId);
-            throw;
-        }
-
-        IDspEngine? old;
-        int oldChannel;
-        lock (_engineLock)
-        {
-            old = _engine;
-            oldChannel = _channelId;
-            PublishPrimaryEngineLocked(next, channelId);
-            ResetSecondaryRxChannels();
-            Volatile.Write(ref _sampleRateHz, rateHz);
-        }
-
-        TeardownEngine(old, oldChannel);
-        var connection = new Protocol3TxEngineConnection(
-            engineName,
-            rateHz,
-            TxIqRateHz: 192_000,
-            external,
-            PureSignal: next is ExternalProtocol3TxDspEngine { PureSignalEnabled: true });
-        Volatile.Write(ref _protocol3TxEngineConnection, connection);
-        _psResyncRequired = true;
-        _appliedTxMonitorEnabled = false;
-        _log.LogInformation(
-            "dsp.pipeline p3 tx engine={Engine} external={External} channel={Id} rxRate={Rate} txIqRate=192000",
-            engineName,
-            external,
-            channelId,
-            rateHz);
-        RaiseEngineChanged(next);
-        OnRadioStateChanged(_radio.Snapshot());
-        return connection;
-    }
-
-    public Protocol3TxEngineConnection? CurrentProtocol3TxEngine =>
-        Volatile.Read(ref _protocol3TxEngineConnection);
-
-    public ExternalDspEngineCapabilities Protocol3ExternalCapabilities =>
-        _externalDspProvider.Capabilities;
 
     public void DisconnectP3TxEngine()
     {
@@ -8714,7 +8430,6 @@ public partial class DspPipelineService : BackgroundService,
         }
 
         TeardownEngine(old, oldChannel);
-        Volatile.Write(ref _protocol3TxEngineConnection, null);
         _psResyncRequired = true;
         _appliedTxMonitorEnabled = false;
         RaiseEngineChanged(disconnectedEngine);
@@ -9802,7 +9517,6 @@ public partial class DspPipelineService : BackgroundService,
 
         var state = _radio.Snapshot();
         ReconcileCaptureMonitor(engine, state);
-        ReconcileExternalPureSignalStatusForTick(engine, state);
         CaptureBandwidthSpectra(engine, state);
         // Synthetic engine stays open while disconnected so SetMode/SetFilter
         // etc. have somewhere to land, but its sweep+static placeholder used

@@ -46,14 +46,6 @@ namespace Zeus.Contracts;
 
 // Broadcast frame carrying the current RX filter state with optional preset
 // context. Emitted on every SetFilter call and on mode change.
-public sealed record FilterStateFrame(
-    int ChannelId,
-    RxMode Mode,
-    int LowHz,
-    int HighHz,
-    string? PresetName = null,
-    int? PresetIndex = null);
-
 // REST / hub request to set the active filter. PresetName is optional;
 // nudges without a preset context (drag edits) omit it and clear the
 // active-preset highlight on the frontend.

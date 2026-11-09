@@ -147,14 +147,7 @@ public static class StationEngineHostingExtensions
         // file the product host has always used for these collections — so an
         // operator's saved look-and-feel follows them between the desktop host
         // and a standalone engine on the same machine, with no migration.
-        services.AddSingleton<ThemeSettingsStore>();
         services.AddSingleton<DisplaySettingsStore>();
-        services.AddSingleton<DisplayIntelligenceSettingsStore>();
-        services.AddSingleton<ToolbarSettingsStore>();
-        services.AddSingleton<NrUiPrefsStore>();
-        services.AddSingleton<ClockSettingsStore>();
-        services.AddSingleton<BottomPinStore>();
-        services.AddSingleton<PanWfSplitStore>();
         services.AddSingleton<OperatorIdentityStore>();
         // Digital workspace prefs (per-mode FT8/FT4/WSPR settings + the Auto-CQ
         // ack stamp). Same collections the desktop host uses, so the rows follow

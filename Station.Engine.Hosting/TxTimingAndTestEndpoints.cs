@@ -47,7 +47,6 @@ public static class TxTimingAndTestEndpoints
             return Results.Ok(new { txPostTxRxMuteDelayMs = state.TxPostTxRxMuteDelayMs });
         });
 
-        // SimpleHPSDR fork: no roger beep (the route is gone and it is always off).
 
         // TX timeout (issue #1270). Maximum single-transmission length that
         // TxMetersService allows before it trips MOX/TUN to protect the PA.

@@ -92,7 +92,6 @@ internal sealed record EngineOperatorDiagnosticsSnapshot(
         Add("TX audio source", state.TxAudioSource.ToString());
         Add("Mic gain", $"{Int(state.MicGainDb)} dB");
         Add("TX monitor", OnOff(state.TxMonitorEnabled));
-        Add("Roger beep", OnOff(state.RogerBeepEnabled));
         Add("CFC", OnOff(state.Cfc?.Enabled == true));
         Add("TX leveler", OnOff(state.TxLeveling?.LevelerEnabled == true));
         // Read-only view of PureSignal state already published in StateDto.

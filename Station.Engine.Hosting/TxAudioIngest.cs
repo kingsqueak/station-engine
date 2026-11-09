@@ -179,7 +179,6 @@ public sealed class TxAudioIngest : IDisposable
     private const int FreeDvTxTailDrainSlackMs = 120;   // headroom over the measured backlog
     private const int FreeDvTxTailCeilingMs = 1200;     // absolute runaway cap on the drain
     private const int FreeDvTxTailGuardMs = 160;        // post-drain FIFO flush hold
-    private const int RogerBeepDurationMs = 180;
     private const int RogerBeepDspFlushCeilingMs = 200;
     private const int RogerBeepFlushSilentBlocks = 2;
     private const float RogerBeepFlushIqThreshold = 0.001f; // -60 dBFS
@@ -200,8 +199,6 @@ public sealed class TxAudioIngest : IDisposable
     // coarse OS timer (15.6 ms on Windows) cannot stretch the flush; only a
     // stall longer than this re-anchors the pace.
     private const int VoiceTailMaxCatchUpMs = 50;
-    private const double RogerBeepFrequencyHz = 1000.0;
-    private const float RogerBeepMagnitude = 0.60f;
     private const int KeyDownPrimeBlocks = 12;
     private const float MonitorPreviewOpenPeak = 0.012f; // ~-38 dBFS
     private const float MonitorPreviewOpenRms = 0.003f;  // ~-50 dBFS
@@ -1113,105 +1110,6 @@ public sealed class TxAudioIngest : IDisposable
     }
 
     /// <summary>
-    /// Clock a short voice-mode roger beep through the normal TX chain before
-    /// PTT drops. Called by <see cref="TxService"/> after an accepted local
-    /// MOX release while the wire MOX bit is still asserted.
-    /// </summary>
-    public bool DrainRogerBeepTail()
-    {
-        if (_audioModem.Active) return false;
-        if (_txOwnedByTuneDriver()) return false;
-
-        var engine = _engineProvider();
-        int blockSize = engine?.TxBlockSamples ?? 0;
-        int iqOut = engine?.TxOutputSamples ?? 0;
-        if (engine is null || blockSize <= 0 || iqOut <= 0
-            || blockSize > _tailMic.Length || 2 * iqOut > _tailIq.Length)
-            return false;
-
-        if (Interlocked.CompareExchange(ref _tailDraining, 1, 0) != 0) return false;
-        lock (_sync) { _accumulatorFill = 0; }
-        bool emitted = false;
-        bool bypassApplied = false;
-        try
-        {
-            bypassApplied = true;
-            engine.SetTxRogerBeepBypass(true);
-            int totalSamples = Math.Max(1, TxRateHz * RogerBeepDurationMs / 1000);
-            double phase = 0.0;
-            double phaseStep = 2.0 * Math.PI * RogerBeepFrequencyHz / TxRateHz;
-            long freq = System.Diagnostics.Stopwatch.Frequency;
-            long periodTicks = (long)(freq * (double)blockSize / TxRateHz);
-            long deadline = System.Diagnostics.Stopwatch.GetTimestamp();
-            int sampleIndex = 0;
-            int blocks = 0;
-            float micPeak = 0f;
-            float iqPeak = 0f;
-
-            while (sampleIndex < totalSamples)
-            {
-                int active = Math.Min(blockSize, totalSamples - sampleIndex);
-                Array.Clear(_tailMic, 0, blockSize);
-                for (int i = 0; i < active; i++)
-                {
-                    float env = RogerBeepEnvelope(sampleIndex + i, totalSamples);
-                    float sample = (float)(Math.Sin(phase) * RogerBeepMagnitude * env);
-                    _tailMic[i] = sample;
-                    float sampleAbs = sample;
-                    if (sampleAbs < 0) sampleAbs = -sampleAbs;
-                    if (sampleAbs > micPeak) micPeak = sampleAbs;
-                    phase += phaseStep;
-                    if (phase >= 2.0 * Math.PI) phase -= 2.0 * Math.PI;
-                }
-
-                if (ClockTailBlock(engine, blockSize, iqOut, ref iqPeak, out _) > 0)
-                {
-                    emitted = true;
-                    blocks++;
-                }
-
-                sampleIndex += active;
-                deadline += periodTicks;
-                if (!SleepToBlockDeadline(deadline, freq))
-                {
-                    deadline = System.Diagnostics.Stopwatch.GetTimestamp();
-                }
-            }
-
-            var flush = FlushTxTailAndTransport(engine, blockSize, iqOut, periodTicks, freq, ref deadline, ref iqPeak);
-            if (flush.EmittedBlocks > 0) emitted = true;
-            blocks += flush.EmittedBlocks;
-            _log.LogInformation(
-                "tx.rogerBeep.tail dropping PTT: blocks={Blocks} flushBlocks={FlushBlocks} dspFlushed={DspFlushed} flushCeilingMs={FlushCeiling} durationMs={Duration} freqHz={Freq:F0} micPeak={MicPeak:F4} iqPeak={IqPeak:F4} transportDrained={TransportDrained} transportBudgetMs={TransportBudget} guardMs={Guard}",
-                blocks, flush.FlushBlocks, flush.DspFlushed, RogerBeepDspFlushCeilingMs,
-                RogerBeepDurationMs, RogerBeepFrequencyHz, micPeak, iqPeak,
-                flush.TransportDrained, RogerBeepTransportDrainTimeoutMs, RogerBeepTailGuardMs);
-            return emitted;
-        }
-        catch (Exception ex)
-        {
-            _log.LogWarning(ex, "tx.rogerBeep.tail drain threw");
-            return false;
-        }
-        finally
-        {
-            if (bypassApplied)
-            {
-                try { engine.SetTxRogerBeepBypass(false); }
-                catch (Exception ex) { _log.LogWarning(ex, "tx.rogerBeep.bypass restore threw"); }
-            }
-            lock (_sync)
-            {
-                _ring.Clear();
-                _accumulatorFill = 0;
-                SetRecordingBypassLocked(null, false);
-                _lastSeenMox = false;
-            }
-            Volatile.Write(ref _tailDraining, 0);
-        }
-    }
-
-    /// <summary>
     /// Finish a CW station ID that was on the air when the operator un-keyed.
     /// Called by <see cref="TxService"/> on an accepted MOX release while the
     /// wire MOX bit is still asserted, so the ID goes out once, complete,
@@ -1606,15 +1504,6 @@ public sealed class TxAudioIngest : IDisposable
             }
             Volatile.Write(ref _tailDraining, 0);
         }
-    }
-
-    private static float RogerBeepEnvelope(int sample, int totalSamples)
-    {
-        int fadeSamples = Math.Min(TxRateHz / 200, Math.Max(1, totalSamples / 4)); // <= 5 ms
-        if (sample < fadeSamples) return sample / (float)fadeSamples;
-        int remaining = totalSamples - sample - 1;
-        if (remaining < fadeSamples) return Math.Max(0f, remaining / (float)fadeSamples);
-        return 1f;
     }
 
     // FreeDV digital-voice modem coordinator. When FreeDV is the active mode,
