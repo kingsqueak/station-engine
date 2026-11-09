@@ -169,9 +169,6 @@ internal static class PrefsCollectionShapeGuard
         new(DisplaySettingsStore.CollectionName, static db =>
             _ = db.GetCollection<DisplaySettingsEntry>(DisplaySettingsStore.CollectionName)
                 .FindAll().FirstOrDefault()),
-        new(ProductBundleSettingsStore.CollectionName, static db =>
-            _ = db.GetCollection<ProductBundleSettingsEntry>(ProductBundleSettingsStore.CollectionName)
-                .FindAll().FirstOrDefault()),
     ];
 }
 

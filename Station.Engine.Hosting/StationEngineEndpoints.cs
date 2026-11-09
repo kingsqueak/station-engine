@@ -169,7 +169,6 @@ public static class StationEngineEndpoints
         // it 404'd against a standalone engine in attach mode.
         endpoints.MapWindowsFirewallEndpoints();
         endpoints.MapStationEngineCapabilitiesEndpoint();
-        endpoints.MapLanProxyEndpoint();
         endpoints.MapNativeAudioEndpoints();
         endpoints.MapRadioStateEndpoint();
         endpoints.MapRadioConnectionEndpoints();
@@ -195,10 +194,8 @@ public static class StationEngineEndpoints
         endpoints.MapDexpEndpoints();
         endpoints.MapCfcPresetEndpoints();
         endpoints.MapSpectralZoomEndpoint();
-        endpoints.MapWorkspaceZoomEndpoint();
         endpoints.MapOperatorUiSettingsEndpoints();
         // SimpleHPSDR fork: no wideband signal-marker settings routes.
-        endpoints.MapOperatorSettingsEndpoints();
         // The attached SPA sends the same waterfall render-state beacon as the
         // full host. Without the shared route Zeus Link logs a 404 after every
         // waterfall mount even though the WebGL fallback itself is healthy.
@@ -209,8 +206,6 @@ public static class StationEngineEndpoints
         // First-run wizard progress — served by BOTH hosts (the workspace-
         // layout pattern) so the SPA's onboarding state persists identically
         // whether it is talking to the engine (attach) or the full host.
-        endpoints.MapOnboardingEndpoints();
-        endpoints.MapWorkspaceLayoutEndpoints();
         endpoints.MapBandPlanEndpoints();
         endpoints.MapStationFavoriteEndpoints();
         endpoints.MapPaSettingsEndpoints();
@@ -242,11 +237,9 @@ public static class StationEngineEndpoints
         // the active database only applies on relaunch. The engine variant
         // exits gracefully and lets the Zeus Link launcher supervisor respawn
         // it — it must NOT self-relaunch like the desktop AppRestartService.
-        endpoints.MapEngineAppControlEndpoints();
         // Zeus Link bundle settings mirror: the product reads its feature
         // toggles and amplifier configs back from the engine (the exportable
         // zeus-prefs.db) so they survive updates and ride splash-row exports.
-        endpoints.MapProductBundleSettingsEndpoints();
         // Support lifeline for "the engine wrote no zeus-app.log" field
         // reports: which build actually runs, where its log should live,
         // whether the on-disk sink is healthy (and why not), and the in-memory

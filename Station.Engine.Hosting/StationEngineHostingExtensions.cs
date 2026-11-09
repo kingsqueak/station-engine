@@ -31,18 +31,6 @@ public static class StationEngineHostingExtensions
         services.AddSingleton(new StationReceiveOnlyPolicy(options.ReceiveOnly));
         services.AddHttpClient();
 
-        // LAN Browser proxy: StationEngine is the API origin reached by local
-        // attach, Product's LAN HTTPS facade, and the remote API tunnel. Keep
-        // redirects manual so LanProxyService can re-validate every hop.
-        services.AddHttpClient(LanProxyService.HttpClientName,
-                client => client.Timeout = TimeSpan.FromSeconds(15))
-            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
-            {
-                AllowAutoRedirect = false,
-                ServerCertificateCustomValidationCallback =
-                    HttpClientHandler.DangerousAcceptAnyServerCertificateValidator,
-            });
-        services.AddSingleton<LanProxyService>();
 
         services.AddSingleton(provider => new StationEngineCapabilitiesService(
             provider.GetRequiredService<IConfiguration>(),
@@ -162,26 +150,16 @@ public static class StationEngineHostingExtensions
         services.AddSingleton<ThemeSettingsStore>();
         services.AddSingleton<DisplaySettingsStore>();
         services.AddSingleton<DisplayIntelligenceSettingsStore>();
-        services.AddSingleton<OperatorSettingsStore>();
         services.AddSingleton<ToolbarSettingsStore>();
         services.AddSingleton<NrUiPrefsStore>();
         services.AddSingleton<ClockSettingsStore>();
         services.AddSingleton<BottomPinStore>();
         services.AddSingleton<PanWfSplitStore>();
         services.AddSingleton<OperatorIdentityStore>();
-        // Zeus Link bundle settings mirror (feature toggles + amplifier
-        // configs as one opaque product JSON document). Product database, same
-        // reasoning as the operator UI families above: it must ride the
-        // exportable zeus-prefs.db so the splash Database row can back it up.
-        services.AddSingleton<ProductBundleSettingsStore>();
         // Digital workspace prefs (per-mode FT8/FT4/WSPR settings + the Auto-CQ
         // ack stamp). Same collections the desktop host uses, so the rows follow
         // the operator between hosts on the same machine.
         services.AddSingleton<OperatorAckStore>();
-        // First-run / onboarding-wizard progress. Same exportable prefs DB as
-        // the ack stamp above so wizard completion follows the operator
-        // between hosts on the same machine (and rides database backups).
-        services.AddSingleton<OnboardingStateStore>();
 
         services.AddSingleton<TxIqRing>();
         services.AddSingleton<ITxIqSource>(sp => sp.GetRequiredService<TxIqRing>());
@@ -260,14 +238,12 @@ public static class StationEngineHostingExtensions
         services.AddSingleton<VirtualCableTxCapture>();
         services.AddSingleton<IAsioSessionFactory, AsioSessionFactory>();
         services.AddSingleton<NativeHostAudioCoordinator>();
-        services.AddSingleton<EngineCacheJanitor>();
 
         // Each hosted registration aliases the singleton used by endpoints
         // and other engine services, so there is exactly one instance of each.
         // Native sources start after the core pipeline and therefore stop
         // before it. This prevents an asynchronous device-open callback from
         // creating a preview DSP engine after shutdown has already begun.
-        services.AddHostedService<EngineCacheJanitorStartup>();
         services.AddHostedService(sp => sp.GetRequiredService<SaturnSpeakerAudioSink>());
         services.AddHostedService(sp => sp.GetRequiredService<WisdomBootstrapService>());
         // Push persisted display settings into the DSP before DspPipelineService

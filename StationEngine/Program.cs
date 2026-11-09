@@ -258,19 +258,8 @@ public partial class Program
         // the rule genuinely has to be re-pointed; see
         // docs/designs/windows-firewall-zero-prompt.md.
         if (!options.ReceiveOnly) builder.Services.AddWindowsFirewallStartupGrant();
-        // The later registration intentionally replaces the engine's inert
-        // fallback so optional hardware follows Zeus Link's first-party
-        // Features state, including live enable/disable without restart.
 
         var app = builder.Build();
-        // Every engine build unpacks into a new .NET extraction directory; drop
-        // the ones earlier builds left behind once this one is up.
-        var bundleLog = app.Services.GetRequiredService<ILoggerFactory>()
-            .CreateLogger("Zeus.BundleExtractionJanitor");
-        BundleExtractionJanitor.StartWhenReady(
-            app.Lifetime.ApplicationStarted,
-            "StationEngine",
-            message => bundleLog.LogInformation("{Message}", message));
         if (options.BindMode == StationEngineBindMode.Lan && options.LanHttpsPort is null)
         {
             app.Logger.LogInformation(
