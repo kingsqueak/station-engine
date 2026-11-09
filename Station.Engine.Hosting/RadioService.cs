@@ -433,7 +433,24 @@ public sealed partial class RadioService : IDisposable
     // AutoAGCOffsetRX1. Zeus has no separate offset knob yet, so use the actual
     // reference default rather than the old 0 dB assumption, which seated the
     // automatic threshold roughly 20 dB too hot.
-    private const double AutoAgcOffsetDb = 20.0;
+    // SimpleHPSDR: settable (Thetis udRX1AutoAGCOffset), +20 dB by default.
+    // Not persisted here; the client sets it after connecting.
+    internal const double DefaultAutoAgcOffsetDb = 20.0;
+    internal const double MinAutoAgcOffsetDb = 0.0;
+    internal const double MaxAutoAgcOffsetDb = 40.0;
+    private double _autoAgcOffsetDb = DefaultAutoAgcOffsetDb;
+
+    public double AutoAgcFloorOffsetDb => Volatile.Read(ref _autoAgcOffsetDb);
+
+    /// <summary>How far above the band noise floor auto AGC puts the AGC
+    /// threshold. Lower = more gain on weak signals and more noise; higher =
+    /// quieter. Applies from the next servo tick.</summary>
+    public double SetAutoAgcFloorOffset(double db)
+    {
+        double v = double.IsFinite(db) ? Math.Clamp(db, MinAutoAgcOffsetDb, MaxAutoAgcOffsetDb) : DefaultAutoAgcOffsetDb;
+        Volatile.Write(ref _autoAgcOffsetDb, v);
+        return v;
+    }
     // In non-Fixed modes Thetis subtracts a 2 dB calibration residual after
     // applying the configured floor shift. Fixed is the sole 0 dB exception
     // (console.cs agcCalOffset), because the result drives RXFixedAGC directly.
@@ -2855,6 +2872,7 @@ public sealed partial class RadioService : IDisposable
         bool ctun;
         long currentLo;
         int sampleRate;
+        long dialOffset;
         lock (_sync)
         {
             if (!paCalibrationOwner)
@@ -2864,6 +2882,7 @@ public sealed partial class RadioService : IDisposable
             ctun = _state.CtunEnabled;
             currentLo = _state.RadioLoHz;
             sampleRate = _state.SampleRate;
+            dialOffset = paCalibrationOwner ? 0 : DialOffsetHzUnderLock();
         }
 
         // CTUN: dial roams, NCO frozen — as long as the tuned signal stays
@@ -2909,7 +2928,8 @@ public sealed partial class RadioService : IDisposable
         // Classic recenter (CTUN off, CTUN out-of-window, or external source):
         // retune the hardware NCO to the dial's effective LO (CW: dial ∓
         // pitch), which leaves the WDSP CTUN-shift stage at zero.
-        long radioLoNew = CwOffset.EffectiveLoHz(currentMode, clamped);
+        // SimpleHPSDR: the display centre sits off the dial by the dial position.
+        long radioLoNew = CwOffset.EffectiveLoHz(currentMode, clamped) - dialOffset;
         Mutate(s =>
         {
             if (!paCalibrationOwner)
@@ -3278,11 +3298,13 @@ public sealed partial class RadioService : IDisposable
         long vfo;
         RxMode mode;
         bool changed;
+        long dialOffset;
         lock (_sync)
         {
             changed = _state.CtunEnabled != enabled;
             vfo = _state.VfoHz;
             mode = _state.Mode;
+            dialOffset = DialOffsetHzUnderLock();
         }
         if (!changed) return Snapshot();
         // Mutate marks the state dirty (so FlushState persists the toggle) and
@@ -3295,9 +3317,45 @@ public sealed partial class RadioService : IDisposable
             // drops to zero and the frontend frames recentre. Bypasses the MOX
             // guard so an operator toggling CTUN off mid-TX still lands the LO
             // on the dial they're transmitting on.
-            SetRadioLoUnchecked(CwOffset.EffectiveLoHz(mode, vfo));
+            SetRadioLoUnchecked(CwOffset.EffectiveLoHz(mode, vfo) - dialOffset);
         }
         return Snapshot();
+    }
+
+    // SimpleHPSDR: where the dial sits across the main panadapter, as a share of
+    // half the displayed span: 0 = centre, -0.9 = near the left edge, +0.9 = near
+    // the right. Every recentre (CTUN off tuning, CTUN turned off, this setter)
+    // puts the hardware LO that far from the dial, in either CTUN state. Not
+    // persisted: the client sets it after connecting. Transmit is unaffected:
+    // AlignLoForTx snaps the LO to the dial on key-down (P1) and P2 uses its DUC.
+    public const double MaxDialPosition = 0.9;
+    private double _dialPosition;   // guarded by _sync
+
+    public double DialPosition
+    {
+        get { lock (_sync) return _dialPosition; }
+    }
+
+    // Caller holds _sync. Display centre = dial - offset.
+    private long DialOffsetHzUnderLock()
+    {
+        int zoom = Math.Max(1, _state.ZoomLevel);
+        return (long)Math.Round(_dialPosition * _state.SampleRate / zoom / 2.0);
+    }
+
+    /// <summary>Set the dial position and recentre the display on it now
+    /// (held while transmitting, as other LO moves are).</summary>
+    public StateDto SetDialPosition(double position)
+    {
+        double p = double.IsFinite(position) ? Math.Clamp(position, -MaxDialPosition, MaxDialPosition) : 0.0;
+        long targetLo;
+        lock (_sync)
+        {
+            _dialPosition = p;
+            targetLo = CwOffset.EffectiveLoHz(_state.Mode, _state.VfoHz) - DialOffsetHzUnderLock();
+            if (_mox || _tunActive) return Snapshot();
+        }
+        return SetRadioLoUnchecked(targetLo);
     }
 
     /// <summary>Enable or disable full-duplex RX audio ("DUP" on the
@@ -4910,7 +4968,7 @@ public sealed partial class RadioService : IDisposable
         double calOffsetDb = agc.Mode == AgcMode.Fixed ? 0.0 : AgcThreshCalOffsetDb;
         // 1) Desired AGC threshold (Thetis: floor + userOffset − cal), clamped.
         double thresh = Math.Clamp(
-            noiseFloorDbm + AutoAgcOffsetDb - calOffsetDb,
+            noiseFloorDbm + AutoAgcFloorOffsetDb - calOffsetDb,
             AgcThreshMinDbm, AgcThreshMaxDbm);
         // 2) WDSP bandwidth/FFT term: 10·log10((fhigh−flow)·size/rate) (wcpAGC.c:482).
         //    fhigh−flow is the RX passband width WDSP runs (our _state filter edges).

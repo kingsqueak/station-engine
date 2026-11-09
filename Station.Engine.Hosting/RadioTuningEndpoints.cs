@@ -219,6 +219,15 @@ public static class RadioTuningEndpoints
             return Results.Ok(r.SetRadioLo(req.Hz));
         });
 
+        // SimpleHPSDR: where the dial sits across the display (-0.9..0.9, 0 = centre).
+        endpoints.MapPost("/api/radio/dial-position", (DialPositionSetRequest req, RadioService r) =>
+        {
+            if (!double.IsFinite(req.Position))
+                return Results.BadRequest(new { error = "position must be a number" });
+            log.LogDebug("api.radio.dialPosition position={Position}", req.Position);
+            return Results.Ok(r.SetDialPosition(req.Position));
+        });
+
         return endpoints;
     }
 

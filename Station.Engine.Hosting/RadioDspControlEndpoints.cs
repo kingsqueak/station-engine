@@ -70,7 +70,7 @@ public static class RadioDspControlEndpoints
             if (!double.IsFinite(cfg.MaxBoostDb) ||
                 cfg.MaxBoostDb < RxLevelerConfig.MinBoostDb ||
                 cfg.MaxBoostDb > RxLevelerConfig.MaxBoostLimitDb)
-                return Results.BadRequest(new { error = "maxBoostDb must be 0..24 dB" });
+                return Results.BadRequest(new { error = $"maxBoostDb must be 0..{RxLevelerConfig.MaxBoostLimitDb:0} dB" });
             if (cfg.AttackMs < RxLevelerConfig.MinAttackMs || cfg.AttackMs > RxLevelerConfig.MaxAttackMs)
                 return Results.BadRequest(new { error = "attackMs must be 20..2000 ms" });
             if (cfg.ReleaseMs < RxLevelerConfig.MinReleaseMs || cfg.ReleaseMs > RxLevelerConfig.MaxReleaseMs)
@@ -175,6 +175,18 @@ public static class RadioDspControlEndpoints
         {
             log.LogInformation("api.auto-agc enabled={Enabled}", req.Enabled);
             return r.SetAutoAgc(req.Enabled);
+        });
+
+        // SimpleHPSDR: auto AGC threshold offset above the band noise floor.
+        endpoints.MapGet("/api/auto-agc/offset", (RadioService r) =>
+            Results.Ok(new { offsetDb = r.AutoAgcFloorOffsetDb }));
+        endpoints.MapPost("/api/auto-agc/offset", (AutoAgcOffsetSetRequest req, RadioService r) =>
+        {
+            if (!double.IsFinite(req.OffsetDb))
+                return Results.BadRequest(new { error = "offsetDb must be a number" });
+            double v = r.SetAutoAgcFloorOffset(req.OffsetDb);
+            log.LogInformation("api.auto-agc.offset dB={Db:F0}", v);
+            return Results.Ok(new { offsetDb = v });
         });
 
         return endpoints;

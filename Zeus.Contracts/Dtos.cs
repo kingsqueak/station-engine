@@ -557,7 +557,9 @@ public sealed record RxLevelerConfig(
     public const double MaxTargetRmsDb = -6.0;
     public const double DefaultTargetRmsDb = -18.0;
     public const double MinBoostDb = 0.0;
-    public const double MaxBoostLimitDb = 24.0;
+    // 35 dB lets the leveler lift weak broadcast stations to a listening level
+    // (SimpleHPSDR); Auto keeps its own 24 dB ceiling.
+    public const double MaxBoostLimitDb = 35.0;
     public const double DefaultMaxBoostDb = 24.0;
     public const int MinAttackMs = 20;
     public const int MaxAttackMs = 2000;
@@ -1951,6 +1953,9 @@ public sealed record SpotsSettings(
 /// capture window. Out-of-range values are rejected with 400.</summary>
 public sealed record RadioLoSetRequest(long Hz);
 
+// SimpleHPSDR: where the dial sits across the display, -0.9 (left) to +0.9 (right), 0 = centre.
+public sealed record DialPositionSetRequest(double Position);
+
 /// <summary>Enable or disable CTUN (click-tune / centred tuning). When
 /// enabled, panadapter clicks move only the dial and leave the hardware NCO
 /// frozen so the operator can tune off-centre; see <see cref="StateDto.CtunEnabled"/>.</summary>
@@ -2163,6 +2168,9 @@ public sealed record PhysicalAdcProtectionStatusDto(byte PhysicalAdcSource, int 
     bool HardOverload, ushort? PeakMagnitude, bool TelemetryFresh, double? PeakDbfs, double? HeadroomDb);
 
 public sealed record AutoAgcSetRequest(bool Enabled);
+
+// SimpleHPSDR: auto AGC threshold offset above the noise floor, 0..40 dB (default 20).
+public sealed record AutoAgcOffsetSetRequest(double OffsetDb);
 
 public sealed record RxLevelerSetRequest(bool Enabled);
 
