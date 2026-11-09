@@ -7,7 +7,6 @@ using Microsoft.AspNetCore.Cors.Infrastructure;
 using Microsoft.Extensions.Primitives;
 using Zeus.Contracts;
 using Zeus.Server.Diagnostics;
-using Zeus.Server.SpeTaurus;
 using Zeus.Server.Tdoa;
 
 namespace Zeus.Server;
@@ -212,13 +211,11 @@ public static class StationEngineEndpoints
         // Same field gap as the operator UI prefs: the SPA's Zeus Digital
         // settings tab reads/writes /api/ft8/settings (+ autocq-ack) against
         // the engine in attach mode, and the standalone host mapped neither.
-        endpoints.MapDigitalSettingsEndpoints();
         // First-run wizard progress — served by BOTH hosts (the workspace-
         // layout pattern) so the SPA's onboarding state persists identically
         // whether it is talking to the engine (attach) or the full host.
         endpoints.MapOnboardingEndpoints();
         endpoints.MapWorkspaceLayoutEndpoints();
-        endpoints.MapContestLogEndpoints();
         endpoints.MapBandPlanEndpoints();
         endpoints.MapStationFavoriteEndpoints();
         endpoints.MapPaSettingsEndpoints();
@@ -236,7 +233,6 @@ public static class StationEngineEndpoints
         endpoints.MapTciEndpoints();
         endpoints.MapHfAutoEndpoints();
         endpoints.MapCatEndpoints();
-        endpoints.MapSpeTaurusEndpoints();
         // Client-error beacon fallback transport (the /ws diagnostic frame is
         // preferred); without this route uncaught SPA errors vanish in local
         // attach whenever the websocket is closed or reconnecting.

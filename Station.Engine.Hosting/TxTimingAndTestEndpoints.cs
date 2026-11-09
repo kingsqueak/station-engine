@@ -47,12 +47,7 @@ public static class TxTimingAndTestEndpoints
             return Results.Ok(new { txPostTxRxMuteDelayMs = state.TxPostTxRxMuteDelayMs });
         });
 
-        endpoints.MapPost("/api/tx/roger-beep", (RogerBeepSetRequest req, RadioService r) =>
-        {
-            log.LogInformation("api.tx.rogerBeep enabled={Enabled}", req.Enabled);
-            var state = r.SetRogerBeepEnabled(req.Enabled);
-            return Results.Ok(new { rogerBeepEnabled = state.RogerBeepEnabled });
-        });
+        // SimpleHPSDR fork: no roger beep (the route is gone and it is always off).
 
         // TX timeout (issue #1270). Maximum single-transmission length that
         // TxMetersService allows before it trips MOX/TUN to protect the PA.

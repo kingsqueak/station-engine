@@ -261,7 +261,6 @@ public partial class Program
         // The later registration intentionally replaces the engine's inert
         // fallback so optional hardware follows Zeus Link's first-party
         // Features state, including live enable/disable without restart.
-        builder.Services.AddSingleton<IInstalledFeatureState, ProductFeatureState>();
 
         var app = builder.Build();
         // Every engine build unpacks into a new .NET extraction directory; drop

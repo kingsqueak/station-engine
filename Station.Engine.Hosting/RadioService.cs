@@ -978,7 +978,7 @@ public sealed partial class RadioService : IDisposable
             CtunEnabled: rsSnap?.CtunEnabled ?? false,
             FullDuplexMultiRxEnabled: rsSnap?.FullDuplexMultiRxEnabled ?? false,
             PreampOn: rsSnap?.PreampOn ?? false,
-            RogerBeepEnabled: rsSnap?.RogerBeepEnabled ?? false,
+            RogerBeepEnabled: false,   // SimpleHPSDR fork: never on, whatever was saved
             // Clamp so a hand-edited row can't exceed the Thetis udRIT/udXIT range.
             RitEnabled: rsSnap?.RitEnabled ?? false,
             RitHz: Math.Clamp(rsSnap?.RitHz ?? 0L, -RitXitMaxHz, RitXitMaxHz),
@@ -5235,7 +5235,8 @@ public sealed partial class RadioService : IDisposable
 
     public bool RogerBeepEnabled
     {
-        get { lock (_sync) return _state.RogerBeepEnabled; }
+        // SimpleHPSDR fork: the roger beep is always off, whatever was saved.
+        get => false;
     }
 
     /// <summary>Operator-set pre-key delay (ms), not PS-clamped.</summary>

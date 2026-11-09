@@ -197,18 +197,11 @@ public static class StationEngineHostingExtensions
         // Digital workspace prefs (per-mode FT8/FT4/WSPR settings + the Auto-CQ
         // ack stamp). Same collections the desktop host uses, so the rows follow
         // the operator between hosts on the same machine.
-        services.AddSingleton<Ft8SettingsStore>();
         services.AddSingleton<OperatorAckStore>();
         // First-run / onboarding-wizard progress. Same exportable prefs DB as
         // the ack stamp above so wizard completion follows the operator
         // between hosts on the same machine (and rides database backups).
         services.AddSingleton<OnboardingStateStore>();
-        // Active contest staging belongs to the API origin used by the SPA.
-        // In Zeus Link that is the standalone engine, so keep it in the
-        // engine-owned preferences database and persist each QSO separately.
-        services.AddSingleton(sp => new ContestLogStore(
-            sp.GetRequiredService<ILogger<ContestLogStore>>(),
-            PrefsDbPath.EngineGet()));
 
         services.AddSingleton<TxIqRing>();
         services.AddSingleton<ITxIqSource>(sp => sp.GetRequiredService<TxIqRing>());
@@ -260,7 +253,6 @@ public static class StationEngineHostingExtensions
         services.AddSingleton<ITdoaContributionSource, KiwiTdoaContributionSource>();
         services.AddSingleton<TdoaContributionCoordinator>();
         services.AddSingleton<TxService>();
-        services.AddSingleton<IInstalledFeatureState, NoInstalledFeatureState>();
         services.AddSingleton<TuneCarrierCommandCoordinator>();
         // The pipeline builds one TX-gated modem around the registered
         // IAudioModemPort. Only TxAudioIngest receives that gate. Passing it
@@ -335,7 +327,6 @@ public static class StationEngineHostingExtensions
 
         services.AddTciServices();
         services.AddCatServices();
-        services.AddSpeTaurusServices();
 
         return services;
     }
