@@ -79,6 +79,11 @@ public static class PureSignalEndpoints
             return Results.Ok(new { reset = true });
         });
 
+        // SimpleHPSDR: the PS feedback spectrum (dB per pixel) for the IMD meter;
+        // 204 when PureSignal isn't armed or no fresh feedback FFT is ready.
+        endpoints.MapGet("/api/tx/ps/feedback-spectrum", (DspPipelineService pipe) =>
+            pipe.TryGetPsFeedbackSpectrum() is { } db ? Results.Ok(new { db }) : Results.NoContent());
+
         endpoints.MapPost("/api/tx/ps/save", (PsSaveRequest req, DspPipelineService pipe) =>
         {
             if (string.IsNullOrWhiteSpace(req.Filename))

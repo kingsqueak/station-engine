@@ -4041,6 +4041,18 @@ public partial class DspPipelineService : BackgroundService,
     /// _engineLock to serialise themselves against each other.</summary>
     public virtual IDspEngine? CurrentEngine => Volatile.Read(ref _engine);
 
+    /// <summary>SimpleHPSDR: the PureSignal feedback (coupler) spectrum, in the
+    /// main panadapter's width and span, centred on the transmit frequency.
+    /// Null when PureSignal isn't armed or no fresh FFT is ready. On Protocol 2
+    /// the panadapter keeps the receive view while keyed, so this is the only
+    /// way to see the amplifier's actual output (the IMD meter uses it).</summary>
+    public float[]? TryGetPsFeedbackSpectrum()
+    {
+        if (CurrentEngine is not { } engine || _panadapterWidth <= 0) return null;
+        var buf = new float[_panadapterWidth];
+        return engine.TryGetPsFeedbackDisplayPixels(DisplayPixout.Panadapter, buf) ? buf : null;
+    }
+
     /// <summary>
     /// Version of the libwdsp actually loaded, for the diagnostics snapshot.
     /// Cached behind a Lazy in <see cref="WdspDspEngine"/> — the loaded library
