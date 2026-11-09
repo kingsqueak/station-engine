@@ -272,7 +272,6 @@ public static class StationEngineHostingExtensions
         services.AddSingleton<TxDiagnosticsService>();
         services.AddSingleton<TxAudioIngestStartup>();
         services.AddSingleton<TxMicMeterService>();
-        services.AddSingleton<SignalJammerTxSource>();
         services.AddSingleton<TxMetersService>();
         services.AddSingleton<TxTuneDriver>();
         services.AddSingleton<CwSidetoneSource>(sp =>
@@ -321,7 +320,6 @@ public static class StationEngineHostingExtensions
         }
         services.AddHostedService(sp => sp.GetRequiredService<TxAudioIngestStartup>());
         services.AddHostedService(sp => sp.GetRequiredService<TxMicMeterService>());
-        services.AddHostedService(sp => sp.GetRequiredService<SignalJammerTxSource>());
         services.AddHostedService(sp => sp.GetRequiredService<TxMetersService>());
         services.AddHostedService(sp => sp.GetRequiredService<TxTuneDriver>());
         services.AddHostedService(sp => sp.GetRequiredService<CwEngine>());

@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-using System.Buffers.Binary;
 using Zeus.Contracts;
 
 namespace Zeus.Server;
@@ -53,57 +52,6 @@ public static class TxTimingAndTestEndpoints
             log.LogInformation("api.tx.rogerBeep enabled={Enabled}", req.Enabled);
             var state = r.SetRogerBeepEnabled(req.Enabled);
             return Results.Ok(new { rogerBeepEnabled = state.RogerBeepEnabled });
-        });
-
-        // Hidden QRM test source. This arms a generated audio source into the
-        // normal TX ingest path, but deliberately does not key MOX. It reaches
-        // RF only while the operator has keyed TX.
-        endpoints.MapPost("/api/tx/qrm", (SignalJammerSetRequest req, SignalJammerTxSource qrm) =>
-        {
-            if (req is null)
-                return Results.BadRequest(new { error = "body required" });
-
-            var snapshot = qrm.Configure(req);
-            log.LogInformation(
-                "api.tx.qrm enabled={Enabled} preset={Preset} level={Level} tone={ToneHz} drift={DriftHz} pulse={PulseRateHz:F1}",
-                snapshot.Enabled, snapshot.Preset, snapshot.Level, snapshot.ToneHz, snapshot.DriftHz, snapshot.PulseRateHz);
-            return Results.Ok(snapshot);
-        });
-
-        endpoints.MapPost("/api/tx/qrm/text", (SignalJammerTextRequest req, SignalJammerTxSource qrm, HttpContext context) =>
-        {
-            if (req is null || string.IsNullOrWhiteSpace(req.SamplesBase64))
-                return Results.BadRequest(new { error = "samplesBase64 required" });
-            if (!TryDecodeFloat32Base64(req.SamplesBase64, out var samples, out var error))
-                return Results.BadRequest(new { error });
-
-            try
-            {
-                var remoteLeaseId = RemoteTxLease.TryGet(context, out var leaseId)
-                    ? leaseId
-                    : null;
-                var snapshot = qrm.EnqueueText(
-                    samples,
-                    req.SampleRate,
-                    req.AutoTransmit,
-                    remoteLeaseId);
-                log.LogInformation(
-                    "api.tx.qrm.text samples={Samples} rate={Rate} autoTx={AutoTx} queued={Queued}",
-                    samples.Length, req.SampleRate, req.AutoTransmit, snapshot.TextQueued);
-                return Results.Ok(snapshot);
-            }
-            catch (InvalidOperationException ex)
-            {
-                return Results.Conflict(new { error = ex.Message });
-            }
-            catch (ArgumentOutOfRangeException ex)
-            {
-                return Results.BadRequest(new { error = ex.Message });
-            }
-            catch (ArgumentException ex)
-            {
-                return Results.BadRequest(new { error = ex.Message });
-            }
         });
 
         // TX timeout (issue #1270). Maximum single-transmission length that
@@ -171,42 +119,5 @@ public static class TxTimingAndTestEndpoints
         });
 
         return endpoints;
-    }
-
-    private static bool TryDecodeFloat32Base64(
-        string samplesBase64,
-        out float[] samples,
-        out string error)
-    {
-        samples = [];
-        error = "";
-        byte[] bytes;
-        try
-        {
-            bytes = Convert.FromBase64String(samplesBase64);
-        }
-        catch (FormatException)
-        {
-            error = "samplesBase64 must be valid base64";
-            return false;
-        }
-
-        if (bytes.Length == 0 || bytes.Length % sizeof(float) != 0)
-        {
-            error = "samplesBase64 must contain float32 little-endian samples";
-            return false;
-        }
-
-        int count = bytes.Length / sizeof(float);
-        if (count > SignalJammerTxSource.MaxTextSamples)
-        {
-            error = $"text audio may not exceed {SignalJammerTxSource.MaxTextSamples} samples";
-            return false;
-        }
-
-        samples = new float[count];
-        for (int i = 0; i < samples.Length; i++)
-            samples[i] = BinaryPrimitives.ReadSingleLittleEndian(bytes.AsSpan(i * sizeof(float), sizeof(float)));
-        return true;
     }
 }

@@ -17,7 +17,6 @@ public static class AudioDiagnosticLogging
         "Zeus.Server.NativeMicCapture", "Zeus.Server.MiniAudioInput",
         "Zeus.Server.TxAudioIngest", "Zeus.Server.TxTuneDriver",
         "Zeus.Server.SaturnSpeakerAudioSink", "Zeus.Server.DspPipelineService",
-        "Zeus.Server.SignalJammerTxSource",
     ];
 
     public static void Configure(ILoggingBuilder logging)
