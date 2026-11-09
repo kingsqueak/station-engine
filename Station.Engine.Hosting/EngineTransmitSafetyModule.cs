@@ -248,9 +248,17 @@ internal sealed class EngineTransmitSafetyModule
             }
         }
 
+        // SimpleHPSDR fork: the region band plans stop at 54 MHz, so above the
+        // radio's own range every transverter frequency was "out of band" and
+        // Block refused all transverter transmit. As in Thetis, the operator's
+        // transverter band edges are the limit there, and the profile check
+        // above has already held the whole emission inside them.
+        bool transverterRf = snapshot is { TransverterProfileRequired: true, TransverterBand: not null }
+            && envelope.Normalize().LowHz > TransverterFrequencyConverter.MaximumRadioFrequencyHz;
+
         // TxGuardIgnore is deliberately regulatory-only. It never bypasses
         // connection, identity, source ownership, protection, or fault policy.
-        if (!snapshot.RegulatoryOverride && !EnvelopeAllowed(snapshot, envelope))
+        if (!transverterRf && !snapshot.RegulatoryOverride && !EnvelopeAllowed(snapshot, envelope))
         {
             return TransmitSafetyDecision.Deny(
                 TransmitSafetyReasonCode.OutOfBand,
