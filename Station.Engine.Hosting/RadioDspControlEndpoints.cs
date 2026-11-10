@@ -47,6 +47,15 @@ public static class RadioDspControlEndpoints
             return Results.Ok(r.SetAgc(req.Agc));
         });
 
+        // SimpleHPSDR: the receive EQ for RX1 and RX2.
+        endpoints.MapGet("/api/rx/eq", (RadioService r) =>
+            Results.Ok(r.Snapshot().RxEq ?? RxEqConfig.Default));
+        endpoints.MapPost("/api/rx/eq", (RxEqConfig config, RadioService r) =>
+        {
+            try { return Results.Ok(r.SetRxEq(config)); }
+            catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+        });
+
         endpoints.MapPost("/api/rx/leveler", (RxLevelerSetRequest req, RadioService r) =>
         {
             log.LogInformation("api.rx.leveler enabled={Enabled}", req.Enabled);

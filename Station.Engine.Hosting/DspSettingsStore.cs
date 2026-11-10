@@ -977,6 +977,25 @@ public sealed class DspSettingsStore : IDisposable
         if (exists) _entries.Update(entry); else _entries.Insert(entry);
     }
 
+    public RxEqConfig? GetRxEq(string profileId = "default")
+    {
+        var json = _entries.FindOne(entry => entry.ProfileId == profileId)?.RxEqJson;
+        if (json is null) return null;
+        try { return System.Text.Json.JsonSerializer.Deserialize<RxEqConfig>(json)?.Validated(); }
+        catch (Exception ex) when (ex is System.Text.Json.JsonException or ArgumentException) { return null; }
+    }
+
+    public void SetRxEq(RxEqConfig config, string profileId = "default")
+    {
+        var clean = config.Validated();
+        var entry = _entries.FindOne(candidate => candidate.ProfileId == profileId);
+        var exists = entry is not null;
+        entry ??= new DspSettingsEntry { ProfileId = profileId };
+        entry.RxEqJson = System.Text.Json.JsonSerializer.Serialize(clean);
+        entry.UpdatedUtc = DateTime.UtcNow;
+        if (exists) _entries.Update(entry); else _entries.Insert(entry);
+    }
+
     public void Dispose() => _dbLease.Dispose();
 
 }
@@ -1137,5 +1156,6 @@ public sealed class DspSettingsEntry
     public int? AmCarrierLevelPercent { get; set; }
     public string? FmConfigJson { get; set; }
     public string? LegacyTxEqJson { get; set; }
+    public string? RxEqJson { get; set; }
     public DateTime UpdatedUtc { get; set; }
 }

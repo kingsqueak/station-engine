@@ -174,6 +174,9 @@ public interface IDspEngine : IDisposable
     /// <summary>Apply a channel-local three-band receive equalizer, with gains in dB.</summary>
     void SetReceiveEqualizer(int channelId, bool enabled, int preampDb, int lowDb, int midDb, int highDb) { }
 
+    /// <summary>SimpleHPSDR: the operator's ten-point receive EQ on one channel.</summary>
+    void SetReceiveEqualizerProfile(int channelId, Zeus.Contracts.RxEqConfig config) { }
+
     /// <summary>Apply the TX leveling config (Thetis parity §6.1-6.3). Drives
     /// the ALC (SetTXAALCMaxGain/Decay — the ALC run state is left ON and is
     /// never touched here; disabling it silences the SSB modulator), the Leveler

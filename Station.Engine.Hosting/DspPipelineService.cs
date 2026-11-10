@@ -1041,6 +1041,7 @@ public partial class DspPipelineService : BackgroundService,
         public double AppliedAgcTopDb = double.NaN;
         public NrConfig? AppliedNr;
         public AgcConfig? AppliedAgc;
+        public RxEqConfig? AppliedRxEq;
         public readonly AutoAgcNoiseFloorTracker AutoAgcTracker = new(feedFps: 5.0);
         public readonly float[] AutoAgcBins;
         public long AutoAgcPanMs = long.MinValue;
@@ -1074,6 +1075,7 @@ public partial class DspPipelineService : BackgroundService,
             AppliedAfGainDb = double.NaN;
             AppliedNr = null;
             AppliedAgc = null;
+            AppliedRxEq = null;
             lock (AutoAgcLock)
             {
                 AutoAgcTracker.Reset();
@@ -1566,6 +1568,8 @@ public partial class DspPipelineService : BackgroundService,
         && a.FrequenciesHz.SequenceEqual(b.FrequenciesHz) && a.GainsDb.SequenceEqual(b.GainsDb);
     private TxPhaseRotatorConfig _appliedTxPhaseRotator = new();
     private LegacyTxEqConfig? _appliedLegacyTxEq;
+    // SimpleHPSDR: the operator's RX EQ as last pushed to RX1.
+    private RxEqConfig? _appliedRxEq;
     // RX/TX bandpass "rectangularity" latches — issue #871. Seeded to
     // BandpassWindow.Normal (= byte 1), which resolves to the WDSP open-time tap
     // count, so a connect landing on the default matches what
@@ -6620,6 +6624,12 @@ public partial class DspPipelineService : BackgroundService,
             engine.SetNoiseReduction(channel, nr);
             _appliedNr = nr;
         }
+        var rxEq = s.RxEq ?? RxEqConfig.Default;
+        if (!rxEq.SameAs(_appliedRxEq))
+        {
+            engine.SetReceiveEqualizerProfile(channel, rxEq);
+            _appliedRxEq = rxEq;
+        }
         // Diversity combiner — managed complex combine in the P2 ingest (see
         // ApplyDiversityConfig / OnIqFrame). Applied once (not per-channel) when
         // the config changes. Default-off makes the ingest byte-identical.
@@ -7233,6 +7243,9 @@ public partial class DspPipelineService : BackgroundService,
         var openAmModFilter = AmModulatorFilterFor(s);
         engine.SetTxAmFilter(openAmModFilter.HighPassHz, openAmModFilter.LowPassHz);
         engine.SetNoiseReduction(channelId, nr);
+        var openRxEq = s.RxEq ?? RxEqConfig.Default;
+        engine.SetReceiveEqualizerProfile(channelId, openRxEq);
+        _appliedRxEq = openRxEq;
         // Force-apply AGC mode/custom params on a fresh engine so the operator's
         // persisted choice survives a reconnect. The engine's channel-open path
         // installs the Med default (ApplyAgcDefaults); this overrides it with the
@@ -7614,6 +7627,12 @@ public partial class DspPipelineService : BackgroundService,
         {
             engine.SetNoiseReduction(channelId, nr);
             rx.AppliedNr = nr;
+        }
+        var secondaryRxEq = s.RxEq ?? RxEqConfig.Default;
+        if (!secondaryRxEq.SameAs(rx.AppliedRxEq))
+        {
+            engine.SetReceiveEqualizerProfile(channelId, secondaryRxEq);
+            rx.AppliedRxEq = secondaryRxEq;
         }
         if (rx.AppliedAgc != agc)
         {

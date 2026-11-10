@@ -1020,6 +1020,7 @@ public sealed partial class RadioService : IDisposable
             LegacyTxEq = initialTxAudioConfig is not null
                 ? initialTxAudioConfig.LegacyTxEq?.Validated() ?? LegacyTxEqConfig.Default
                 : _dspSettingsStore.GetLegacyTxEq() ?? LegacyTxEqConfig.Default,
+            RxEq = _dspSettingsStore.GetRxEq() ?? RxEqConfig.Default,
         };
         if (_state.Mode == RxMode.FM)
         {
@@ -6640,6 +6641,14 @@ public sealed partial class RadioService : IDisposable
     // Thetis configurable mic-gain range. The dB → linear (10^(db/20))
     // conversion happens at the engine seam in DspPipelineService so the wire
     // and persisted form is the operator-friendly integer.
+    public StateDto SetRxEq(RxEqConfig config)
+    {
+        var clean = config.Validated();
+        _dspSettingsStore.SetRxEq(clean);
+        Mutate(state => state with { RxEq = clean });
+        return Snapshot();
+    }
+
     public StateDto SetLegacyTxEq(LegacyTxEqConfig config)
     {
         var clean = config.Validated();

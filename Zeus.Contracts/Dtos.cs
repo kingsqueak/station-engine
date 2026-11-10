@@ -1653,7 +1653,9 @@ public sealed record StateDto(
     // Appended so older positional StateDto construction sites stay valid.
     // Null (older producer) resolves to FmConfig.Default.
     FmConfig? Fm = null,
-    LegacyTxEqConfig? LegacyTxEq = null);
+    LegacyTxEqConfig? LegacyTxEq = null,
+    // SimpleHPSDR: the operator's receive EQ for RX1 and RX2. Null = RxEqConfig.Default.
+    RxEqConfig? RxEq = null);
 
 /// <summary>Canonical CW constants shared between backend and wire DTOs.
 /// Single source of truth — CwOffset (server-side) and StateDto both
@@ -3081,6 +3083,31 @@ public sealed record CfcBand(double FreqHz, double CompLevelDb, double PostGainD
 
 /// <summary>Thetis legacy WDSP TX equalizer control values. Frequencies and
 /// gains contain ten entries; the zero-Hz first control point is valid.</summary>
+/// <summary>SimpleHPSDR: the receive equalizer for the operator's receivers
+/// (RX1 and RX2), ten points through WDSP's RXA EQ (SetRXAEQProfile), the same
+/// shape as the TX EQ. Off in DIGU/DIGL like the other RX audio stages.
+/// The default points cover receive audio: speech and AM broadcast.</summary>
+public sealed record RxEqConfig(bool Enabled, double PreampDb, double[] FrequenciesHz, double[] GainsDb)
+{
+    public static RxEqConfig Default => new(false, 0,
+        [60, 120, 250, 400, 700, 1000, 1500, 2200, 3000, 5000], new double[10]);
+
+    public RxEqConfig Validated()
+    {
+        if (!double.IsFinite(PreampDb) || PreampDb is < -24 or > 24
+            || FrequenciesHz is not { Length: 10 } || GainsDb is not { Length: 10 }
+            || FrequenciesHz.Any(value => !double.IsFinite(value) || value < 0 || value > 20000)
+            || GainsDb.Any(value => !double.IsFinite(value) || value < -24 || value > 24)
+            || FrequenciesHz.Zip(FrequenciesHz.Skip(1)).Any(pair => pair.First >= pair.Second))
+            throw new ArgumentException("RX EQ requires ten increasing frequencies in 0..20000 Hz and finite gains in -24..24 dB.");
+        return this with { FrequenciesHz = FrequenciesHz.ToArray(), GainsDb = GainsDb.ToArray() };
+    }
+
+    public bool SameAs(RxEqConfig? other) => other is not null && Enabled == other.Enabled
+        && PreampDb == other.PreampDb && FrequenciesHz.SequenceEqual(other.FrequenciesHz)
+        && GainsDb.SequenceEqual(other.GainsDb);
+}
+
 public sealed record LegacyTxEqConfig(bool Enabled, double PreampDb, double[] FrequenciesHz, double[] GainsDb)
 {
     public static LegacyTxEqConfig Default => new(false, 0,

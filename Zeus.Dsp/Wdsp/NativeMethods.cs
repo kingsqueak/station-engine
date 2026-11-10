@@ -187,6 +187,10 @@ internal static partial class NativeMethods
 
     [LibraryImport(LibraryName)]
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    internal static unsafe partial void SetRXAEQProfile(int channel, int nfreqs, double* frequencies, double* gains);
+
+    [LibraryImport(LibraryName)]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
     internal static partial void SetRXAAMDSBMode(int channel, int sbmode);
 
     // AGC bindings — mode 3 (MED) is the Thetis default; without this the WDSP

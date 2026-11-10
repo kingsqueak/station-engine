@@ -347,6 +347,8 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
         // these unchanged. Null = never set on this channel.
         public NrConfig? OperatorNr;
         public RxEqualizerSettings? OperatorRxEq;
+        // SimpleHPSDR: the operator's ten-point RX EQ (RX1/RX2); wins over OperatorRxEq.
+        public RxEqConfig? OperatorRxEqProfile;
         public bool OperatorApf;
         public bool RxDigitalBypass;
         public bool RxCwNoiseReductionBypass;
@@ -1533,8 +1535,31 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
         ApplyReceiveEqualizer(state);
     }
 
+    public void SetReceiveEqualizerProfile(int channelId, RxEqConfig config)
+    {
+        if (!_channels.TryGetValue(channelId, out var state)) return;
+        state.OperatorRxEqProfile = config.Validated();
+        ApplyReceiveEqualizer(state);
+    }
+
     private static unsafe void ApplyReceiveEqualizer(ChannelState state)
     {
+        if (state.OperatorRxEqProfile is { } profile)
+        {
+            // WDSP takes index 0 as the preamp, then the ten points.
+            double* f = stackalloc double[11];
+            double* g = stackalloc double[11];
+            f[0] = 0;
+            g[0] = profile.PreampDb;
+            for (int i = 0; i < 10; i++)
+            {
+                f[i + 1] = profile.FrequenciesHz[i];
+                g[i + 1] = profile.GainsDb[i];
+            }
+            NativeMethods.SetRXAEQProfile(state.Id, 10, f, g);
+            NativeMethods.SetRXAEQRun(state.Id, profile.Enabled && !IsRxDigitalBypassed(state) ? 1 : 0);
+            return;
+        }
         if (state.OperatorRxEq is not { } eq) return;
         // Thetis RXEQ3 passes preamp, low, mid and high to this RXA-local API.
         // WDSP eq.c owns the channel's coefficients and run flag. The digital
