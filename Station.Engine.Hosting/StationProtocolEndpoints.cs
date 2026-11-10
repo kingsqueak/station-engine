@@ -196,6 +196,26 @@ public static class StationProtocolEndpoints
                 : Results.Conflict(new { error = "RADE is unavailable for this station-engine RID/build" });
         });
 
+        // SimpleHPSDR: RADE's squelch, mic gate and TX level.
+        endpoints.MapGet("/api/station/rade/tuning", (HttpContext context) =>
+        {
+            if (!IsLoopback(context))
+                return Results.StatusCode(StatusCodes.Status403Forbidden);
+            var port = context.RequestServices.GetService<CompositeAudioModemPort>();
+            return port is null ? Results.NotFound() : Results.Ok(port.RadeTuning());
+        });
+
+        endpoints.MapPost("/api/station/rade/tuning", async (HttpContext context) =>
+        {
+            if (!IsLoopback(context))
+                return Results.StatusCode(StatusCodes.Status403Forbidden);
+            var port = context.RequestServices.GetService<CompositeAudioModemPort>();
+            if (port is null) return Results.NotFound();
+            var request = await ReadRequestAsync<RadeTuning>(context).ConfigureAwait(false);
+            if (request is null) return Results.BadRequest(new { error = "RADE tuning is required" });
+            return Results.Ok(port.SetRadeTuning(request));
+        });
+
         endpoints.MapPost("/api/station/rade/mic", async (HttpContext context) =>
         {
             if (!IsLoopback(context))

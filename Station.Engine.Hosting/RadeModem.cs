@@ -49,6 +49,11 @@ internal sealed class RadeModem : IRadeModemCore
     // output interpolator.  Keep the same level for live, residual, and EOO
     // frames so transitions at the end of an over do not jump in amplitude.
     internal const float TxOutputScale = 0.5f;
+    // SimpleHPSDR: operator tuning (RadeTuning); defaults are the engine's own.
+    private float _txScale = TxOutputScale;
+    private volatile bool _rxSquelchOn = true;
+    private volatile bool _micGateOn = true;
+    private double _rxMinSnrDb = -10, _rxHoldMs = 250, _micOpenDb = 14, _micHangMs = 250;
 
     // Native handles — published to the hot paths via Volatile; IntPtr.Zero means
     // "do not process" (closed / reconfiguring / native missing). RX and TX use
@@ -78,7 +83,7 @@ internal sealed class RadeModem : IRadeModemCore
     // is the ONLY thing that mutes the FARGAN decoder's noise-driven output when
     // the far station unkeys — without it you hear an R2D2 tail every un-key.
     // Owned by the RX hot path; reset in RetireRx.
-    private readonly RxSquelchGate _rxGate = RxSquelchGate.Default(RadeResampler.FsHigh);
+    private RxSquelchGate _rxGate = RxSquelchGate.Default(RadeResampler.FsHigh);
     private int _ninMax;                               // cached at open
     private readonly byte[] _eooScratch = new byte[CallsignMax + 1]; // hot-path EOO fetch buffer
 
@@ -96,7 +101,7 @@ internal sealed class RadeModem : IRadeModemCore
     private float[] _txInterp = new float[2048];        // 48k after interpolation
     // Pre-vocoder mic noise gate: drives the mic to silence during pauses so
     // rade_tx emits clean silence frames, not vocoded hiss. Reset in RetireTx/FlushTx.
-    private readonly MicNoiseGate _micGate = MicNoiseGate.Default(RadeResampler.FsHigh);
+    private MicNoiseGate _micGate = MicNoiseGate.Default(RadeResampler.FsHigh);
     private int _txNSpeech;                             // cached at open: int16 @16k per tx call
     private int _txNTxOut;                              // cached at open: modem samples per tx call
     private int _txNEooOut;                             // cached at open: modem samples in the EOO frame
@@ -366,8 +371,14 @@ internal sealed class RadeModem : IRadeModemCore
             // Sync-gate the decoded speech (RADE's only squelch): smooth fade-out
             // on loss of sync kills the end-of-over tail; flush the FIFO when fully
             // closed so no stale-noise backlog plays at the head of the next over.
-            if (_rxGate.Process(block48k, _synced))
-                _rxOut48.Clear();
+            // SimpleHPSDR: squelch can be turned off, and can also wait for a
+            // minimum SNR (RADE itself has none).
+            if (_rxSquelchOn)
+            {
+                bool open = _synced && SnrDb >= Volatile.Read(ref _rxMinSnrDb);
+                if (Volatile.Read(ref _rxGate).Process(block48k, open))
+                    _rxOut48.Clear();
+            }
         }
         finally
         {
@@ -395,7 +406,7 @@ internal sealed class RadeModem : IRadeModemCore
 
             // Gate the mic to silence during pauses so rade_tx encodes clean
             // silence frames instead of vocoding background hiss into garble.
-            _micGate.Process(block48k);
+            if (_micGateOn) Volatile.Read(ref _micGate).Process(block48k);
 
             // 1. decimate mic 48k -> 16k speech into the speech ring.
             int n16 = _txDown.Process(block48k, _txDecScratch);
@@ -576,10 +587,46 @@ internal sealed class RadeModem : IRadeModemCore
         return filled;
     }
 
-    internal static void CopyScaledModemReal(float[] interleavedIq, float[] modemReal, int count)
+    // SimpleHPSDR: the scale follows the operator's TX level.
+    private void CopyScaledModemReal(float[] interleavedIq, float[] modemReal, int count) =>
+        CopyScaledModemReal(interleavedIq, modemReal, count, Volatile.Read(ref _txScale));
+
+    public RadeTuningState Tuning => new(_rxSquelchOn, Volatile.Read(ref _rxHoldMs), Volatile.Read(ref _rxMinSnrDb),
+        _micGateOn, Volatile.Read(ref _micOpenDb), Volatile.Read(ref _micHangMs),
+        Math.Round(20 * Math.Log10(Volatile.Read(ref _txScale)), 1));
+
+    /// <summary>New gates are built off the hot paths and swapped in whole; each
+    /// starts fresh (closed), as after a reset.</summary>
+    public void SetTuning(RadeTuning t)
+    {
+        lock (_reconfigGate)
+        {
+            if (t.RxSquelch is { } sq) _rxSquelchOn = sq;
+            if (t.RxMinSnrDb is { } snr) Volatile.Write(ref _rxMinSnrDb, Math.Clamp(snr, -10, 20));
+            if (t.RxHoldMs is { } hold)
+            {
+                Volatile.Write(ref _rxHoldMs, Math.Clamp(hold, 0, 2000));
+                Volatile.Write(ref _rxGate, new RxSquelchGate(RadeResampler.FsHigh, _rxHoldMs, attackMs: 5.0, releaseMs: 60.0));
+            }
+            if (t.MicGate is { } gate) _micGateOn = gate;
+            if (t.MicGateOpenDb is not null || t.MicGateHangMs is not null)
+            {
+                if (t.MicGateOpenDb is { } open) Volatile.Write(ref _micOpenDb, Math.Clamp(open, 6, 30));
+                if (t.MicGateHangMs is { } hang) Volatile.Write(ref _micHangMs, Math.Clamp(hang, 50, 1000));
+                // Close 6 dB under open, as the default (14 / 8) does.
+                Volatile.Write(ref _micGate, new MicNoiseGate(RadeResampler.FsHigh,
+                    openMarginDb: _micOpenDb, closeMarginDb: Math.Max(1, _micOpenDb - 6),
+                    envAttackMs: 2.0, envReleaseMs: 40.0, floorDownMs: 50.0, floorUpMs: 3000.0,
+                    hangMs: _micHangMs, gateAttackMs: 3.0, gateReleaseMs: 80.0, minFloorDb: -75.0));
+            }
+            if (t.TxLevelDb is { } db) Volatile.Write(ref _txScale, (float)Math.Pow(10, Math.Clamp(db, -12, 0) / 20));
+        }
+    }
+
+    internal static void CopyScaledModemReal(float[] interleavedIq, float[] modemReal, int count, float scale)
     {
         for (int i = 0; i < count; i++)
-            modemReal[i] = interleavedIq[2 * i] * TxOutputScale;
+            modemReal[i] = interleavedIq[2 * i] * scale;
     }
 
     internal static bool ReadLiveBlockOrSilence(FreeDvSampleRing ring, Span<float> block)

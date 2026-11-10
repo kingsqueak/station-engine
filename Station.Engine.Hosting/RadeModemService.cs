@@ -17,6 +17,20 @@ public sealed record RadeStatusResponse(
 
 public sealed record RadeSelectRequest(bool Active, string? TxText = null);
 
+/// <summary>SimpleHPSDR: RADE's receive squelch, mic gate and TX level, for
+/// the operator. Null fields leave that setting unchanged.</summary>
+public sealed record RadeTuning(
+    bool? RxSquelch = null,         // fade decoded speech out when sync is lost
+    double? RxHoldMs = null,        // ride through brief sync drops (0..2000)
+    double? RxMinSnrDb = null,      // also stay closed below this SNR (-10..20; -10 = off)
+    bool? MicGate = null,           // silence the mic between words
+    double? MicGateOpenDb = null,   // open this far above the room noise (6..30)
+    double? MicGateHangMs = null,   // hold open after speech stops (50..1000)
+    double? TxLevelDb = null);      // modem level into the TX chain (-12..0; -6 = engine default)
+
+public sealed record RadeTuningState(bool RxSquelch, double RxHoldMs, double RxMinSnrDb,
+    bool MicGate, double MicGateOpenDb, double MicGateHangMs, double TxLevelDb);
+
 /// <summary>
 /// Pre-encoder TX mic conditioning config. Null fields leave that setting
 /// unchanged — mirrors <see cref="RadeSelectRequest"/> and the product's
@@ -51,6 +65,8 @@ internal interface IRadeModemCore : IDisposable
     int DrainTo(Span<float> block48k);
     void SetTxText(string? text);
     void SetMicConfig(RadeMicConfig config);
+    RadeTuningState Tuning => new(true, 250, -10, true, 14, 250, -6);
+    void SetTuning(RadeTuning tuning) { }
 }
 
 /// <summary>
@@ -118,6 +134,18 @@ public sealed class RadeModemService : IAudioModemPort, IDisposable
         {
             ObjectDisposedException.ThrowIf(_disposed != 0, this);
             _modem.SetMicConfig(config);
+        }
+    }
+
+    internal RadeTuningState Tuning => _modem.Tuning;
+
+    internal RadeTuningState SetTuning(RadeTuning tuning)
+    {
+        lock (_controlGate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed != 0, this);
+            _modem.SetTuning(tuning);
+            return _modem.Tuning;
         }
     }
 
@@ -263,6 +291,8 @@ public sealed class CompositeAudioModemPort : IAudioModemPort, IDisposable
         _rade.Snapshot(RadeSelected && Volatile.Read(ref _modeByte) == FreeDvModeByte);
 
     internal void SetRadeMicConfig(RadeMicConfig config) => _rade.SetMicConfig(config);
+    internal RadeTuningState RadeTuning() => _rade.Tuning;
+    internal RadeTuningState SetRadeTuning(RadeTuning tuning) => _rade.SetTuning(tuning);
 
     public void SyncMode(byte rxModeByte)
     {
