@@ -198,7 +198,12 @@ public sealed record BoardCapabilities(
     /// returns 409 on a non-HL2 board. True for Hermes-Lite 2 only. Default 0 →
     /// byte-identical to a board that never drives the lines. External-port
     /// parity audit (re-port of external-ports plan Phase 5).</summary>
-    bool HasHl2UserGpio = false)
+    bool HasHl2UserGpio = false,
+    /// <summary>SimpleHPSDR: the radio's rated output in watts when it differs
+    /// from the drive bracket (PaMaxPowerWatts), for the power meter scale and
+    /// the drive readout. Set only for the Brick SDRs (15 W radios driven
+    /// through the 100 W Hermes / Angelia gain tables); null elsewhere.</summary>
+    int? RatedPowerWatts = null)
 {
     /// <summary>Safe defaults for an unrecognised / disconnected board.
     /// Single ADC, no extras — minimum-surprise capability set so a

@@ -85,15 +85,30 @@ internal static class BoardCapabilitiesTable
     private static BoardCapabilities Brick2 => s_brick2 ??= HermesClass with
     {
         MaxPowerWatts = 15,
+        RatedPowerWatts = 15,
         HasTxAntennaRelays = false,
         HasRxAntennaRelays = false,
         RxAuxInputs = RxAuxInputs.None,
     };
 
+    // Brick3: Angelia (ANAN-100D) class, 15 W on 160-6 m (10 W digital modes;
+    // Linoobs spec). Its manual has Thetis set to ANAN-100D with Alex on for
+    // the power and SWR readings, so everything else stays Angelia; the drive
+    // keeps the 100 W gain table (PaDefaults), only the rating differs.
+    private static BoardCapabilities? s_brick3;
+    private static BoardCapabilities Brick3 => s_brick3 ??= Angelia with
+    {
+        MaxPowerWatts = 15,
+        RatedPowerWatts = 15,
+    };
+
     public static BoardCapabilities For(HpsdrBoardKind board, OrionMkIIVariant variant) =>
-        board is HpsdrBoardKind.Hermes && ConnectedBrick == BrickModel.Brick2
-            ? Brick2
-            : ForBoard(board, variant);
+        (board, ConnectedBrick) switch
+        {
+            (HpsdrBoardKind.Hermes, BrickModel.Brick2) => Brick2,
+            (HpsdrBoardKind.Angelia, BrickModel.Brick3) => Brick3,
+            _ => ForBoard(board, variant),
+        };
 
     private static BoardCapabilities ForBoard(HpsdrBoardKind board, OrionMkIIVariant variant) => board switch
     {
