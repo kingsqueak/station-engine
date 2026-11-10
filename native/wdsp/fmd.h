@@ -63,7 +63,7 @@ extern __declspec (dllexport) void SetRXAFMNCaud (int channel, int nc);
 
 extern __declspec (dllexport) void SetRXAFMMPaud (int channel, int mp);
 
-// Zeus extension (FM tones / de-emphasis bypass), see fmd.c
+// SimpleHPSDR extension (FM tones / de-emphasis bypass), see fmd.c
 
 extern __declspec (dllexport) void SetRXAFMToneSquelch (int channel, int mode, double ctcssHz, int dcsCode, int dcsInverted);
 

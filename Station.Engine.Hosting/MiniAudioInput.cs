@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2026 Douglas J. Cerrato (KB2UKA), Christian Suarez (N9WAR), and contributors.
 
 using System.Runtime.InteropServices;
 using System.Text;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
 /// Thin managed wrapper around a miniaudio capture device. Mirrors
@@ -124,8 +124,8 @@ internal sealed class MiniAudioInput : INativeMicInput
         {
             throw new InvalidOperationException(
                 deviceIdHex is null
-                    ? "miniaudio: failed to open default capture device (zeus_ma_input_create returned NULL)."
-                    : "miniaudio: failed to open selected capture device (zeus_ma_input_create_for_device returned NULL).");
+                    ? "miniaudio: failed to open default capture device (simplehpsdr_ma_input_create returned NULL)."
+                    : "miniaudio: failed to open selected capture device (simplehpsdr_ma_input_create_for_device returned NULL).");
         }
 
         SampleRate = MiniAudioInterop.InputSampleRate(_handle);

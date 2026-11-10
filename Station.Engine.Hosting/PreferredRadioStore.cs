@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
@@ -11,10 +11,10 @@
 // repository for the full text, or https://www.gnu.org/licenses/.
 
 using LiteDB;
-using Zeus.Contracts;
-using Zeus.Protocol1.Discovery;
+using SimpleHPSDR.Contracts;
+using SimpleHPSDR.Protocol1.Discovery;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 // Persists the operator's chosen "this is my radio" preference. Fed into
 // RadioService.EffectiveBoardKind so PA defaults, per-band gain tables and
@@ -39,7 +39,7 @@ namespace Zeus.Server;
 // no output power, or hardware damage. Only use if you understand your hardware.
 public sealed class PreferredRadioStore : IDisposable
 {
-    private readonly Zeus.Data.SharedLiteDatabase.Lease _dbLease;
+    private readonly SimpleHPSDR.Data.SharedLiteDatabase.Lease _dbLease;
     private readonly LiteDatabase _db;
     private readonly ILiteCollection<PreferredRadioEntry> _entries;
     private readonly ILogger<PreferredRadioStore> _log;
@@ -55,7 +55,7 @@ public sealed class PreferredRadioStore : IDisposable
         if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
             Directory.CreateDirectory(dir);
 
-        _dbLease = Zeus.Data.SharedLiteDatabase.Acquire(dbPath);
+        _dbLease = SimpleHPSDR.Data.SharedLiteDatabase.Acquire(dbPath);
         _db = _dbLease.Database;
         _entries = _db.GetCollection<PreferredRadioEntry>("preferred_radio");
 
@@ -168,7 +168,7 @@ public sealed class PreferredRadioStore : IDisposable
     /// <summary>
     /// Returns the operator-selected variant for the 0x0A wire byte
     /// (issue #218). When no entry exists or the field is unset, returns
-    /// <see cref="OrionMkIIVariant.G2"/> — Zeus' shipping default.
+    /// <see cref="OrionMkIIVariant.G2"/> — SimpleHPSDR' shipping default.
     /// Consulted only when the connected board kind is
     /// <see cref="HpsdrBoardKind.OrionMkII"/>; ignored otherwise.
     /// </summary>
@@ -540,7 +540,7 @@ public sealed class PreferredRadioEntry
     /// <summary>Operator-selected variant for the 0x0A wire-byte alias
     /// family. LiteDB hydrates as <see cref="OrionMkIIVariant.G2"/>
     /// (the zero-default) for older rows that pre-date this field, which
-    /// preserves Zeus' pre-#218 dispatch behaviour.</summary>
+    /// preserves SimpleHPSDR' pre-#218 dispatch behaviour.</summary>
     public OrionMkIIVariant OrionMkIIVariant { get; set; }
     /// <summary>Whether the operator explicitly confirmed the 0x0A variant.
     /// Null means the row predates this marker; a legacy non-G2 value proves a

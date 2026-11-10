@@ -5,16 +5,16 @@
 // settings; this store only records which target is currently authoritative.
 
 using LiteDB;
-using Zeus.Contracts;
+using SimpleHPSDR.Contracts;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 public sealed class TxFidelityPolicyStore : IDisposable
 {
     public const string DefaultProfileId = "studio-ssb";
     public const int DefaultTargetSpectralDensity = 55;
 
-    private readonly Zeus.Data.SharedLiteDatabase.Lease _dbLease;
+    private readonly SimpleHPSDR.Data.SharedLiteDatabase.Lease _dbLease;
     private readonly LiteDatabase _db;
     private readonly ILiteCollection<TxFidelityPolicyEntry> _policy;
     private readonly ILogger<TxFidelityPolicyStore> _log;
@@ -28,7 +28,7 @@ public sealed class TxFidelityPolicyStore : IDisposable
         if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
             Directory.CreateDirectory(dir);
 
-        _dbLease = Zeus.Data.SharedLiteDatabase.Acquire(dbPath);
+        _dbLease = SimpleHPSDR.Data.SharedLiteDatabase.Acquire(dbPath);
         _db = _dbLease.Database;
         _policy = _db.GetCollection<TxFidelityPolicyEntry>("tx_fidelity_policy");
 

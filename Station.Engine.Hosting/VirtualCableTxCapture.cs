@@ -8,7 +8,7 @@ using System.Runtime.InteropServices;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
 /// Opens a selected virtual audio cable and feeds its real-time PCM into the
@@ -74,7 +74,7 @@ internal sealed class VirtualCableTxCapture : IHostedService, IDisposable
         _worker = new Thread(WorkerLoop)
         {
             IsBackground = true,
-            Name = "zeus-virtual-cable-tx",
+            Name = "simplehpsdr-virtual-cable-tx",
         };
         _worker.Start();
     }

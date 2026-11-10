@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright (C) 2026 Douglas J. Cerrato (KB2UKA) and contributors.
 
-using Zeus.Dsp.Wdsp;
-using Zeus.Protocol1;
+using SimpleHPSDR.Dsp.Wdsp;
+using SimpleHPSDR.Protocol1;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 public sealed record StationEngineHostingOptions(
     bool NativeAudioOutputEnabled = false,
@@ -41,8 +41,8 @@ public static class StationEngineHostingExtensions
         services.AddSingleton<IWindowsFirewallService, WindowsFirewallService>();
         // StationEngine is the process that opens the HPSDR UDP sockets, so it is
         // the executable the firewall rule has to name. Nothing granted that rule
-        // automatically before: the only auto-apply lived in Zeus.Server.Hosting,
-        // which only Zeus.Host (the retired dev bench) references.
+        // automatically before: the only auto-apply lived in SimpleHPSDR.Server.Hosting,
+        // which only SimpleHPSDR.Host (the retired dev bench) references.
         //
         // These two are inert until resolved, so they are safe to register here.
         // WindowsFirewallStartupGrant is NOT: it shells out to netsh and can create
@@ -86,7 +86,7 @@ public static class StationEngineHostingExtensions
         // external-receiver ports used by the monolithic host so attach-mode
         // clients can configure and open the Kiwi slice instead of receiving
         // 404s from the standalone station engine.
-        // Keep the established zeus-prefs.db ownership so existing saved URLs,
+        // Keep the established simplehpsdr-prefs.db ownership so existing saved URLs,
         // passwords, feature-profile exports, and restores remain intact.
         // SimpleHPSDR fork: no KiwiSDR receiver; the external-receiver ports are the null ones.
         services.AddSingleton<IExternalReceiverSource, NullExternalReceiverSource>();
@@ -104,7 +104,7 @@ public static class StationEngineHostingExtensions
             sp.GetRequiredService<ILogger<PsSettingsStore>>(),
             PrefsDbPath.EngineGet()));
         services.AddSingleton<RadioStateStore>();
-        // Workspace layouts: the store defaults to the product zeus-prefs.db
+        // Workspace layouts: the store defaults to the product simplehpsdr-prefs.db
         // (where existing desktop installs keep their layouts), so the engine
         // must pass its own database explicitly — attach-session layouts live
         // in the engine-owned prefs DB like every other engine store.
@@ -163,15 +163,15 @@ public static class StationEngineHostingExtensions
         services.AddSingleton<StreamingHub>();
         // Public Listening engine feed (ADR-0010). Lazy and inert: nothing is
         // constructed or produced unless a host resolves IPublicListenFeed.
-        Zeus.Server.PublicListen.PublicListenFeedServiceCollectionExtensions.AddPublicListenFeed(services);
+        SimpleHPSDR.Server.PublicListen.PublicListenFeedServiceCollectionExtensions.AddPublicListenFeed(services);
         services.AddSingleton<RadioService>();
         services.AddSingleton<RadioReclaimService>();
         services.AddSingleton<
-            Zeus.Protocol1.Discovery.IRadioDiscovery,
-            Zeus.Protocol1.Discovery.RadioDiscoveryService>();
+            SimpleHPSDR.Protocol1.Discovery.IRadioDiscovery,
+            SimpleHPSDR.Protocol1.Discovery.RadioDiscoveryService>();
         services.AddSingleton<
-            Zeus.Protocol2.Discovery.IRadioDiscovery,
-            Zeus.Protocol2.Discovery.RadioDiscoveryService>();
+            SimpleHPSDR.Protocol2.Discovery.IRadioDiscovery,
+            SimpleHPSDR.Protocol2.Discovery.RadioDiscoveryService>();
         services.AddSingleton<IRadioDiscoveryExtension, NullRadioDiscoveryExtension>();
 
         services.AddSingleton<RadioSpeakerAudioSink>();

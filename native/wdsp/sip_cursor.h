@@ -1,8 +1,8 @@
 /*  sip_cursor.h
 
-Zeus extension (contiguous siphon reads) -- not part of upstream WDSP.
+SimpleHPSDR extension (contiguous siphon reads) -- not part of upstream WDSP.
 
-This file is part of Zeus's vendored copy of WDSP, a program that implements
+This file is part of SimpleHPSDR's vendored copy of WDSP, a program that implements
 a Software-Defined Radio. WDSP is Copyright (C) Warren Pratt, NR0V.
 
 This program is free software; you can redistribute it and/or
@@ -17,7 +17,7 @@ GNU General Public License for more details.
 
 */
 
-// Zeus extension: a read cursor over a siphon's complex sample ring, so a
+// SimpleHPSDR extension: a read cursor over a siphon's complex sample ring, so a
 // reader on another thread receives every written block exactly once.
 //
 // TXAGetaSipF1 copies "the newest N samples". Called from the fexchange

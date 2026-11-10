@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
@@ -8,10 +8,10 @@
 // bypass policy; Protocol2Client still owns the final Alex bit encoding.
 
 using LiteDB;
-using Zeus.Contracts;
-using Zeus.Protocol2;
+using SimpleHPSDR.Contracts;
+using SimpleHPSDR.Protocol2;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 public sealed class RfFilterSettingsStore : IDisposable
 {
@@ -21,7 +21,7 @@ public sealed class RfFilterSettingsStore : IDisposable
     private const string AnanProfileKey = "anan-7000";
     private const string ClassicProfileKey = "classic-alex";
 
-    private readonly Zeus.Data.SharedLiteDatabase.Lease _dbLease;
+    private readonly SimpleHPSDR.Data.SharedLiteDatabase.Lease _dbLease;
     private readonly LiteDatabase _db;
     private readonly ILiteCollection<RfFilterSettingsEntry> _state;
     private readonly ILogger<RfFilterSettingsStore> _log;
@@ -37,7 +37,7 @@ public sealed class RfFilterSettingsStore : IDisposable
         if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
             Directory.CreateDirectory(dir);
 
-        _dbLease = Zeus.Data.SharedLiteDatabase.Acquire(dbPath);
+        _dbLease = SimpleHPSDR.Data.SharedLiteDatabase.Acquire(dbPath);
         _db = _dbLease.Database;
         _state = _db.GetCollection<RfFilterSettingsEntry>("rf_filter_settings");
         _state.EnsureIndex(x => x.Id, unique: true);

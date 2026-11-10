@@ -29,7 +29,7 @@ warren@wpratt.com
 #include "firmin.h"
 #include "fm_tone.h"
 
-// Zeus extension (FM tones): adjustable CTCSS level (SetTXACTCSSLevel), DCS
+// SimpleHPSDR extension (FM tones): adjustable CTCSS level (SetTXACTCSSLevel), DCS
 // encode (SetTXADCSRun / SetTXADCSCode; DCS wins over CTCSS when both run)
 // and a peak-deviation readout of the composite modulating signal
 // (GetTXAFMDeviationPeak). DSP helpers live in fm_tone.c.
@@ -58,7 +58,7 @@ typedef struct _fmmod {
   int nc;
   int mp;
   FIRCORE p;
-  // ---- Zeus FM tone extension ----
+  // ---- SimpleHPSDR FM tone extension ----
   int dcs_run;
   int dcs_code;                         // octal written as decimal (23 = 023)
   int dcs_inverted;
@@ -97,7 +97,7 @@ extern __declspec (dllexport) void SetTXAFMNC (int channel, int nc);
 
 extern __declspec (dllexport) void SetTXAFMAFFreqs (int channel, double low, double high);
 
-// Zeus extension (FM tones)
+// SimpleHPSDR extension (FM tones)
 
 extern __declspec (dllexport) void SetTXACTCSSLevel (int channel, double level);
 

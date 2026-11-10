@@ -4,7 +4,7 @@
 using System.Reflection;
 using System.Runtime.InteropServices;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
 /// The hosting assembly may register only one DllImport resolver. Dispatch all

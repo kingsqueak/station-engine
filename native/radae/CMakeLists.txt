@@ -1,8 +1,8 @@
 # native/radae/CMakeLists.txt
 #
-# Builds ONE shared library, `zeus_rade`, the full-duplex RADE V1 (Radio
+# Builds ONE shared library, `simplehpsdr_rade`, the full-duplex RADE V1 (Radio
 # Autoencoder) modem — RX (IQ -> 16 kHz PCM) and TX (16 kHz PCM -> IQ) with an
-# LDPC End-of-Over callsign. Cross-platform native base for Zeus's RADE support,
+# LDPC End-of-Over callsign. Cross-platform native base for SimpleHPSDR's RADE support,
 # P/Invoked from the .NET side as a single library.
 #
 # Composition (all statically linked into the one .so/.dll/.dylib):
@@ -15,10 +15,10 @@
 #   3. freedv_text — FreeDV reliable-text LDPC for the EOO callsign (FreeDV-GUI
 #                    on-air compatible). Mixed per-file Codec2 LDPC with an
 #                    LGPL-2.1 section 3 election for the conveyed copies.
-#   4. zeus_rade   — Zeus's thin shim (shim/zeus_rade.c): one streaming "complex
+#   4. simplehpsdr_rade   — SimpleHPSDR's thin shim (shim/simplehpsdr_rade.c): one streaming "complex
 #                    IQ <-> int16 PCM" RX/TX surface over the three above.
 #
-# The three upstream slices are NOT committed to the Zeus git tree (~95 MB of
+# The three upstream slices are NOT committed to the SimpleHPSDR git tree (~95 MB of
 # weight sources). build-rade.yml and the source exporter share
 # vendor/fetch-sources.sh, whose pins and hashes live in SOURCE-SLICES.json.
 #
@@ -27,7 +27,7 @@
 # (full-scale real speech). See vendor/PROVENANCE.md.
 
 cmake_minimum_required(VERSION 3.16)
-project(zeus_rade C)
+project(simplehpsdr_rade C)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
@@ -38,7 +38,7 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 # Root of the vendored upstream slices. CI populates this; for a local build,
 # point it at a checkout of sv1eia/Thetis-RADE's "Project Files/lib" (see
 # vendor/PROVENANCE.md for the pinned SHA and the exact sub-paths).
-set(ZEUS_RADE_VENDOR "${CMAKE_CURRENT_SOURCE_DIR}/vendor"
+set(SIMPLEHPSDR_RADE_VENDOR "${CMAKE_CURRENT_SOURCE_DIR}/vendor"
     CACHE PATH "Directory containing radae_c/, opus_dnn/, freedv_text/ slices")
 
 # Generic / Raspberry Pi fallback: disable all SIMD intrinsics. Also required on
@@ -46,9 +46,9 @@ set(ZEUS_RADE_VENDOR "${CMAKE_CURRENT_SOURCE_DIR}/vendor"
 # x86/ SIMD subtrees are stripped; see PROVENANCE.md). Default ON for portability.
 option(OPUS_DISABLE_INTRINSICS "Disable Opus SIMD intrinsics (generic/RPi build)" ON)
 
-set(RADAE_C   "${ZEUS_RADE_VENDOR}/radae_c")
-set(OPUS_DNN  "${ZEUS_RADE_VENDOR}/opus_dnn")
-set(FREEDV_TXT "${ZEUS_RADE_VENDOR}/freedv_text")
+set(RADAE_C   "${SIMPLEHPSDR_RADE_VENDOR}/radae_c")
+set(OPUS_DNN  "${SIMPLEHPSDR_RADE_VENDOR}/opus_dnn")
+set(FREEDV_TXT "${SIMPLEHPSDR_RADE_VENDOR}/freedv_text")
 
 if(NOT EXISTS "${OPUS_DNN}/CMakeLists.txt")
   message(FATAL_ERROR
@@ -59,7 +59,7 @@ endif()
 # ---------------------------------------------------------------------------
 # 1. opus_dnn — static Opus + DNN/FARGAN. OPUS_DEEP_PLC pulls in the FARGAN
 #    vocoder + nnet sources (dnn/fargan.c, dnn/fargan_data.c, dnn/nnet.c, ...).
-#    Build as a static lib; we whole-archive it into zeus_rade so the FARGAN
+#    Build as a static lib; we whole-archive it into simplehpsdr_rade so the FARGAN
 #    symbols survive into the final shared object.
 # ---------------------------------------------------------------------------
 set(OPUS_BUILD_SHARED_LIBRARY OFF CACHE BOOL "" FORCE)
@@ -123,26 +123,26 @@ set(FREEDV_TXT_SOURCES
     "${FREEDV_TXT}/codec2/phi0.c")
 
 # ---------------------------------------------------------------------------
-# 4. zeus_rade shim
+# 4. simplehpsdr_rade shim
 # ---------------------------------------------------------------------------
-set(SHIM_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/shim/zeus_rade.c")
+set(SHIM_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/shim/simplehpsdr_rade.c")
 
 # ---------------------------------------------------------------------------
 # The one shared library
 # ---------------------------------------------------------------------------
-add_library(zeus_rade SHARED ${RADAE_C_SOURCES} ${FREEDV_TXT_SOURCES} ${SHIM_SOURCES})
+add_library(simplehpsdr_rade SHARED ${RADAE_C_SOURCES} ${FREEDV_TXT_SOURCES} ${SHIM_SOURCES})
 
 # AppleClang diagnoses the upstream radc_rx.c use of abs() because that file
 # does not include stdlib.h. Keep the upstream slice byte-exact and provide the
 # declaration at compile time. Ninja also needs an explicit target edge before
 # force-loading $<TARGET_FILE:opus>; the generator expression alone does not
-# guarantee that the static archive exists before the zeus_rade link step.
+# guarantee that the static archive exists before the simplehpsdr_rade link step.
 if(APPLE)
-  target_compile_options(zeus_rade PRIVATE -include stdlib.h)
-  add_dependencies(zeus_rade opus)
+  target_compile_options(simplehpsdr_rade PRIVATE -include stdlib.h)
+  add_dependencies(simplehpsdr_rade opus)
 endif()
 
-target_include_directories(zeus_rade PRIVATE
+target_include_directories(simplehpsdr_rade PRIVATE
     "${RADAE_C}/src"
     "${FREEDV_TXT}/src"
     "${FREEDV_TXT}/codec2"
@@ -153,69 +153,69 @@ target_include_directories(zeus_rade PRIVATE
 # Windows-only compat shim dir (FIRST) that maps <alloca.h> -> <malloc.h>. Not
 # added on Linux/macOS, so their real system header is used unchanged.
 if(WIN32)
-  target_include_directories(zeus_rade BEFORE PRIVATE
+  target_include_directories(simplehpsdr_rade BEFORE PRIVATE
       "${CMAKE_CURRENT_SOURCE_DIR}/shim/compat")
 endif()
 
 # RADE_STATIC neutralises the DLL import/export + __stdcall decoration in
 # rade_api.h (Thetis-RADE static-build patch); RADE_PYTHON_FREE selects the C
 # encoder/decoder; IS_BUILDING_RADE_API matches the upstream vcxproj defines.
-target_compile_definitions(zeus_rade PRIVATE
+target_compile_definitions(simplehpsdr_rade PRIVATE
     RADE_STATIC
     RADE_PYTHON_FREE=1
     IS_BUILDING_RADE_API=1)
 
 if(OPUS_DISABLE_INTRINSICS)
-  target_compile_definitions(zeus_rade PRIVATE OPUS_DISABLE_INTRINSICS)
+  target_compile_definitions(simplehpsdr_rade PRIVATE OPUS_DISABLE_INTRINSICS)
 endif()
 
 # Whole-archive the static opus so fargan_* / nnet symbols are retained even
 # though only the shim references them transitively.
 if(APPLE)
-  target_link_libraries(zeus_rade PRIVATE
+  target_link_libraries(simplehpsdr_rade PRIVATE
     -Wl,-force_load,$<TARGET_FILE:opus> m)
 elseif(MSVC)
-  target_link_libraries(zeus_rade PRIVATE opus)
-  set_target_properties(zeus_rade PROPERTIES LINK_FLAGS "/WHOLEARCHIVE:opus")
+  target_link_libraries(simplehpsdr_rade PRIVATE opus)
+  set_target_properties(simplehpsdr_rade PROPERTIES LINK_FLAGS "/WHOLEARCHIVE:opus")
 else() # GNU/Clang ld
-  target_link_libraries(zeus_rade PRIVATE
+  target_link_libraries(simplehpsdr_rade PRIVATE
     -Wl,--whole-archive opus -Wl,--no-whole-archive m)
 endif()
 
-set_target_properties(zeus_rade PROPERTIES
+set_target_properties(simplehpsdr_rade PROPERTIES
     C_VISIBILITY_PRESET default
-    OUTPUT_NAME zeus_rade
+    OUTPUT_NAME simplehpsdr_rade
     VERSION 1.0
     SOVERSION 1)
 
-# Windows: emit `zeus_rade.dll` (drop MinGW's "lib" prefix) so the file name
+# Windows: emit `simplehpsdr_rade.dll` (drop MinGW's "lib" prefix) so the file name
 # matches what the .NET loader probes (FreeDvNativeLoader.RadeNativeFileName).
 # Linux/macOS keep the conventional lib<name>.so / .dylib.
 if(WIN32)
-  set_target_properties(zeus_rade PROPERTIES PREFIX "")
+  set_target_properties(simplehpsdr_rade PROPERTIES PREFIX "")
 endif()
 
 # MinGW: statically link the GCC + winpthread runtimes so the DLL depends only on
 # system libraries (KERNEL32 + UCRT) — never libgcc_s_seh-1.dll / libwinpthread-1.dll.
-# PROVEN: yields a standalone zeus_rade.dll that decoded off-air RADE on Windows.
+# PROVEN: yields a standalone simplehpsdr_rade.dll that decoded off-air RADE on Windows.
 if(MINGW)
-  target_link_options(zeus_rade PRIVATE -static -static-libgcc -Wl,-Bstatic)
+  target_link_options(simplehpsdr_rade PRIVATE -static -static-libgcc -Wl,-Bstatic)
 endif()
 
 # ---------------------------------------------------------------------------
 # Optional: standalone decode-validation harness (proves the lib end-to-end).
 # ---------------------------------------------------------------------------
-option(ZEUS_RADE_BUILD_TEST "Build the zeus_rade_test decode harness" OFF)
-if(ZEUS_RADE_BUILD_TEST)
-  add_executable(zeus_rade_test "${CMAKE_CURRENT_SOURCE_DIR}/shim/zeus_rade_test.c")
-  target_include_directories(zeus_rade_test PRIVATE
+option(SIMPLEHPSDR_RADE_BUILD_TEST "Build the simplehpsdr_rade_test decode harness" OFF)
+if(SIMPLEHPSDR_RADE_BUILD_TEST)
+  add_executable(simplehpsdr_rade_test "${CMAKE_CURRENT_SOURCE_DIR}/shim/simplehpsdr_rade_test.c")
+  target_include_directories(simplehpsdr_rade_test PRIVATE
       "${RADAE_C}/src"
       "${CMAKE_CURRENT_SOURCE_DIR}/shim"
       ${OPUS_INCLUDE_DIRS})
-  target_link_libraries(zeus_rade_test PRIVATE zeus_rade)
+  target_link_libraries(simplehpsdr_rade_test PRIVATE simplehpsdr_rade)
   # The harness calls libm directly (sin() in the synth). GNU ld needs an explicit
   # -lm for the executable's own references (MinGW/MSVC auto-link it).
   if(NOT MSVC)
-    target_link_libraries(zeus_rade_test PRIVATE m)
+    target_link_libraries(simplehpsdr_rade_test PRIVATE m)
   endif()
 endif()

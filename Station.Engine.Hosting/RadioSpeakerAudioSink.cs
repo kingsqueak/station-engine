@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
 // See ATTRIBUTIONS.md at the repository root for the full provenance
 // statement and per-component attribution.
 
-using Zeus.Contracts;
-using Zeus.Protocol1;
+using SimpleHPSDR.Contracts;
+using SimpleHPSDR.Protocol1;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
 /// Feeds demodulated RX audio into the Protocol-1 <see cref="RxAudioRing"/> so a

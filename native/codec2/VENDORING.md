@@ -3,7 +3,7 @@
 This directory does **not** vendor any codec2 source. It carries a single
 `CMakeLists.txt` that fetches and builds **libcodec2** (the Codec 2 / FreeDV
 modem library, David Rowe / drowe67) straight from the upstream Git repo via
-CMake `FetchContent`. Zeus P/Invokes the resulting shared library for FreeDV
+CMake `FetchContent`. SimpleHPSDR P/Invokes the resulting shared library for FreeDV
 digital voice.
 
 ## Provenance / pinned ref
@@ -38,13 +38,13 @@ intentional:
   neural-net runtime, no model files). That keeps the cross-platform build
   trivial on macOS / Windows / Linux x64+arm64 / Raspberry Pi.
 * **Scope.** The ML-based **2020 / 2020B** modes require LPCNet and large model
-  blobs and are out of scope for Zeus. Enabling them would pull a heavy,
+  blobs and are out of scope for SimpleHPSDR. Enabling them would pull a heavy,
   platform-sensitive dependency chain into a library that is otherwise clean.
 
 ## Modes available
 
 With LPCNet excluded, the library still provides the classic FreeDV / Codec 2
-modes Zeus targets:
+modes SimpleHPSDR targets:
 
 * **700C**
 * **700D**
@@ -56,11 +56,11 @@ modes Zeus targets:
 
 ## Licence posture
 
-codec2 is **LGPL-2.1**. Zeus links it the same way it links WDSP and
+codec2 is **LGPL-2.1**. SimpleHPSDR links it the same way it links WDSP and
 libspecbleach: as a separately-built **dynamic shared library** loaded at
 runtime via .NET `NativeLibrary`. Dynamic linking against an LGPL-2.1 library
-is the LGPL's intended use and is compatible with Zeus's distribution. The
-library is rebuilt from unmodified upstream source (no Zeus patches), so the
+is the LGPL's intended use and is compatible with SimpleHPSDR's distribution. The
+library is rebuilt from unmodified upstream source (no SimpleHPSDR patches), so the
 "relink with a modified library" LGPL provision is satisfied by the documented
 rebuild procedure below.
 
@@ -68,11 +68,11 @@ rebuild procedure below.
 
 CI wiring lives in `.github/workflows/build-native-libs.yml` (see below); these
 are the equivalent manual steps. The output shared library must land in
-`Zeus.Dsp/runtimes/{rid}/native/` so the Zeus `NativeLibrary` resolver finds
+`SimpleHPSDR.Dsp/runtimes/{rid}/native/` so the SimpleHPSDR `NativeLibrary` resolver finds
 it, exactly like `libwdsp` / `libminiaudio`.
 
 Build **only** the `codec2` target — the upstream tree also defines CLI tools
-(`c2enc`, `freedv_tx`, …) that Zeus does not ship.
+(`c2enc`, `freedv_tx`, …) that SimpleHPSDR does not ship.
 
 ### macOS (osx-arm64)
 
@@ -81,7 +81,7 @@ cmake -S native/codec2 -B native/build-codec2 -DCMAKE_BUILD_TYPE=Release
 cmake --build native/build-codec2 --config Release --target codec2 --parallel
 # upstream stages the .dylib under the fetched src tree:
 find native/build-codec2 -name 'libcodec2.dylib'
-cp <found>/libcodec2.dylib Zeus.Dsp/runtimes/osx-arm64/native/libcodec2.dylib
+cp <found>/libcodec2.dylib SimpleHPSDR.Dsp/runtimes/osx-arm64/native/libcodec2.dylib
 ```
 
 ### Linux (linux-x64 / linux-arm64 / Raspberry Pi)
@@ -90,7 +90,7 @@ cp <found>/libcodec2.dylib Zeus.Dsp/runtimes/osx-arm64/native/libcodec2.dylib
 cmake -S native/codec2 -B native/build-codec2 -DCMAKE_BUILD_TYPE=Release
 cmake --build native/build-codec2 --config Release --target codec2 --parallel
 find native/build-codec2 -name 'libcodec2.so*'
-cp <found>/libcodec2.so Zeus.Dsp/runtimes/linux-x64/native/libcodec2.so
+cp <found>/libcodec2.so SimpleHPSDR.Dsp/runtimes/linux-x64/native/libcodec2.so
 ```
 
 For arm64 cross-compile, pass the same toolchain flags the wdsp/miniaudio jobs
@@ -116,8 +116,8 @@ cmake -S native/codec2 -B native/build-codec2 -G Ninja \
 cmake --build native/build-codec2 --config Release --target codec2 --parallel
 # Standalone codec2.dll (deps: KERNEL32 + system UCRT only; libgcc static-linked):
 dll=$(find native/build-codec2 -name 'codec2.dll' | head -n1)
-cp "$dll" Zeus.Dsp/runtimes/win-x64/native/codec2.dll
-objdump -p Zeus.Dsp/runtimes/win-x64/native/codec2.dll | grep 'DLL Name'
+cp "$dll" SimpleHPSDR.Dsp/runtimes/win-x64/native/codec2.dll
+objdump -p SimpleHPSDR.Dsp/runtimes/win-x64/native/codec2.dll | grep 'DLL Name'
 ```
 
 **win-arm64:** not yet built — aarch64 MinGW (e.g. `llvm-mingw`) is needed.
@@ -142,6 +142,6 @@ inherent to codec2.
    this file).
 3. Re-run the build on every platform (or trigger the
    **Build Native Libraries** workflow) and commit the refreshed
-   `Zeus.Dsp/runtimes/{rid}/native/` binaries.
+   `SimpleHPSDR.Dsp/runtimes/{rid}/native/` binaries.
 4. Confirm LPCNet is still off and the classic modes still link before
    shipping.

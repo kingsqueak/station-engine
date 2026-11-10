@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 using LiteDB;
-using Zeus.Contracts;
+using SimpleHPSDR.Contracts;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 // DSP settings persistence — stores NR/NB/ANF/SNB/NBP parameters so the
 // operator's preferred noise reduction and blanker configuration survives
@@ -15,7 +15,7 @@ namespace Zeus.Server;
 // because LiteDB's BsonMapper races on parallel construction (commit b57c12d).
 public sealed class DspSettingsStore : IDisposable
 {
-    private readonly Zeus.Data.SharedLiteDatabase.Lease _dbLease;
+    private readonly SimpleHPSDR.Data.SharedLiteDatabase.Lease _dbLease;
     private readonly LiteDatabase _db;
     private readonly ILiteCollection<DspSettingsEntry> _entries;
     private readonly ILiteCollection<AmBroadcastSettingsEntry> _amBroadcast;
@@ -30,7 +30,7 @@ public sealed class DspSettingsStore : IDisposable
         if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
             Directory.CreateDirectory(dir);
 
-        _dbLease = Zeus.Data.SharedLiteDatabase.Acquire(dbPath);
+        _dbLease = SimpleHPSDR.Data.SharedLiteDatabase.Acquire(dbPath);
         _db = _dbLease.Database;
         _entries = _db.GetCollection<DspSettingsEntry>("dsp_settings");
         _entries.EnsureIndex(x => x.ProfileId, unique: true);
@@ -46,7 +46,7 @@ public sealed class DspSettingsStore : IDisposable
         if (e is null)
             return null;
 
-        // Legacy scale migration: pre-fix Zeus stored EmnrPost2Factor/Nlevel
+        // Legacy scale migration: pre-fix SimpleHPSDR stored EmnrPost2Factor/Nlevel
         // on the WDSP post-divide 0..1 scale (default 0.15). The wire-correct
         // form is the Thetis NUD 0..100 scale (default 15.0) — WDSP /100s
         // internally at emnr.c:1035/1042. Old persisted values < 1.0 are

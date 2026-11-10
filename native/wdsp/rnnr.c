@@ -311,7 +311,7 @@ void destroy_rnnr(RNNR a) {
 
 // Loads the process-global RNNR model from file_path (every RNNR channel uses
 // it). A NULL/empty path clears to the baked-in model (inert pass-through in
-// Zeus's USE_WEIGHTS_FILE build). Returns 1 on success — either an intentional
+// SimpleHPSDR's USE_WEIGHTS_FILE build). Returns 1 on success — either an intentional
 // clear, or a requested file that loaded — and 0 when a file was requested but
 // rnnoise_model_from_filename failed (bad/incompatible weights). The current
 // loaded-state is also queryable via RNNRmodelLoaded().

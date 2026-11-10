@@ -3,10 +3,10 @@
 using System.Net;
 using System.Net.NetworkInformation;
 using Microsoft.Extensions.Logging;
-using Zeus.Contracts;
-using Zeus.Protocol1.Discovery;
+using SimpleHPSDR.Contracts;
+using SimpleHPSDR.Protocol1.Discovery;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 internal sealed record P1ConnectionAttempt(
     string Endpoint,

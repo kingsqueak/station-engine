@@ -830,7 +830,7 @@ void SetupDetectMaxBin(int run, int disp, int ss, int LO, double rate,
   calc_dmb(a->dmb_disp, a->size);
 }
 
-// Zeus: one frame of the max-bin hold. A stronger live reading replaces the
+// SimpleHPSDR: one frame of the max-bin hold. A stronger live reading replaces the
 // held value at once. Otherwise the held value falls by (1 - decay) of its
 // magnitude, as in Thetis, but never by less than (1 - decay) * 20 dB. Thetis
 // subtracts fabs((1 - decay) * held), which shrinks a held value above 0 dB

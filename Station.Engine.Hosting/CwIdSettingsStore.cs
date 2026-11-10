@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA), Christian Suarez (N9WAR), and contributors.
 
 using LiteDB;
-using Zeus.Contracts;
+using SimpleHPSDR.Contracts;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
 /// Persists the CW station ID timer preferences (speed, tone, level,
@@ -34,7 +34,7 @@ public sealed class CwIdSettingsStore : IDisposable
     /// <summary>97.119(a): identify at least every 10 minutes.</summary>
     public const int MaxIntervalMinutes = 10;
 
-    private readonly Zeus.Data.SharedLiteDatabase.Lease _dbLease;
+    private readonly SimpleHPSDR.Data.SharedLiteDatabase.Lease _dbLease;
     private readonly ILiteCollection<CwIdSettingsEntry> _docs;
     private readonly object _sync = new();
 
@@ -45,7 +45,7 @@ public sealed class CwIdSettingsStore : IDisposable
         if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
             Directory.CreateDirectory(dir);
 
-        _dbLease = Zeus.Data.SharedLiteDatabase.Acquire(dbPath);
+        _dbLease = SimpleHPSDR.Data.SharedLiteDatabase.Acquire(dbPath);
         _docs = _dbLease.Database.GetCollection<CwIdSettingsEntry>("cw_id_settings");
         log.LogInformation("CwIdSettingsStore initialized at {Path}", dbPath);
     }

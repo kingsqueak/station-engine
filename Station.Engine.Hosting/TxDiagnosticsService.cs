@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright (C) 2026 Douglas J. Cerrato (KB2UKA) and contributors.
 
-using Zeus.Dsp;
-using Zeus.Protocol1;
-using Zeus.Protocol2;
+using SimpleHPSDR.Dsp;
+using SimpleHPSDR.Protocol1;
+using SimpleHPSDR.Protocol2;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
 /// Owns the TX diagnostics that can be observed entirely inside the station

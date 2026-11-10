@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
@@ -9,7 +9,7 @@
 // owned exclusively by a modem hot path (RX tick / mic ingest) and are reset
 // only while that path is gated out during reconfigure, so they need no
 // synchronisation. Pure span math, no allocation — matching the realtime
-// discipline of the rest of the Zeus audio bus (FreeDvResampler, FreeDvModem).
+// discipline of the rest of the SimpleHPSDR audio bus (FreeDvResampler, FreeDvModem).
 //
 //   RxSquelchGate — gates DECODED speech by the modem's sync flag with a smooth
 //   attack/release ramp and a short hold. When the far station unkeys, the
@@ -32,7 +32,7 @@
 // conservative (long hold/hang, gentle thresholds) so the gates only ever act
 // on genuine silence/noise, never on speech. See docs/lessons/freedv-fidelity.md.
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
 /// Sync-driven output squelch for decoded FreeDV/RADE speech. Applies a smooth

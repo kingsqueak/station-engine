@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
@@ -10,11 +10,11 @@
 // option) any later version. See the LICENSE file at the root of this
 // repository for the full text, or https://www.gnu.org/licenses/.
 //
-// Zeus is an independent reimplementation in .NET — not a fork. Its
+// SimpleHPSDR is an independent reimplementation in .NET — not a fork. Its
 // Protocol-1 / Protocol-2 framing, WDSP integration, meter pipelines, and
 // TX behaviour were informed by studying the Thetis project
 // (https://github.com/ramdor/Thetis), the authoritative reference
-// implementation in the OpenHPSDR ecosystem. Zeus gratefully acknowledges
+// implementation in the OpenHPSDR ecosystem. SimpleHPSDR gratefully acknowledges
 // the Thetis contributors whose work made this possible:
 //
 //   Richard Samphire (MW0LGE), Warren Pratt (NR0V),
@@ -39,22 +39,22 @@
 // WDSP — loaded by Zeus via P/Invoke — is Copyright (C) Warren Pratt
 // (NR0V), distributed under GPL v2 or later.
 //
-// Zeus is distributed WITHOUT ANY WARRANTY; see the GNU General Public
+// SimpleHPSDR is distributed WITHOUT ANY WARRANTY; see the GNU General Public
 // License for details.
 
 using LiteDB;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Zeus.Contracts;
+using SimpleHPSDR.Contracts;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 public readonly record struct TransverterWorkspaceSelection(
     bool Enabled,
     int? ActiveBandId);
 
 // UI layout persistence — stores the operator's panel arrangement so it
-// survives page reloads and reinstalls. Shares zeus-prefs.db with
+// survives page reloads and reinstalls. Shares simplehpsdr-prefs.db with
 // BandMemoryStore (layout isn't sensitive).
 //
 // Two collections live here:
@@ -67,7 +67,7 @@ public readonly record struct TransverterWorkspaceSelection(
 //     no radio is connected.
 public sealed class LayoutStore : IDisposable
 {
-    private readonly Zeus.Data.SharedLiteDatabase.Lease _dbLease;
+    private readonly SimpleHPSDR.Data.SharedLiteDatabase.Lease _dbLease;
     private readonly LiteDatabase _db;
     private readonly ILiteCollection<LayoutEntry> _legacy;
     private readonly ILiteCollection<RadioLayoutsEntry> _v2;
@@ -82,7 +82,7 @@ public sealed class LayoutStore : IDisposable
     public event Action<string, bool>? ActiveTransverterEnabledChanged;
 
     // dbPathOverride mirrors the sibling engine stores: the product host keeps
-    // the historical PrefsDbPath.Get() default (layouts stay in zeus-prefs.db,
+    // the historical PrefsDbPath.Get() default (layouts stay in simplehpsdr-prefs.db,
     // where existing desktop installs already have them), while the standalone
     // engine registration passes PrefsDbPath.EngineGet() so attach-session
     // layouts persist in the engine-owned database.
@@ -95,7 +95,7 @@ public sealed class LayoutStore : IDisposable
         if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
             Directory.CreateDirectory(dir);
 
-        _dbLease = Zeus.Data.SharedLiteDatabase.Acquire(dbPath);
+        _dbLease = SimpleHPSDR.Data.SharedLiteDatabase.Acquire(dbPath);
         _db = _dbLease.Database;
         _legacy = _db.GetCollection<LayoutEntry>("ui_layout");
         _legacy.EnsureIndex(x => x.ProfileId, unique: true);

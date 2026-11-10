@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
@@ -12,9 +12,9 @@
 
 using System.Net;
 using System.Net.Sockets;
-using Zeus.Protocol1;
+using SimpleHPSDR.Protocol1;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
 /// Forcibly frees an OpenHPSDR radio that discovery reports as <c>Busy</c>
@@ -27,7 +27,7 @@ namespace Zeus.Server;
 /// Connect panel — it can kick another operator off a live, possibly
 /// transmitting, radio. A stop cannot kill a controller process on another
 /// host, so a live controller can resume its own keepalive and reacquire the
-/// radio after Zeus connects; the operator is expected to stop the other
+/// radio after SimpleHPSDR connects; the operator is expected to stop the other
 /// controller if that happens.</para>
 ///
 /// <list type="bullet">
@@ -52,7 +52,7 @@ public sealed class RadioReclaimService
     private const int Protocol1CommandPort = 1024;
     private const int Protocol2HighPriorityPort = 1027;
 
-    // Matches Protocol2Client.BufLen — the size Zeus's own high-priority
+    // Matches Protocol2Client.BufLen — the size SimpleHPSDR's own high-priority
     // sender uses on the wire.
     private const int Protocol2HighPriorityLen = 1444;
 

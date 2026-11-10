@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 using LiteDB;
-using Zeus.Contracts;
+using SimpleHPSDR.Contracts;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
 /// Persists the five station-wide tuning favorites in the engine preferences
@@ -15,7 +15,7 @@ public sealed class StationFavoriteStore : IDisposable
     internal const string CollectionName = "station_favorites";
 
     private readonly object _gate = new();
-    private readonly Zeus.Data.SharedLiteDatabase.Lease _dbLease;
+    private readonly SimpleHPSDR.Data.SharedLiteDatabase.Lease _dbLease;
     private readonly ILiteCollection<StationFavoriteEntry> _entries;
 
     public StationFavoriteStore(
@@ -27,7 +27,7 @@ public sealed class StationFavoriteStore : IDisposable
         if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
             Directory.CreateDirectory(directory);
 
-        _dbLease = Zeus.Data.SharedLiteDatabase.Acquire(dbPath);
+        _dbLease = SimpleHPSDR.Data.SharedLiteDatabase.Acquire(dbPath);
         _entries = _dbLease.Database.GetCollection<StationFavoriteEntry>(CollectionName);
         RemoveOutOfRangeAndDuplicateRows(log);
         _entries.EnsureIndex(entry => entry.Slot, unique: true);

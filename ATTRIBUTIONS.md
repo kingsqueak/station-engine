@@ -151,7 +151,7 @@ conveyed under **GPL-3.0-only**, as described below.
 ## Vallado SGP4/SDP4 orbital propagator
 
 The satellite-tracking implementation under
-[`Zeus.Server.Hosting/Satellites/`](Zeus.Server.Hosting/Satellites/) includes a
+[`SimpleHPSDR.Server.Hosting/Satellites/`](SimpleHPSDR.Server.Hosting/Satellites/) includes a
 vendored C# translation of David Vallado's 2016 SGP4 numerical core from
 [`aholinch/sgp4`](https://github.com/aholinch/sgp4) at commit
 [`552cb1489a52c3023ae70cb6c7e239e84c5950fe`](https://github.com/aholinch/sgp4/tree/552cb1489a52c3023ae70cb6c7e239e84c5950fe).
@@ -356,7 +356,7 @@ GPL-3.0-or-later, vendored byte-for-byte from the minimal
 [pavel-demin/wsprd](https://github.com/pavel-demin/wsprd) extract of WSJT-X at
 commit `8aa903085479910c77de95f7e7c178f66a245ed3` under
 [`native/wspr/vendor/`](native/wspr/vendor/), with Julien Pommier's PFFFT
-(BSD-style FFTPACK terms). It builds into the decode-only `zeus_wspr` library,
+(BSD-style FFTPACK terms). It builds into the decode-only `simplehpsdr_wspr` library,
 which only the GPL station engine loads; the engine publishes decoded spots on
 loopback routes. The proprietary Zeus product and web client never load, link,
 or call it, and WSPR transmit is implemented separately without it. Provenance
@@ -376,7 +376,7 @@ external libraries: **zf_log** (© 2017 wonder-mice, MIT) and Simon
 Rockliff's Reed-Solomon coder (1989/1991, distributed on condition that the
 author is acknowledged; modified by Peter LaRue for ardopcf). A Zeus-written
 MIT backend in `native/ardop/zeus/` replaces ardopcf's sound-card, PTT and
-command-line layer; it builds into the `zeus_ardop` library loaded by the
+command-line layer; it builds into the `simplehpsdr_ardop` library loaded by the
 ZeusProduct Winlink feature. The licence notices ship as
 `ZeusProduct/Plugins/Ardop/ThirdParty/ardopcf-LICENSE.txt`; provenance and
 build notes: `ZeusProduct/Plugins/Ardop/SOURCE.md` and
@@ -385,7 +385,7 @@ build notes: `ZeusProduct/Plugins/Ardop/SOURCE.md` and
 ## RADE V1 (Radio Autoencoder — radae_c, opus_dnn, freedv_text)
 
 Zeus's RADE V1 (Radio Autoencoder) digital-voice mode builds a single shared
-library, `libzeus_rade.{so,dll,dylib}`, from three upstream C slices. The
+library, `libsimplehpsdr_rade.{so,dll,dylib}`, from three upstream C slices. The
 slices are vendored at build time into
 [`native/radae/vendor/`](native/radae/vendor/) by CI and are **not** committed
 to the Zeus tree (~95 MB, almost all of it compiled-in neural-network weight
@@ -446,7 +446,7 @@ the codec2 contributors** and distributed under the **GNU Lesser General
 Public License, version 2.1 or (at your option) any later version**
 (LGPL-2.1-or-later). Upstream: <https://github.com/drowe67/codec2>.
 
-`libzeus_rade` is a shared library; Zeus's managed code reaches it through
+`libsimplehpsdr_rade` is a shared library; Zeus's managed code reaches it through
 P/Invoke. Dynamic linking against LGPL-2.1-or-later code from Zeus's
 GPL-2.0-or-later distribution is consistent with both licences (LGPL §6's
 permissive linking clause is preserved, and the combined work remains

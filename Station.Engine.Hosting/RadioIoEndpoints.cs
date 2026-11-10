@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-using Zeus.Contracts;
-namespace Zeus.Server;
+using SimpleHPSDR.Contracts;
+namespace SimpleHPSDR.Server;
 
 /// <summary>Maps radio PTT, audio-front-end, and speaker-output routes.</summary>
 public static class RadioIoEndpoints

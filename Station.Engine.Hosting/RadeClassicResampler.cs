@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
@@ -9,7 +9,7 @@
 // so a single Hamming-windowed-sinc prototype low-pass drives both a decimator
 // and a polyphase interpolator. Both keep filter history across calls so block
 // boundaries are seamless, and both are pure span -> span with NO allocation
-// and NO locking — matching the realtime discipline of the Zeus audio bus
+// and NO locking — matching the realtime discipline of the SimpleHPSDR audio bus
 // (AudioChain, FloatSpscRing). This replaces any external libsamplerate / soxr
 // dependency — important for the arm64 / Raspberry Pi targets.
 //
@@ -29,7 +29,7 @@
 using System.Runtime.CompilerServices;
 using System.Threading;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>Exact-ratio (6:1) low-pass FIR resamplers for 48 kHz &lt;-&gt; 8 kHz.</summary>
 internal static class FreeDvResampler
@@ -181,8 +181,8 @@ internal static class FreeDvResampler
 /// Fixed-capacity, lock-free single-producer/single-consumer float ring used to
 /// bridge the mismatched block cadences between the 48 kHz pipeline and FreeDV's
 /// variable frame sizes. This is the FreeDV-assembly twin of
-/// <c>Zeus.Server.FloatSpscRing</c> (same Volatile release/acquire cursor
-/// discipline, power-of-two bitmask wrap, never-blocking Write/Read) — Zeus.Dsp
+/// <c>SimpleHPSDR.Server.FloatSpscRing</c> (same Volatile release/acquire cursor
+/// discipline, power-of-two bitmask wrap, never-blocking Write/Read) — SimpleHPSDR.Dsp
 /// can't reference the Hosting assembly, so the proven design is mirrored here.
 /// Within a single FreeDV direction the producer and consumer are the same
 /// (DSP-tick) thread; the ring still uses SPSC-safe ordering so a reconfigure on

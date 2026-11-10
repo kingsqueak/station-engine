@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
@@ -11,9 +11,9 @@
 // repository for the full text, or https://www.gnu.org/licenses/.
 
 using LiteDB;
-using Zeus.Contracts;
+using SimpleHPSDR.Contracts;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 // Persists per-mode filter-slot overrides and the last-selected preset slot
 // across server restarts. Lives in the shared station-engine.db file.
@@ -44,7 +44,7 @@ public sealed class FilterPresetStore : IDisposable
         }
     }
 
-    private readonly Zeus.Data.SharedLiteDatabase.Lease _dbLease;
+    private readonly SimpleHPSDR.Data.SharedLiteDatabase.Lease _dbLease;
     private readonly LiteDatabase _db;
     private readonly ILiteCollection<FilterPresetStoreEntry> _entries;
     private readonly ILogger<FilterPresetStore> _log;
@@ -61,7 +61,7 @@ public sealed class FilterPresetStore : IDisposable
         if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
             Directory.CreateDirectory(dir);
 
-        _dbLease = Zeus.Data.SharedLiteDatabase.Acquire(dbPath);
+        _dbLease = SimpleHPSDR.Data.SharedLiteDatabase.Acquire(dbPath);
         _db = _dbLease.Database;
         _entries = _db.GetCollection<FilterPresetStoreEntry>("filter_presets");
         _entries.EnsureIndex("ModeKey", "$.ModeKey", unique: true);

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright (C) 2026 Douglas J. Cerrato (KB2UKA) and contributors.
-using Zeus.Contracts;
-using Zeus.Protocol1;
+using SimpleHPSDR.Contracts;
+using SimpleHPSDR.Protocol1;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>Receive protection state for one physical ADC, without routing or I/O.</summary>
 internal sealed class PhysicalAdcProtectionController

@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 
-using Zeus.Contracts;
+using SimpleHPSDR.Contracts;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 internal enum TransmitIntent
 {
@@ -115,7 +115,7 @@ internal sealed class EngineTransmitSafetyModule
     // than the 500 ms sustain window — which nuisance-trips today's flat
     // 6.0:1 TUN guard (issue #1659). Thetis suppresses SWR protection during
     // TUN, but only while the transmitted power stays low enough that a bad
-    // match cannot harm the PA. Zeus mirrors that: while TUN is active AND
+    // match cannot harm the PA. SimpleHPSDR mirrors that: while TUN is active AND
     // measured forward power stays within this guarded limit, the SWR hard
     // drop is suppressed so the tuner can hunt. Above the limit the normal
     // 6.0:1 / 500 ms TUN trip still applies, MOX protection is untouched, and
@@ -397,7 +397,7 @@ internal sealed class EngineTransmitSafetyModule
         // the bypass below 1 W and left nothing holding the trip off. These
         // constants are board-agnostic, and a limit read off 100 W ANAN hardware
         // governs a 5 W Hermes-Lite 2 too, where an ordinary external-ATU tune
-        // at the default 10 % drive sits under 1 W. Zeus implements the reduced
+        // at the default 10 % drive sits under 1 W. SimpleHPSDR implements the reduced
         // rule directly so that trap cannot be reintroduced by reading one
         // Thetis line and not the other. Pinned by
         // EvaluateSwrTrip_Tun_SubWattBoard_DoesNotTrip_Hl2ExternalAtuRegression.
@@ -405,7 +405,7 @@ internal sealed class EngineTransmitSafetyModule
         // Thetis does not hard-unkey when a higher slider request falls outside
         // that ignore window: it records high SWR and can fold output back. A
         // requested percentage is not measured RF power, so using it to turn a
-        // low-power tune into Zeus's latched hard drop is stricter in the wrong
+        // low-power tune into SimpleHPSDR's latched hard drop is stricter in the wrong
         // dimension. Issue #2662 captured exactly that mismatch: 84% requested
         // drive produced only 7.61 W while an external ATU hunted on 160 m.
         // Keep the hard-drop decision on measured power; high-power TUN and all
@@ -503,7 +503,7 @@ internal sealed class EngineTransmitSafetyModule
 
             // Internal half-open form adapts the present inclusive contract by
             // making HighHz+1 the exclusive end. This gives exact integer-Hz
-            // ownership without changing Zeus.Contracts or persisted plans.
+            // ownership without changing SimpleHPSDR.Contracts or persisted plans.
             long highExclusive = segment.HighHz == long.MaxValue ? long.MaxValue : segment.HighHz + 1;
             if (envelope.LowHz >= segment.LowHz && envelope.HighHz < highExclusive)
                 return true;

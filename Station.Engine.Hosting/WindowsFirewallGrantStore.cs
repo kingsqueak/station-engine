@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 
 using LiteDB;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
-/// Remembers, per engine executable path, that we already tried to grant Zeus its
+/// Remembers, per engine executable path, that we already tried to grant SimpleHPSDR its
 /// Windows Firewall rule — and how that went.
 ///
 /// This exists so the operator is asked <b>at most once</b>. Without it the
@@ -24,7 +24,7 @@ namespace Zeus.Server;
 /// </summary>
 public sealed class WindowsFirewallGrantStore : IDisposable
 {
-    private readonly Zeus.Data.SharedLiteDatabase.Lease _dbLease;
+    private readonly SimpleHPSDR.Data.SharedLiteDatabase.Lease _dbLease;
     private readonly LiteDatabase _db;
     private readonly ILiteCollection<WindowsFirewallGrantEntry> _docs;
     private readonly ILogger<WindowsFirewallGrantStore> _log;
@@ -42,7 +42,7 @@ public sealed class WindowsFirewallGrantStore : IDisposable
             Directory.CreateDirectory(dir);
         }
 
-        _dbLease = Zeus.Data.SharedLiteDatabase.Acquire(dbPath);
+        _dbLease = SimpleHPSDR.Data.SharedLiteDatabase.Acquire(dbPath);
         _db = _dbLease.Database;
         _docs = _db.GetCollection<WindowsFirewallGrantEntry>("windows_firewall_grant");
     }

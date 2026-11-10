@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
 // RADE V1 (Radio Autoencoder) modem as a streaming, frame-synchronous insert in
-// the Zeus audio bus — the RADE twin of FreeDvModem, now full-duplex:
+// the SimpleHPSDR audio bus — the RADE twin of FreeDvModem, now full-duplex:
 //   RX: received SSB audio -> decoded 16 kHz speech (radae_c + opus_dnn/FARGAN).
 //   TX: mic speech -> RADE modem waveform (opus_dnn LPCNet analyzer + rade_tx),
 //       transmitted as the REAL part of the modem IQ (inverse of the RX feed).
@@ -27,7 +27,7 @@
 using System.Threading;
 using Microsoft.Extensions.Logging;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 internal sealed class RadeModem : IRadeModemCore
 {
@@ -71,7 +71,7 @@ internal sealed class RadeModem : IRadeModemCore
     // so FARGAN's full bandwidth survives.
     private readonly FreeDvResampler.Decimator _rxDown = FreeDvResampler.NewDecimator();
     private readonly RadeResampler.Interpolator _rxUp = RadeResampler.NewInterpolator();
-    private readonly FreeDvSampleRing _rx8In = new(8192);     // 8 kHz modem samples awaiting zeus_rade_rx
+    private readonly FreeDvSampleRing _rx8In = new(8192);     // 8 kHz modem samples awaiting simplehpsdr_rade_rx
     private readonly FreeDvSampleRing _rxOut48 = new(16384);  // decoded speech, 48 kHz, awaiting playout
     private readonly float[] _rxDecScratch = new float[FreeDvResampler.MaxDecimatedLength(MaxBlock)];
     private float[] _rx8Block = new float[256];       // nin 8k real samples pulled from the ring
@@ -87,11 +87,11 @@ internal sealed class RadeModem : IRadeModemCore
     private int _ninMax;                               // cached at open
     private readonly byte[] _eooScratch = new byte[CallsignMax + 1]; // hot-path EOO fetch buffer
 
-    // TX chain. Mic 48k -> 16k speech (wideband 3:1 decimate) -> zeus_rade_tx ->
+    // TX chain. Mic 48k -> 16k speech (wideband 3:1 decimate) -> simplehpsdr_rade_tx ->
     // modem IQ @8k (real lane) -> 8k -> 48k (6:1 interpolate) -> playout.
     private readonly RadeResampler.Decimator _txDown = RadeResampler.NewDecimator();
     private readonly FreeDvResampler.Interpolator _txUp = FreeDvResampler.NewInterpolator();
-    private readonly FreeDvSampleRing _tx16In = new(16384);   // 16 kHz speech awaiting zeus_rade_tx
+    private readonly FreeDvSampleRing _tx16In = new(16384);   // 16 kHz speech awaiting simplehpsdr_rade_tx
     private readonly FreeDvSampleRing _txOut48 = new(TxTailCapacity); // modem audio, 48 kHz, awaiting playout
     private readonly float[] _txDecScratch = new float[RadeResampler.MaxDecimatedLength(MaxBlock)];
     private float[] _tx16Float = new float[640];        // n_speech 16k samples pulled from the ring
@@ -143,15 +143,15 @@ internal sealed class RadeModem : IRadeModemCore
         _nativeAvailable = nativeAvailableOverride ?? RadeNativeLoader.TryProbeRade();
         if (_nativeAvailable)
         {
-            RadeNativeMethods.zeus_rade_global_init();
+            RadeNativeMethods.simplehpsdr_rade_global_init();
         }
         else
         {
-            _log?.LogWarning("RADE: zeus_rade native library not found; RADE V1 will pass audio through unchanged.");
+            _log?.LogWarning("RADE: simplehpsdr_rade native library not found; RADE V1 will pass audio through unchanged.");
         }
     }
 
-    /// <summary>True when the native zeus_rade shim is loadable and RADE can decode.</summary>
+    /// <summary>True when the native simplehpsdr_rade shim is loadable and RADE can decode.</summary>
     public bool RadeAvailable => _nativeAvailable;
     public bool Active => _active;
     public bool Synced => _synced;
@@ -237,7 +237,7 @@ internal sealed class RadeModem : IRadeModemCore
                 Volatile.Write(ref _txRade, IntPtr.Zero);
                 Thread.MemoryBarrier();
                 SpinUntilIdle(ref _txBusy);
-                RadeNativeMethods.zeus_rade_set_tx_callsign(tx, cs ?? string.Empty);
+                RadeNativeMethods.simplehpsdr_rade_set_tx_callsign(tx, cs ?? string.Empty);
                 Volatile.Write(ref _txRade, tx);
             }
         }
@@ -249,7 +249,7 @@ internal sealed class RadeModem : IRadeModemCore
     /// of the native calls, mirroring <see cref="SetTxText"/>.
     /// <para>
     /// The settings are retained on the managed side and re-applied to every
-    /// fresh TX context, because <c>zeus_rade_open()</c> starts each context at
+    /// fresh TX context, because <c>simplehpsdr_rade_open()</c> starts each context at
     /// the native defaults (conditioning off, flat EQ). Without that,
     /// conditioning silently reverted to bypass on any TX reopen — a
     /// deactivate/activate cycle or a mode change — while the panel kept
@@ -294,12 +294,12 @@ internal sealed class RadeModem : IRadeModemCore
     /// </summary>
     private void ApplyMicConfigTo(IntPtr tx)
     {
-        RadeNativeMethods.zeus_rade_set_mic_agc_enabled(tx, _micAgcEnabled ? 1 : 0);
-        RadeNativeMethods.zeus_rade_set_mic_agc_target_db(tx, (float)_micAgcTargetDb);
-        RadeNativeMethods.zeus_rade_set_mic_eq_enabled(tx, _micEqEnabled ? 1 : 0);
-        RadeNativeMethods.zeus_rade_set_mic_eq_bass_db(tx, (float)_micEqBassDb);
-        RadeNativeMethods.zeus_rade_set_mic_eq_mid_db(tx, (float)_micEqMidDb);
-        RadeNativeMethods.zeus_rade_set_mic_eq_treble_db(tx, (float)_micEqTrebleDb);
+        RadeNativeMethods.simplehpsdr_rade_set_mic_agc_enabled(tx, _micAgcEnabled ? 1 : 0);
+        RadeNativeMethods.simplehpsdr_rade_set_mic_agc_target_db(tx, (float)_micAgcTargetDb);
+        RadeNativeMethods.simplehpsdr_rade_set_mic_eq_enabled(tx, _micEqEnabled ? 1 : 0);
+        RadeNativeMethods.simplehpsdr_rade_set_mic_eq_bass_db(tx, (float)_micEqBassDb);
+        RadeNativeMethods.simplehpsdr_rade_set_mic_eq_mid_db(tx, (float)_micEqMidDb);
+        RadeNativeMethods.simplehpsdr_rade_set_mic_eq_treble_db(tx, (float)_micEqTrebleDb);
     }
 
     private static string? NormalizeCallsign(string? text)
@@ -330,7 +330,7 @@ internal sealed class RadeModem : IRadeModemCore
             _rx8In.Write(_rxDecScratch.AsSpan(0, n8));
 
             // 2. drain the 8k ring through the decoder, nin samples at a time.
-            int nin = RadeNativeMethods.zeus_rade_nin(h);
+            int nin = RadeNativeMethods.simplehpsdr_rade_nin(h);
             while (nin > 0 && nin <= _ninMax && _rx8In.Count >= nin)
             {
                 _rx8In.Read(_rx8Block.AsSpan(0, nin));
@@ -339,13 +339,13 @@ internal sealed class RadeModem : IRadeModemCore
                 // they stay 0 across calls — only the real lanes need refreshing.
                 for (int i = 0; i < nin; i++) _rxIn[2 * i] = _rx8Block[i];
 
-                int npcm = RadeNativeMethods.zeus_rade_rx(h, _rxIn, _rxPcm);
-                _synced = RadeNativeMethods.zeus_rade_sync(h) != 0;
-                Volatile.Write(ref _snrDb, RadeNativeMethods.zeus_rade_snr_db(h));
+                int npcm = RadeNativeMethods.simplehpsdr_rade_rx(h, _rxIn, _rxPcm);
+                _synced = RadeNativeMethods.simplehpsdr_rade_sync(h) != 0;
+                Volatile.Write(ref _snrDb, RadeNativeMethods.simplehpsdr_rade_snr_db(h));
 
                 // Pull any freshly-decoded EOO callsign (cheap — just returns the
                 // already-decoded string). Publish via the seqlock; no alloc.
-                int csn = RadeNativeMethods.zeus_rade_get_eoo_callsign(h, _eooScratch);
+                int csn = RadeNativeMethods.simplehpsdr_rade_get_eoo_callsign(h, _eooScratch);
                 if (csn > 0)
                 {
                     int n = csn > CallsignMax ? CallsignMax : csn;
@@ -360,7 +360,7 @@ internal sealed class RadeModem : IRadeModemCore
                     int up = _rxUp.Process(_rxSpeechFloat.AsSpan(0, npcm), _rxInterp);
                     WriteBounded(_rxOut48, _rxInterp.AsSpan(0, up));
                 }
-                nin = RadeNativeMethods.zeus_rade_nin(h);
+                nin = RadeNativeMethods.simplehpsdr_rade_nin(h);
             }
 
             // 3. read decoded speech into the block; silence-pad the remainder
@@ -418,9 +418,9 @@ internal sealed class RadeModem : IRadeModemCore
             {
                 _tx16In.Read(_tx16Float.AsSpan(0, nspeech));
                 FloatToShort(_tx16Float, _tx16Short, nspeech);
-                int n = RadeNativeMethods.zeus_rade_tx(h, _tx16Short, _txIqOut);
-                Volatile.Write(ref _txMicLevelDb, RadeNativeMethods.zeus_rade_tx_mic_level_db(h));
-                _txMicClip = RadeNativeMethods.zeus_rade_tx_mic_clip(h) != 0;
+                int n = RadeNativeMethods.simplehpsdr_rade_tx(h, _tx16Short, _txIqOut);
+                Volatile.Write(ref _txMicLevelDb, RadeNativeMethods.simplehpsdr_rade_tx_mic_level_db(h));
+                _txMicClip = RadeNativeMethods.simplehpsdr_rade_tx_mic_clip(h) != 0;
                 if (n > ntx) n = ntx;
                 CopyScaledModemReal(_txIqOut, _txModemReal, n);
                 int up = _txUp.Process(_txModemReal.AsSpan(0, n), _txInterp);
@@ -466,7 +466,7 @@ internal sealed class RadeModem : IRadeModemCore
     /// Drop buffered RX decode state on a MOX transition WITHOUT closing the
     /// modem, so the receiver resumes from an empty, unsynced state instead of
     /// dumping speech decoded from the operator's own transmission during the
-    /// over (heard as an end-of-over garble in Zeus's own RX audio). Clears the
+    /// over (heard as an end-of-over garble in SimpleHPSDR's own RX audio). Clears the
     /// input/output rings, resets the resamplers + sync squelch gate, and marks
     /// unsynced. Control thread; gates the RX hot path out via the seqlock —
     /// mirrors <see cref="FlushTx"/>. RADE has no codec2-style squelch, so this
@@ -524,7 +524,7 @@ internal sealed class RadeModem : IRadeModemCore
                     _tx16In.Read(_tx16Float.AsSpan(0, have));
                     if (have < nspeech) Array.Clear(_tx16Float, have, nspeech - have);
                     FloatToShort(_tx16Float, _tx16Short, nspeech);
-                    int n = RadeNativeMethods.zeus_rade_tx(h, _tx16Short, _txIqOut);
+                    int n = RadeNativeMethods.simplehpsdr_rade_tx(h, _tx16Short, _txIqOut);
                     if (n > ntx) n = ntx;
                     CopyScaledModemReal(_txIqOut, _txModemReal, n);
                     int up = _txUp.Process(_txModemReal.AsSpan(0, n), _txInterp);
@@ -534,7 +534,7 @@ internal sealed class RadeModem : IRadeModemCore
                 // Append the EOO (closing callsign) frame as the final modem audio.
                 if (_txNEooOut > 0)
                 {
-                    int n = RadeNativeMethods.zeus_rade_tx_eoo(h, _txIqOut);
+                    int n = RadeNativeMethods.simplehpsdr_rade_tx_eoo(h, _txIqOut);
                     if (n > _txNEooOut) n = _txNEooOut;
                     CopyScaledModemReal(_txIqOut, _txModemReal, n);
                     int up = _txUp.Process(_txModemReal.AsSpan(0, n), _txInterp);
@@ -681,21 +681,21 @@ internal sealed class RadeModem : IRadeModemCore
             return;
         }
 
-        IntPtr rx = RadeNativeMethods.zeus_rade_open();
-        IntPtr tx = RadeNativeMethods.zeus_rade_open();
+        IntPtr rx = RadeNativeMethods.simplehpsdr_rade_open();
+        IntPtr tx = RadeNativeMethods.simplehpsdr_rade_open();
         if (rx == IntPtr.Zero || tx == IntPtr.Zero)
         {
-            _log?.LogError("RADE: zeus_rade_open failed — passthrough (no decode/encode).");
-            if (rx != IntPtr.Zero) RadeNativeMethods.zeus_rade_close(rx);
-            if (tx != IntPtr.Zero) RadeNativeMethods.zeus_rade_close(tx);
+            _log?.LogError("RADE: simplehpsdr_rade_open failed — passthrough (no decode/encode).");
+            if (rx != IntPtr.Zero) RadeNativeMethods.simplehpsdr_rade_close(rx);
+            if (tx != IntPtr.Zero) RadeNativeMethods.simplehpsdr_rade_close(tx);
             RetireRx(IntPtr.Zero);
             RetireTx(IntPtr.Zero);
             return;
         }
 
         // RX scratch from the new context (off the hot path).
-        _ninMax = RadeNativeMethods.zeus_rade_nin_max(rx);
-        int maxPcm = RadeNativeMethods.zeus_rade_max_pcm_per_rx(rx);
+        _ninMax = RadeNativeMethods.simplehpsdr_rade_nin_max(rx);
+        int maxPcm = RadeNativeMethods.simplehpsdr_rade_max_pcm_per_rx(rx);
         EnsureFloat(ref _rx8Block, _ninMax);
         EnsureFloatZeroed(ref _rxIn, 2 * _ninMax);
         EnsureShort(ref _rxPcm, maxPcm);
@@ -703,9 +703,9 @@ internal sealed class RadeModem : IRadeModemCore
         EnsureFloat(ref _rxInterp, RadeResampler.InterpolatedLength(maxPcm));
 
         // TX scratch + sizes.
-        _txNSpeech = RadeNativeMethods.zeus_rade_n_speech_samples(tx);
-        _txNTxOut = RadeNativeMethods.zeus_rade_n_tx_out(tx);
-        _txNEooOut = RadeNativeMethods.zeus_rade_n_tx_eoo_out(tx);
+        _txNSpeech = RadeNativeMethods.simplehpsdr_rade_n_speech_samples(tx);
+        _txNTxOut = RadeNativeMethods.simplehpsdr_rade_n_tx_out(tx);
+        _txNEooOut = RadeNativeMethods.simplehpsdr_rade_n_tx_eoo_out(tx);
         int txMax = Math.Max(_txNTxOut, _txNEooOut);
         EnsureFloat(ref _tx16Float, _txNSpeech);
         EnsureShort(ref _tx16Short, _txNSpeech);
@@ -715,7 +715,7 @@ internal sealed class RadeModem : IRadeModemCore
 
         // Apply the operator's EOO callsign to the fresh TX context before it goes
         // live.
-        RadeNativeMethods.zeus_rade_set_tx_callsign(tx, _txCallsign ?? string.Empty);
+        RadeNativeMethods.simplehpsdr_rade_set_tx_callsign(tx, _txCallsign ?? string.Empty);
 
         // Same for mic conditioning: a fresh context opens at the native
         // defaults (off / flat), so without this the operator's AGC and EQ
@@ -741,7 +741,7 @@ internal sealed class RadeModem : IRadeModemCore
         Volatile.Write(ref _rade, IntPtr.Zero);
         Thread.MemoryBarrier();
         SpinUntilIdle(ref _rxBusy);
-        if (old != IntPtr.Zero) RadeNativeMethods.zeus_rade_close(old);
+        if (old != IntPtr.Zero) RadeNativeMethods.simplehpsdr_rade_close(old);
         _rx8In.Clear(); _rxOut48.Clear();
         _rxDown.Reset(); _rxUp.Reset();
         _rxGate.Reset();
@@ -754,7 +754,7 @@ internal sealed class RadeModem : IRadeModemCore
         Volatile.Write(ref _txRade, IntPtr.Zero);
         Thread.MemoryBarrier();
         SpinUntilIdle(ref _txBusy);
-        if (old != IntPtr.Zero) RadeNativeMethods.zeus_rade_close(old);
+        if (old != IntPtr.Zero) RadeNativeMethods.simplehpsdr_rade_close(old);
         _tx16In.Clear(); _txOut48.Clear();
         _txDown.Reset(); _txUp.Reset();
         _micGate.Reset();

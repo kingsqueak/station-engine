@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-using Zeus.Server;
+using SimpleHPSDR.Server;
 
-namespace Zeus.Server.Tci;
+namespace SimpleHPSDR.Server.Tci;
 
 internal sealed class TciRxAudioResampler
 {

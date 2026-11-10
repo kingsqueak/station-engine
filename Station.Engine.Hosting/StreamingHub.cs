@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
@@ -10,11 +10,11 @@
 // option) any later version. See the LICENSE file at the root of this
 // repository for the full text, or https://www.gnu.org/licenses/.
 //
-// Zeus is an independent reimplementation in .NET — not a fork. Its
+// SimpleHPSDR is an independent reimplementation in .NET — not a fork. Its
 // Protocol-1 / Protocol-2 framing, WDSP integration, meter pipelines, and
 // TX behaviour were informed by studying the Thetis project
 // (https://github.com/ramdor/Thetis), the authoritative reference
-// implementation in the OpenHPSDR ecosystem. Zeus gratefully acknowledges
+// implementation in the OpenHPSDR ecosystem. SimpleHPSDR gratefully acknowledges
 // the Thetis contributors whose work made this possible:
 //
 //   Richard Samphire (MW0LGE), Warren Pratt (NR0V),
@@ -39,16 +39,16 @@
 // WDSP — loaded by Zeus via P/Invoke — is Copyright (C) Warren Pratt
 // (NR0V), distributed under GPL v2 or later.
 //
-// Zeus is distributed WITHOUT ANY WARRANTY; see the GNU General Public
+// SimpleHPSDR is distributed WITHOUT ANY WARRANTY; see the GNU General Public
 // License for details.
 
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using System.Net.WebSockets;
-using Zeus.Contracts;
+using SimpleHPSDR.Contracts;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 public sealed class StreamingHub : IDisposable, IAsyncDisposable
 {
@@ -588,7 +588,7 @@ public sealed class StreamingHub : IDisposable, IAsyncDisposable
 
     /// <summary>Updates the hub's cached wisdom phase so clients attaching
     /// after the one-shot broadcast still receive the current state.</summary>
-    public void SetWisdomPhase(Zeus.Contracts.WisdomPhase phase)
+    public void SetWisdomPhase(SimpleHPSDR.Contracts.WisdomPhase phase)
     {
         _wisdomPhase = (byte)phase;
     }
@@ -645,7 +645,7 @@ public sealed class StreamingHub : IDisposable, IAsyncDisposable
         // at default (Idle) and render the splash indefinitely; a client
         // joining mid-build needs both the phase byte and any status string
         // already accumulated so the body shows the current step.
-        session.TryEnqueue(BuildWisdomPayload((Zeus.Contracts.WisdomPhase)_wisdomPhase, _wisdomStatus));
+        session.TryEnqueue(BuildWisdomPayload((SimpleHPSDR.Contracts.WisdomPhase)_wisdomPhase, _wisdomStatus));
         ReplayCwStatusSnapshot(session, cwSequence, cwSnapshot);
 
         // Product extensions are already encoded and own their snapshot/cache
@@ -1300,7 +1300,7 @@ public sealed class StreamingHub : IDisposable, IAsyncDisposable
         }
     }
 
-    private static byte[] BuildWisdomPayload(Zeus.Contracts.WisdomPhase phase, string status)
+    private static byte[] BuildWisdomPayload(SimpleHPSDR.Contracts.WisdomPhase phase, string status)
     {
         var frame = new WisdomStatusFrame(phase, status ?? string.Empty);
         int total = frame.ByteLength;

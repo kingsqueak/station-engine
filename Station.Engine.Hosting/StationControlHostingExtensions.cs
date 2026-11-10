@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright (C) 2026 Douglas J. Cerrato (KB2UKA) and contributors.
 
-using Zeus.Server.Cat;
-using Zeus.Server.Tci;
+using SimpleHPSDR.Server.Cat;
+using SimpleHPSDR.Server.Tci;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>Registers the engine-owned TCI and CAT station-control transports.</summary>
 public static class StationControlHostingExtensions

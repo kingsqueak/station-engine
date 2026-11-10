@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
-// Zeus is distributed WITHOUT ANY WARRANTY; see the GNU General Public
+// SimpleHPSDR is distributed WITHOUT ANY WARRANTY; see the GNU General Public
 // License for details.
 
 using System.Text;
-using Zeus.Contracts;
+using SimpleHPSDR.Contracts;
 
-namespace Zeus.Server.Cat;
+namespace SimpleHPSDR.Server.Cat;
 
 /// <summary>
 /// Pure parse/format helpers for the Kenwood TS-2000 CAT protocol (the subset
@@ -96,7 +96,7 @@ public static class CatProtocol
         long.TryParse(field, System.Globalization.NumberStyles.None,
             System.Globalization.CultureInfo.InvariantCulture, out hz);
 
-    /// <summary>Zeus mode → Kenwood TS-2000 mode digit. Unknown/Zeus-only modes
+    /// <summary>SimpleHPSDR mode → Kenwood TS-2000 mode digit. Unknown/SimpleHPSDR-only modes
     /// fall back to "2" (USB), matching Thetis's Mode2KString fallback.</summary>
     public static string ModeDigit(RxMode mode) => mode switch
     {
@@ -116,7 +116,7 @@ public static class CatProtocol
         _ => "2",
     };
 
-    /// <summary>Kenwood TS-2000 mode digit → Zeus mode, or null if unmapped.</summary>
+    /// <summary>Kenwood TS-2000 mode digit → SimpleHPSDR mode, or null if unmapped.</summary>
     public static RxMode? ParseMode(string field) => field switch
     {
         "1" => RxMode.LSB,
@@ -130,9 +130,9 @@ public static class CatProtocol
         _ => null,
     };
 
-    /// <summary>Zeus mode → 2-digit Thetis ZZ mode code (ZZMD/ZZME/ZZIF), per
+    /// <summary>SimpleHPSDR mode → 2-digit Thetis ZZ mode code (ZZMD/ZZME/ZZIF), per
     /// Thetis <c>CATCommands.Mode2String</c>: 00 LSB, 01 USB, 02 DSB, 03 CWL,
-    /// 04 CWU, 05 FM, 06 AM, 07 DIGU, 08 SPEC, 09 DIGL, 10 SAM, 11 DRM. Zeus has
+    /// 04 CWU, 05 FM, 06 AM, 07 DIGU, 08 SPEC, 09 DIGL, 10 SAM, 11 DRM. SimpleHPSDR has
     /// no SPEC or DRM, so nothing maps to 08/11; FreeDv reports 01 (USB) because
     /// that is its WDSP carrier mode.</summary>
     public static string ZzModeDigit(RxMode mode) => mode switch
@@ -151,8 +151,8 @@ public static class CatProtocol
         _ => "01",
     };
 
-    /// <summary>2-digit Thetis ZZ mode code → Zeus mode, per Thetis
-    /// <c>CATCommands.String2Mode</c>. Null for codes with no Zeus equivalent
+    /// <summary>2-digit Thetis ZZ mode code → SimpleHPSDR mode, per Thetis
+    /// <c>CATCommands.String2Mode</c>. Null for codes with no SimpleHPSDR equivalent
     /// (08 SPEC, 11 DRM) and for invalid input; the caller decides whether null
     /// is a silent no-op (in-range 08/11) or a "?;" (anything else).</summary>
     public static RxMode? ParseZzMode(string field) => field switch
@@ -241,7 +241,7 @@ public static class CatProtocol
 
         var sb = new StringBuilder(34 + modeField.Length);
         sb.Append(FormatFreq(freqHz)); // P1 freq            11
-        sb.Append("0000");             // P2 step size        4 (Zeus exposes no tune-step)
+        sb.Append("0000");             // P2 step size        4 (SimpleHPSDR exposes no tune-step)
         sb.Append(incr);               // P3 RIT/XIT value    6 (sign + 5)
         sb.Append(ritOn ? '1' : '0');  // P4 RIT status       1
         sb.Append(xitOn ? '1' : '0');  // P5 XIT status       1

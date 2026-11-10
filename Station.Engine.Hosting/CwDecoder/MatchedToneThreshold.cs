@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright (C) 2026 Douglas J. Cerrato (KB2UKA) and contributors.
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 /// <summary>
 /// Two-level decision for the coherent envelope. A slowly measured mark rail
 /// keeps random in-mark dips from moving the decision threshold. The low rail

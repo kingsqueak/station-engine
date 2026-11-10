@@ -3,7 +3,7 @@
 
 using LiteDB;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
 /// Persists the operator's TX monitor volume in the engine preferences database.
@@ -14,7 +14,7 @@ public sealed class TxMonitorSettingsStore : IDisposable
     public const double MinVolumeDb = -60.0;
     public const double MaxVolumeDb = 0.0;
 
-    private readonly Zeus.Data.SharedLiteDatabase.Lease _dbLease;
+    private readonly SimpleHPSDR.Data.SharedLiteDatabase.Lease _dbLease;
     private readonly ILiteCollection<TxMonitorSettingsEntry> _settings;
     private readonly object _sync = new();
 
@@ -27,7 +27,7 @@ public sealed class TxMonitorSettingsStore : IDisposable
         if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
             Directory.CreateDirectory(dir);
 
-        _dbLease = Zeus.Data.SharedLiteDatabase.Acquire(dbPath);
+        _dbLease = SimpleHPSDR.Data.SharedLiteDatabase.Acquire(dbPath);
         _settings = _dbLease.Database.GetCollection<TxMonitorSettingsEntry>(
             "tx_monitor_settings");
 

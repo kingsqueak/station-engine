@@ -151,11 +151,11 @@ struct _rxa
 	} nnr;
 	struct
 	{
-		RNNR p;		// Zeus: NR3 (RNNoise), Thetis lineage — see ZEUS-PATCHES.md
+		RNNR p;		// SimpleHPSDR: NR3 (RNNoise), Thetis lineage — see SIMPLEHPSDR-PATCHES.md
 	} rnnr;
 	struct
 	{
-		SBNR p;		// Zeus: NR4 (libspecbleach), Thetis lineage — see ZEUS-PATCHES.md
+		SBNR p;		// SimpleHPSDR: NR4 (libspecbleach), Thetis lineage — see SIMPLEHPSDR-PATCHES.md
 	} sbnr;
 	struct
 	{
@@ -234,7 +234,7 @@ extern void RXAResCheck (int channel);
 extern void RXAbp1Check (int channel, int amd_run, int snba_run, 
 	int emnr_run, int nnrbypass_run, int anf_run, int anr_run);
 
-// Zeus: the upstream signature above reads the NR3 / NR4 run flags from the
+// SimpleHPSDR: the upstream signature above reads the NR3 / NR4 run flags from the
 // channel itself, so upstream callers are untouched. rnnr.c / sbnr.c call
 // this variant to pass their *pending* run value, exactly as the upstream
 // blocks do for their own flag.

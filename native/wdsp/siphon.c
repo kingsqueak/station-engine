@@ -93,7 +93,7 @@ void destroy_siphon (SIPHON a) {
 }
 
 void flush_siphon (SIPHON a) {
-  // Zeus: under the update lock, so a TXAGetaSipBlocksF1 reader on another
+  // SimpleHPSDR: under the update lock, so a TXAGetaSipBlocksF1 reader on another
   // thread never sees the ring and its cursor half reset.
   EnterCriticalSection (&a->update);
   memset (a->sipbuff, 0, a->sipsize * sizeof (complex));
@@ -128,7 +128,7 @@ void xsiphon (SIPHON a, int pos) {
         if ((a->idx += a->insize) >= a->sipsize) { a->idx -= a->sipsize; }
       }
 
-      // Zeus: count every write for the TXAGetaSipBlocksF1 cursor. The
+      // SimpleHPSDR: count every write for the TXAGetaSipBlocksF1 cursor. The
       // insize >= sipsize branch above does not move idx, so cursor reads
       // assume insize < sipsize (TXA: dsp_size 512 or less, sipsize 16384).
       a->cursor.written += a->insize;
@@ -301,7 +301,7 @@ void TXAGetaSipF1 (int channel, float* out, int size) {
   }
 }
 
-// Zeus extension. TXAGetaSipF1 returns the newest samples whenever it is
+// SimpleHPSDR extension. TXAGetaSipF1 returns the newest samples whenever it is
 // called, so a caller on the fexchange thread repeats or skips blocks that the
 // DSP thread is still writing. This returns each block once, in order.
 PORT

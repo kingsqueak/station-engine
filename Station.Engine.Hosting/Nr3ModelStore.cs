@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
@@ -10,16 +10,16 @@
 // option) any later version. See the LICENSE file at the root of this
 // repository for the full text, or https://www.gnu.org/licenses/.
 //
-// Zeus is distributed WITHOUT ANY WARRANTY; see the GNU General Public
+// SimpleHPSDR is distributed WITHOUT ANY WARRANTY; see the GNU General Public
 // License for details.
 
 using Microsoft.Extensions.Logging;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
 /// Stores the operator-installed RNNoise (NR3) model file on disk and tracks
-/// which one is active. Zeus ships a <b>bundled default model</b>
+/// which one is active. SimpleHPSDR ships a <b>bundled default model</b>
 /// (<see cref="BundledDefaultFileName"/>, next to the app under
 /// <see cref="AppContext.BaseDirectory"/>) so NR3 works out of the box; the
 /// operator can override it by installing their own weights file (upload or URL
@@ -28,9 +28,9 @@ namespace Zeus.Server;
 ///
 /// Resolution order for the active model is: operator-installed file (if any)
 /// → bundled default (if shipped) → none. The operator file lives under
-/// <c>%LOCALAPPDATA%/Zeus/nr3-models/</c>
+/// <c>%LOCALAPPDATA%/SimpleHPSDR/nr3-models/</c>
 /// (cross-platform <see cref="Environment.SpecialFolder.LocalApplicationData"/>:
-/// <c>~/.local/share/Zeus</c> on Linux, <c>~/Library/Application Support/Zeus</c>
+/// <c>~/.local/share/SimpleHPSDR</c> on Linux, <c>~/Library/Application Support/SimpleHPSDR</c>
 /// on macOS). The file itself is the persistence — no LiteDB row — so a model
 /// survives restarts and the active operator model is simply "the one file in
 /// the dir".
@@ -74,7 +74,7 @@ public sealed class Nr3ModelStore
     public Nr3ModelStore(ILogger<Nr3ModelStore> log)
     {
         _log = log;
-        _dir = Path.Combine(Zeus.Contracts.EngineDataRoot.Resolve(), "nr3-models");
+        _dir = Path.Combine(SimpleHPSDR.Contracts.EngineDataRoot.Resolve(), "nr3-models");
         var bundled = Path.Combine(AppContext.BaseDirectory, BundledDefaultFileName);
         _bundledDefaultPath = File.Exists(bundled) ? bundled : null;
     }
@@ -148,12 +148,12 @@ public sealed class Nr3ModelStore
     /// <see cref="ReportLoadStatus"/> from the synchronous <see cref="Changed"/>
     /// handler, so <see cref="Install"/> callers can read it immediately after
     /// installing to reject a model the native loader couldn't parse.</summary>
-    public Zeus.Dsp.Nr3ModelLoadResult? LastLoadResult { get; private set; }
+    public SimpleHPSDR.Dsp.Nr3ModelLoadResult? LastLoadResult { get; private set; }
 
     /// <summary>Records the engine's load outcome for the active model. Called by
     /// the DSP pipeline after each (re)load. enum-sized field; a benign
     /// last-writer-wins race between the install thread and a connect thread.</summary>
-    public void ReportLoadStatus(Zeus.Dsp.Nr3ModelLoadResult result) => LastLoadResult = result;
+    public void ReportLoadStatus(SimpleHPSDR.Dsp.Nr3ModelLoadResult result) => LastLoadResult = result;
 
     /// <summary>
     /// Install (replacing any prior model) the given bytes under a sanitized

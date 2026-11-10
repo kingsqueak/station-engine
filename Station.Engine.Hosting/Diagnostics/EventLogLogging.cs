@@ -2,13 +2,13 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
-namespace Zeus.Server.Diagnostics;
+namespace SimpleHPSDR.Server.Diagnostics;
 
 public static class EventLogLogging
 {
     // On Windows the default host writes every Warning to the Application
-    // event log. Zeus warnings, including the webview diagnostics the client
-    // beacons, belong in zeus-app.log, which keeps the full trace and is what
+    // event log. SimpleHPSDR warnings, including the webview diagnostics the client
+    // beacons, belong in simplehpsdr-app.log, which keeps the full trace and is what
     // "Submit an Issue" sends. The event log keeps only errors (issue 2701).
     //
     // The rule is keyed by the provider's alias, as appsettings keys it, so it

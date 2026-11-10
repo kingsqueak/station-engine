@@ -59,7 +59,7 @@ FMMOD create_fmmod (int run, int size, double* in, double* out, int rate, double
 	a->nc = nc;
 	a->mp = mp;
 	calc_fmmod (a);
-	// Zeus extension (FM tones)
+	// SimpleHPSDR extension (FM tones)
 	a->dcs_run = 0;
 	a->dcs_code = 23;
 	a->dcs_inverted = 0;
@@ -101,7 +101,7 @@ void xfmmod (FMMOD a)
 		{
 			if (a->dcs_run)
 			{
-				// Zeus extension: DCS NRZ at the CTCSS level, same tscale
+				// SimpleHPSDR extension: DCS NRZ at the CTCSS level, same tscale
 				// headroom; DCS wins over CTCSS when both are set.
 				a->out[2 * i + 0] = a->tscale * (a->in[2 * i + 0] + a->ctcss_level * fmtone_dcsenc_next (&a->dcs));
 			}
@@ -123,7 +123,7 @@ void xfmmod (FMMOD a)
 			if (magdp > peak) peak = magdp;
 		}
 		//print_deviation ("peakdev.txt", peak, a->samplerate);
-		// Zeus extension: composite modulating peak -> deviation (Hz)
+		// SimpleHPSDR extension: composite modulating peak -> deviation (Hz)
 		modpeak *= a->deviation;
 		EnterCriticalSection (&a->cs_peak);
 		if (modpeak > a->dev_peak) a->dev_peak = modpeak;
@@ -261,7 +261,7 @@ void SetTXAFMAFFreqs (int channel, double low, double high)
 
 /********************************************************************************************************
 *																										*
-*								Zeus extension (FM tones): TXA Properties								*
+*								SimpleHPSDR extension (FM tones): TXA Properties								*
 *																										*
 ********************************************************************************************************/
 

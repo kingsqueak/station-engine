@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-using Zeus.Contracts;
-using Zeus.Dsp;
+using SimpleHPSDR.Contracts;
+using SimpleHPSDR.Dsp;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 public partial class DspPipelineService
 {

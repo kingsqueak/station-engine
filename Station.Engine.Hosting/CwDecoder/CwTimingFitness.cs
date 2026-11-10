@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright (C) 2026 Douglas J. Cerrato (KB2UKA) and contributors.
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 /// <summary>Bounded complete-run evidence; it never uses decoded text or callsign priors.</summary>
 internal sealed class CwTimingFitness
 {

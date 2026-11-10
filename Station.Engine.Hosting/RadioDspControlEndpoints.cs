@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-using Zeus.Contracts;
-using Zeus.Protocol1;
+using SimpleHPSDR.Contracts;
+using SimpleHPSDR.Protocol1;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>Maps sample-rate, gain, AGC, squelch, and RX/TX-leveling routes.</summary>
 public static class RadioDspControlEndpoints

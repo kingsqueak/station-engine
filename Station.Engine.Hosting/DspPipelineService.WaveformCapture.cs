@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-using Zeus.Dsp;
+using SimpleHPSDR.Dsp;
 using System.Buffers.Binary;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 public partial class DspPipelineService
 {
@@ -11,7 +11,7 @@ public partial class DspPipelineService
     private readonly WaveformSnapshotCache _monitorWaveform = new();
     private sealed record MonitorCaptureContext(WaveformContext Signal, MicBlockSource Source);
 
-    private MonitorCaptureContext? MonitorWaveformContext(IDspEngine? engine, Zeus.Contracts.StateDto state, int receiver)
+    private MonitorCaptureContext? MonitorWaveformContext(IDspEngine? engine, SimpleHPSDR.Contracts.StateDto state, int receiver)
     {
         if (engine is null || !ReferenceEquals(engine, Volatile.Read(ref _engine))
             || receiver != state.TxReceiverIndex) return null;
@@ -24,7 +24,7 @@ public partial class DspPipelineService
         return signal is null || ingest is null ? null : new(signal, ingest.ActiveSource);
     }
 
-    private void ReconcileCaptureMonitor(IDspEngine engine, Zeus.Contracts.StateDto state)
+    private void ReconcileCaptureMonitor(IDspEngine engine, SimpleHPSDR.Contracts.StateDto state)
     {
         bool enabled = state.TxMonitorEnabled || _monitorWaveform.IsCaptureActive
             || (_productPluginAudio?.HasLeasedTxMicCapture ?? false);
@@ -32,7 +32,7 @@ public partial class DspPipelineService
         engine.SetTxMonitorEnabled(enabled);
     }
 
-    private void CaptureMonitorWaveform(IDspEngine engine, Zeus.Contracts.StateDto state, ReadOnlySpan<float> samples)
+    private void CaptureMonitorWaveform(IDspEngine engine, SimpleHPSDR.Contracts.StateDto state, ReadOnlySpan<float> samples)
     {
         long now = Environment.TickCount64;
         if (!_monitorWaveform.IsDemanded(now)) return;

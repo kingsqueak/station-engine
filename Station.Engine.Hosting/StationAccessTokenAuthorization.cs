@@ -5,7 +5,7 @@ using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
 /// Requires the launcher-provided station token on private station audio and
@@ -39,7 +39,7 @@ public static class StationAccessTokenAuthorization
         if (stationAccessToken.Length == 0)
         {
             throw new InvalidOperationException(
-                "ZEUS_STATION_ACCESS_TOKEN is present but empty; refusing to start without a usable station access token.");
+                "SIMPLEHPSDR_STATION_ACCESS_TOKEN is present but empty; refusing to start without a usable station access token.");
         }
 
         var expectedHash = SHA256.HashData(Encoding.UTF8.GetBytes(stationAccessToken));

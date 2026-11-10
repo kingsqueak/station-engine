@@ -1,20 +1,20 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
-// Zeus is distributed WITHOUT ANY WARRANTY; see the GNU General Public
+// SimpleHPSDR is distributed WITHOUT ANY WARRANTY; see the GNU General Public
 // License for details.
 
-using Zeus.Contracts;
+using SimpleHPSDR.Contracts;
 
-namespace Zeus.Server.Cat;
+namespace SimpleHPSDR.Server.Cat;
 
 /// <summary>
 /// Stateless-per-connection Kenwood TS-2000 command dispatcher. Holds the
 /// per-session Auto-Information level and routes each parsed command to the
-/// verified Zeus seams. Deliberately decoupled from socket I/O (it takes a
+/// verified SimpleHPSDR seams. Deliberately decoupled from socket I/O (it takes a
 /// <c>send</c> callback and a <c>latestRxDbm</c> accessor) so the full Tier-1
 /// command surface — including the safety-critical "no auto-key" and per-source
 /// MOX-ownership behaviour — is unit-testable without a TCP connection.
@@ -136,7 +136,7 @@ internal sealed class CatCommandHandler
                 // chkVFOBTX_CheckedChanged sets Display.TXOnVFOB and forces
                 // chkVFOSplit when RX2 is off). That is Kenwood FT1 semantics,
                 // so it shares HandleFt. The VFO-contents swap is a different
-                // command (ZZVS), which Zeus does not implement and answers
+                // command (ZZVS), which SimpleHPSDR does not implement and answers
                 // "?;".
                 HandleFt(args, "ZZSW", zzStrict: true);
                 break;
@@ -224,7 +224,7 @@ internal sealed class CatCommandHandler
     /// RX2 mode only while RX2 is enabled — SetMode(…, TxVfo.B) falls back to
     /// RX1 when RX2 is off, which would surprise a ZZME sender, so it is gated.
     /// Thetis range-checks 00..11 and answers "?;" outside it; 08 (SPEC) and 11
-    /// (DRM) are in range but have no Zeus mode, so they change nothing.
+    /// (DRM) are in range but have no SimpleHPSDR mode, so they change nothing.
     /// </summary>
     private void HandleZzMode(string args, string cmd, bool rx2)
     {
@@ -244,7 +244,7 @@ internal sealed class CatCommandHandler
             return;
         }
         var parsed = CatProtocol.ParseZzMode(args);
-        if (parsed is null) return; // 08/11: no Zeus equivalent → no state change
+        if (parsed is null) return; // 08/11: no SimpleHPSDR equivalent → no state change
         if (!rx2) _radio.SetMode(parsed.Value);
         else if (_radio.Snapshot().Rx2Enabled) _radio.SetMode(parsed.Value, TxVfo.B);
     }
@@ -310,7 +310,7 @@ internal sealed class CatCommandHandler
 
     /// <summary>
     /// ZZSM is get-only with a 1-digit meter selector that the reply echoes
-    /// ("ZZSM0;" → "ZZSM0nnn;"). Thetis 0 = main / 1 = RX2; Zeus exposes a
+    /// ("ZZSM0;" → "ZZSM0nnn;"). Thetis 0 = main / 1 = RX2; SimpleHPSDR exposes a
     /// single meter source here (the same <c>_latestRxDbm</c> as SM), so both
     /// selectors answer from it. Anything else is "?;" (Thetis behaviour).
     /// </summary>
@@ -349,7 +349,7 @@ internal sealed class CatCommandHandler
     }
 
     /// <summary>
-    /// ZZPS: Zeus never powers anything off via CAT, so a get always reports
+    /// ZZPS: SimpleHPSDR never powers anything off via CAT, so a get always reports
     /// "1" and a set is accepted and ignored (no reply, Thetis set semantics).
     /// Wrong-length arguments are "?;".
     /// </summary>

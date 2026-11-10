@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright (C) 2026 Douglas J. Cerrato (KB2UKA) and contributors.
 
-using Zeus.Contracts;
+using SimpleHPSDR.Contracts;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>A lease's fixed native-radio channel. Constrained audio uses the
 /// selected receiver without split, XIT or a transverter. Receiver 0 is RX1.

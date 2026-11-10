@@ -5,15 +5,15 @@ using System.Globalization;
 using System.Net;
 using Microsoft.AspNetCore.Cors.Infrastructure;
 using Microsoft.Extensions.Primitives;
-using Zeus.Contracts;
-using Zeus.Server.Diagnostics;
+using SimpleHPSDR.Contracts;
+using SimpleHPSDR.Server.Diagnostics;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>Maps the standalone station engine's HTTP and WebSocket surface.</summary>
 public static class StationEngineEndpoints
 {
-    // SimpleHPSDR fork: no web page may drive this engine. Upstream allowed Zeus's
+    // SimpleHPSDR fork: no web page may drive this engine. Upstream allowed SimpleHPSDR's
     // hosted web app (app.zeussdr.com), its staging site and a local Vite dev server,
     // which let those pages call the engine on localhost, transmit included.
     internal static readonly HashSet<string> AllowedBrowserOrigins = new(StringComparer.Ordinal);
@@ -201,7 +201,7 @@ public static class StationEngineEndpoints
         // full host. Without the shared route Zeus Link logs a 404 after every
         // waterfall mount even though the WebGL fallback itself is healthy.
         endpoints.MapWaterfallDiagnosticEndpoint();
-        // Same field gap as the operator UI prefs: the SPA's Zeus Digital
+        // Same field gap as the operator UI prefs: the SPA's SimpleHPSDR Digital
         // settings tab reads/writes /api/ft8/settings (+ autocq-ack) against
         // the engine in attach mode, and the standalone host mapped neither.
         // First-run wizard progress — served by BOTH hosts (the workspace-
@@ -240,8 +240,8 @@ public static class StationEngineEndpoints
         // it — it must NOT self-relaunch like the desktop AppRestartService.
         // Zeus Link bundle settings mirror: the product reads its feature
         // toggles and amplifier configs back from the engine (the exportable
-        // zeus-prefs.db) so they survive updates and ride splash-row exports.
-        // Support lifeline for "the engine wrote no zeus-app.log" field
+        // simplehpsdr-prefs.db) so they survive updates and ride splash-row exports.
+        // Support lifeline for "the engine wrote no simplehpsdr-app.log" field
         // reports: which build actually runs, where its log should live,
         // whether the on-disk sink is healthy (and why not), and the in-memory
         // ring tail when the file itself cannot be written.

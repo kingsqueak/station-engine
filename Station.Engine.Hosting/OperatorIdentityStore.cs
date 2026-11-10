@@ -1,21 +1,21 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
 // OperatorIdentityStore — persists the single shared station callsign + grid
-// (OperatorIdentity) in a single-row LiteDB collection sharing zeus-prefs.db,
+// (OperatorIdentity) in a single-row LiteDB collection sharing simplehpsdr-prefs.db,
 // mirroring FreeDvReporterSettingsStore. First run (no row) returns the empty
 // default, which means "no override — fall back to QRZ". This is the one place
 // operator identity is stored; the FreeDV / log-broadcast resolvers read it
-// first (see OperatorIdentityResolver), and the Zeus Digital plugin gets it
+// first (see OperatorIdentityResolver), and the SimpleHPSDR Digital plugin gets it
 // pushed by the core UI.
 
 using LiteDB;
-using Zeus.Contracts;
+using SimpleHPSDR.Contracts;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
 /// Reads/writes the shared <see cref="OperatorIdentity"/> override row. Thread-safe;
@@ -23,7 +23,7 @@ namespace Zeus.Server;
 /// </summary>
 public sealed class OperatorIdentityStore : IDisposable
 {
-    private readonly Zeus.Data.SharedLiteDatabase.Lease _dbLease;
+    private readonly SimpleHPSDR.Data.SharedLiteDatabase.Lease _dbLease;
     private readonly LiteDatabase _db;
     private readonly ILiteCollection<OperatorIdentityEntry> _entries;
     private readonly ILogger<OperatorIdentityStore> _log;
@@ -37,7 +37,7 @@ public sealed class OperatorIdentityStore : IDisposable
         if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
             Directory.CreateDirectory(dir);
 
-        _dbLease = Zeus.Data.SharedLiteDatabase.Acquire(dbPath);
+        _dbLease = SimpleHPSDR.Data.SharedLiteDatabase.Acquire(dbPath);
         _db = _dbLease.Database;
         _entries = _db.GetCollection<OperatorIdentityEntry>("operator_identity");
 

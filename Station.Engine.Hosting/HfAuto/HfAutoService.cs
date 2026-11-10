@@ -9,7 +9,7 @@ using System.Text;
 using System.Text.Json;
 using LiteDB;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 public sealed record HfAutoRuntimeConfig(
     bool Enabled,
@@ -53,7 +53,7 @@ public sealed record HfAutoStatus(
 
 public sealed class HfAutoConfigStore : IDisposable
 {
-    private readonly Zeus.Data.SharedLiteDatabase.Lease _dbLease;
+    private readonly SimpleHPSDR.Data.SharedLiteDatabase.Lease _dbLease;
     private readonly ILiteCollection<HfAutoConfigEntry> _entries;
     private readonly object _sync = new();
 
@@ -64,7 +64,7 @@ public sealed class HfAutoConfigStore : IDisposable
         if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
             Directory.CreateDirectory(dir);
 
-        _dbLease = Zeus.Data.SharedLiteDatabase.Acquire(dbPath);
+        _dbLease = SimpleHPSDR.Data.SharedLiteDatabase.Acquire(dbPath);
         _entries = _dbLease.Database.GetCollection<HfAutoConfigEntry>("hf_auto_config");
     }
 
@@ -113,7 +113,7 @@ public sealed class HfAutoConfigEntry
 /// <summary>
 /// Receives the HF-AUTO Controller's optional UDP JSON output. The companion
 /// application remains responsible for the proprietary serial transport;
-/// Zeus consumes only the explicitly exposed interoperability stream.
+/// SimpleHPSDR consumes only the explicitly exposed interoperability stream.
 /// </summary>
 public sealed class HfAutoService : BackgroundService
 {

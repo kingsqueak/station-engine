@@ -1,8 +1,8 @@
 /*  fm_tone.h
 
-Zeus extension (FM sub-audible signalling) -- not part of upstream WDSP.
+SimpleHPSDR extension (FM sub-audible signalling) -- not part of upstream WDSP.
 
-This file is part of Zeus's vendored copy of WDSP, a program that implements
+This file is part of SimpleHPSDR's vendored copy of WDSP, a program that implements
 a Software-Defined Radio. WDSP is Copyright (C) Warren Pratt, NR0V.
 
 This program is free software; you can redistribute it and/or
@@ -17,7 +17,7 @@ GNU General Public License for more details.
 
 */
 
-// Zeus extension (FM tones): self-contained DSP helpers used by fmmod.c (TX
+// SimpleHPSDR extension (FM tones): self-contained DSP helpers used by fmmod.c (TX
 // DCS encode) and fmd.c (RX CTCSS / DCS decode and tone squelch). No WDSP
 // channel state, no FFTW, no heap: every object is a plain struct, so the
 // helpers compile standalone for native/wdsp/tests/fm_tests.c.

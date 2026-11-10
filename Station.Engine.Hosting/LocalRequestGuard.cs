@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA), Christian Suarez (N9WAR), and contributors.
 //
 // See ATTRIBUTIONS.md at the repository root for the full provenance
@@ -8,7 +8,7 @@
 
 using System.Net;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 internal static class LocalRequestGuard
 {
@@ -52,7 +52,7 @@ internal static class LocalRequestGuard
     }
 
     /// <summary>Allow non-browser websocket clients with no Origin, while
-    /// constraining browser handshakes to this server or a fixed Zeus-owned
+    /// constraining browser handshakes to this server or a fixed SimpleHPSDR-owned
     /// app origin. HTTP CORS middleware does not govern websocket upgrades.</summary>
     public static bool IsTrustedWebSocketOrigin(HttpContext ctx)
     {
@@ -92,14 +92,14 @@ internal static class LocalRequestGuard
         if (!IsLocalRequest(ctx))
         {
             return Results.Json(
-                new { error = $"Open Zeus on the machine running the backend to {action}." },
+                new { error = $"Open SimpleHPSDR on the machine running the backend to {action}." },
                 statusCode: StatusCodes.Status403Forbidden);
         }
 
         if (!IsSameOriginOrNoOrigin(ctx))
         {
             return Results.Json(
-                new { error = $"Zeus can only {action} from the local same-origin app." },
+                new { error = $"SimpleHPSDR can only {action} from the local same-origin app." },
                 statusCode: StatusCodes.Status403Forbidden);
         }
 
@@ -120,7 +120,7 @@ internal static class LocalRequestGuard
         if (!IsLocalRequest(ctx))
         {
             return Results.Json(
-                new { error = $"Open Zeus on the machine running the engine to {action}." },
+                new { error = $"Open SimpleHPSDR on the machine running the engine to {action}." },
                 statusCode: StatusCodes.Status403Forbidden);
         }
 
@@ -131,7 +131,7 @@ internal static class LocalRequestGuard
                     || !StationEngineEndpoints.IsBrowserOriginAllowed(origin))))
         {
             return Results.Json(
-                new { error = $"Zeus can only {action} from an allowed local app origin." },
+                new { error = $"SimpleHPSDR can only {action} from an allowed local app origin." },
                 statusCode: StatusCodes.Status403Forbidden);
         }
 
@@ -158,7 +158,7 @@ internal static class LocalRequestGuard
         }
 
         return Results.Json(
-            new { error = $"Zeus can only {action} through a literal local address." },
+            new { error = $"SimpleHPSDR can only {action} through a literal local address." },
             statusCode: StatusCodes.Status403Forbidden);
     }
 

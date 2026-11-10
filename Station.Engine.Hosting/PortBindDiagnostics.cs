@@ -5,7 +5,7 @@
 using System.Net;
 using System.Net.Sockets;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 internal static class PortBindDiagnostics
 {

@@ -1,6 +1,6 @@
-/* rnnoise_data.c — Zeus minimal vendor (init_rnnoise only).
+/* rnnoise_data.c — SimpleHPSDR minimal vendor (init_rnnoise only).
    Upstream xiph/rnnoise src/rnnoise_data.c is ~78 MB: default-model weight
-   arrays (all inside #ifndef USE_WEIGHTS_FILE) + init_rnnoise(). Zeus builds
+   arrays (all inside #ifndef USE_WEIGHTS_FILE) + init_rnnoise(). SimpleHPSDR builds
    with -DUSE_WEIGHTS_FILE and ships NO baked-in model, so the weight blocks
    compile out and only init_rnnoise() remains. This is that function,
    extracted verbatim from upstream @ 70f1d256, so the repo carries

@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright (C) 2026 Douglas J. Cerrato (KB2UKA) and contributors.
 
-namespace Zeus.Server.Diagnostics;
+namespace SimpleHPSDR.Server.Diagnostics;
 
 /// <summary>
 /// GET /api/diagnostics/engine-log — loopback-readable snapshot of the engine's
 /// diagnostic-log pipeline: which build is running, where the rolling
-/// zeus-app.log SHOULD live, whether the on-disk sink is healthy (and if not,
+/// simplehpsdr-app.log SHOULD live, whether the on-disk sink is healthy (and if not,
 /// why), plus the tail of the in-memory ring so support can pull recent engine
 /// logs over HTTP even when the file itself cannot be written on the
 /// operator's machine. Safe on the engine's loopback-only surface: paths and

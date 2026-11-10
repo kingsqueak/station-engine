@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>Maps the waterfall render-state beacon used by every SPA host.</summary>
 public static class WaterfallDiagnosticEndpoints
@@ -25,7 +25,7 @@ public static class WaterfallDiagnosticEndpoints
             ILoggerFactory loggerFactory) =>
         {
             loggerFactory
-                .CreateLogger("Zeus.Server.WaterfallDiagnostics")
+                .CreateLogger("SimpleHPSDR.Server.WaterfallDiagnostics")
                 .LogInformation("diag.wf {Report}", body.ToString());
             return Results.Ok();
         });

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-namespace Zeus.Server.Diagnostics;
+namespace SimpleHPSDR.Server.Diagnostics;
 
 /// <summary>
 /// A durable sink for already-formatted, already-redacted log lines. It retains

@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
 // See ATTRIBUTIONS.md at the repository root for the full provenance
 // statement and per-component attribution.
 //
-// Compiled into both Station.Engine.Hosting (which BUILDS the .zeusdb
-// container and restores station-owned entries) and ZeusProduct (which
+// Compiled into both Station.Engine.Hosting (which BUILDS the .simplehpsdrdb
+// container and restores station-owned entries) and SimpleHPSDRProduct (which
 // restores product-owned entries before its stores open). Sharing one source
 // keeps the two hosts from drifting on which settings travel, which never
 // leave the machine, and where the product's file-backed settings live.
@@ -18,14 +18,14 @@ using System.Text.Json.Nodes;
 using LiteDB;
 using JsonSerializer = System.Text.Json.JsonSerializer;
 
-#if ZEUS_PRODUCT_HOST
-namespace Zeus.Product.Hosting.Data;
+#if SIMPLEHPSDR_PRODUCT_HOST
+namespace SimpleHPSDR.Product.Hosting.Data;
 #else
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 #endif
 
 /// <summary>
-/// What the operator-facing settings backup (.zeusdb) may carry.
+/// What the operator-facing settings backup (.simplehpsdrdb) may carry.
 ///
 /// Secrets policy: passwords, API keys, tokens and the credential vault never
 /// leave the machine through a backup. Machine-bound state (LAN opt-in,
@@ -116,7 +116,7 @@ internal static class DatabaseBackupPolicy
 
     internal const string ProductBundleKey = "product-bundle";
     internal const string ProductBundleFileName = "product-bundle.json";
-    internal const string ProductDataDirectoryEnvironmentVariable = "ZEUS_PRODUCT_DATA_DIR";
+    internal const string ProductDataDirectoryEnvironmentVariable = "SIMPLEHPSDR_PRODUCT_DATA_DIR";
 
     internal sealed record ProductSettingsFile(string Key, string Path);
 
@@ -129,9 +129,9 @@ internal static class DatabaseBackupPolicy
     internal static bool IsSecretBearingFile(string key) => JsonSecretRules.ContainsKey(key);
 
     /// <summary>
-    /// ZeusProduct's small file-backed plugin settings documents. Paths are
+    /// SimpleHPSDRProduct's small file-backed plugin settings documents. Paths are
     /// resolved exactly like the stores resolve them — VoyeurPaths.AppDataRoot
-    /// (DoNotVerify, ~/.zeus fallback) and RecorderSettingsStore /
+    /// (DoNotVerify, ~/.simplehpsdr fallback) and RecorderSettingsStore /
     /// VoiceKeyerSettingsStore.DefaultPluginDataDirectory (plain
     /// LocalApplicationData) — and a test pins them equal. Voice-keyer audio,
     /// recorder WAVs, SSTV images and Voyeur's archive are operator content,
@@ -144,13 +144,13 @@ internal static class DatabaseBackupPolicy
             Environment.SpecialFolderOption.DoNotVerify);
         if (string.IsNullOrWhiteSpace(voyeurLocal))
             voyeurLocal = System.IO.Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".zeus");
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".simplehpsdr");
         var pluginLocal = LocalApplicationDataOverrideForTests
             ?? Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        var plugins = System.IO.Path.Combine(pluginLocal, "Zeus", "Product", "plugins");
+        var plugins = System.IO.Path.Combine(pluginLocal, "SimpleHPSDR", "Product", "plugins");
         return
         [
-            new("voyeur-settings", System.IO.Path.Combine(voyeurLocal, "Zeus", "voyeur-settings.json")),
+            new("voyeur-settings", System.IO.Path.Combine(voyeurLocal, "SimpleHPSDR", "voyeur-settings.json")),
             new("recorder-settings", System.IO.Path.Combine(
                 plugins, "org.openhpsdr.recorder", "settings.json")),
             new("voicekeyer-settings", System.IO.Path.Combine(

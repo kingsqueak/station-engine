@@ -6,7 +6,7 @@
 // COM server or opening hardware. Only driver activation is replaced.
 HRESULT activate_test_driver(REFCLSID, LPUNKNOWN, DWORD, REFIID, LPVOID*);
 #define CoCreateInstance activate_test_driver
-#include "../zeus_asio.cpp"
+#include "../simplehpsdr_asio.cpp"
 #undef CoCreateInstance
 
 #include <cstdio>
@@ -87,15 +87,15 @@ void check(bool condition, const char* name, const char* assertion)
 void run(const char* name, DriverState config, bool accepted, int expected_sets, int expected_creates)
 {
     state = config;
-    void* session = zeus_asio_session_create("{DC30AC77-3C04-444A-A189-4D132CBE8F21}", 0, -1, 64, 128, 0);
+    void* session = simplehpsdr_asio_session_create("{DC30AC77-3C04-444A-A189-4D132CBE8F21}", 0, -1, 64, 128, 0);
     check((session != nullptr) == accepted, name, "session acceptance");
     if (session) {
-        check(zeus_asio_session_sample_rate(session) == 48000, name, "runtime ABI rate");
-        check(zeus_asio_session_start(session) == 0, name, "start");
-        zeus_asio_session_destroy(session);
+        check(simplehpsdr_asio_session_sample_rate(session) == 48000, name, "runtime ABI rate");
+        check(simplehpsdr_asio_session_start(session) == 0, name, "start");
+        simplehpsdr_asio_session_destroy(session);
     } else {
         char message[512]{};
-        zeus_asio_last_error(nullptr, message, sizeof(message));
+        simplehpsdr_asio_last_error(nullptr, message, sizeof(message));
         check(std::strstr(message, "48") != nullptr, name, "actionable rate error");
     }
     check(state.sets == expected_sets, name, "set rate count");

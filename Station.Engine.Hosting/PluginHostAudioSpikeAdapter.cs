@@ -2,11 +2,11 @@
 
 using Station.AudioIpc.Spike;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
 /// Measurement-only cross-process audio adapter. It is never registered by
-/// normal engine startup and can only be constructed when ZEUS_SPIKE_IPC is
+/// normal engine startup and can only be constructed when SIMPLEHPSDR_SPIKE_IPC is
 /// explicitly set to shm or udp.
 /// </summary>
 public sealed class PluginHostAudioSpikeAdapter : IAudioModemPort, IDisposable
@@ -40,7 +40,7 @@ public sealed class PluginHostAudioSpikeAdapter : IAudioModemPort, IDisposable
 
     public static bool IsEnabledFromEnvironment(out AudioIpcTransportKind kind)
     {
-        var value = Environment.GetEnvironmentVariable("ZEUS_SPIKE_IPC");
+        var value = Environment.GetEnvironmentVariable("SIMPLEHPSDR_SPIKE_IPC");
         if (string.Equals(value, "shm", StringComparison.OrdinalIgnoreCase))
         {
             kind = AudioIpcTransportKind.SharedMemory;

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
@@ -19,12 +19,12 @@
 // (https://github.com/dl1bz/deskhpsdr), maintained by Heiko (DL1BZ).
 // Both are GPL-2.0-or-later.
 
-using Zeus.Contracts;
-using Zeus.Dsp;
-using Zeus.Protocol1;
-using Zeus.Protocol1.Discovery;
+using SimpleHPSDR.Contracts;
+using SimpleHPSDR.Dsp;
+using SimpleHPSDR.Protocol1;
+using SimpleHPSDR.Protocol1.Discovery;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
 /// PureSignal AutoAttenuate loop. Polls the calcc feedback level (info[4]) at
@@ -44,7 +44,7 @@ namespace Zeus.Server;
 /// SetPSControl(reset=1) so calcc retries with the new feedback level.
 ///
 /// Three wire paths are supported. Protocol 2 (G2/Saturn etc.) uses the simple
-/// step-then-reset pattern via <see cref="Zeus.Protocol2.Protocol2Client.SetTxAttenuationDb"/>.
+/// step-then-reset pattern via <see cref="SimpleHPSDR.Protocol2.Protocol2Client.SetTxAttenuationDb"/>.
 /// HL2 (Protocol 1) uses the mi0bot timer2code 3-state dance — disable PS at
 /// the engine, write the new ATTOnTX wire byte, then re-enable PS — because
 /// changing C4 (AD9866 TX PGA) mid-fit otherwise wedges calcc into binfo[6]
@@ -336,7 +336,7 @@ public sealed class PsAutoAttenuateService : BackgroundService
     // client with a bad/missing external coupler still DELIVERS blocks — they
     // are just near-zero — so blocks-flowing + rxPeak under this floor is the
     // one stall signature that genuinely points at station wiring rather than
-    // Zeus (#841/#869 lesson: zero BLOCKS is always a client-side fault).
+    // SimpleHPSDR (#841/#869 lesson: zero BLOCKS is always a client-side fault).
     private const float PsPeakSilenceFloor = 0.001f;
     // Frozen-stream detector floor, measured against the client's per-block
     // delivery stamp (IProtocol1Client.LastPsFeedbackBlockAgeMs — refreshed on
@@ -390,7 +390,7 @@ public sealed class PsAutoAttenuateService : BackgroundService
             {
                 // No feedback blocks at all while armed + keyed. An armed
                 // client with bad station wiring still delivers (near-zero)
-                // blocks, so zero blocks is ALWAYS a Zeus-side wire/parse
+                // blocks, so zero blocks is ALWAYS a SimpleHPSDR-side wire/parse
                 // fault — never the operator's coupler (#841/#869 lesson).
                 _log.LogWarning(
                     "psAutoAttn.stall fb={Fb} info5={Cal} attn={Attn} for {ElapsedMs}ms blocksNow={BlocksNow} blocksDelta={BlocksDelta} ps.clientEnabled={ClientPsEnabled} ps.numRxMinus1={RequestedNumRxMinusOne} hwPeak={HwPeak:F4} — ZERO feedback blocks while keyed: the HL2 4-DDC feedback stream is not being delivered (wire arm / receiver count / parser). This is NOT an HW-peak problem; check ps.clientEnabled and ps.numRxMinus1 above.",
@@ -405,10 +405,10 @@ public sealed class PsAutoAttenuateService : BackgroundService
                 // above), then STOPPED: the per-block delivery stamp has not
                 // been refreshed for the whole floor window. A live stream
                 // re-stamps it every block (2.7-21 ms depending on rate), so
-                // a multi-second age is a Zeus-side parse/dispatch freeze at
+                // a multi-second age is a SimpleHPSDR-side parse/dispatch freeze at
                 // every rate — do not route the operator to HW peak or wiring.
                 _log.LogWarning(
-                    "psAutoAttn.stall fb={Fb} info5={Cal} attn={Attn} for {ElapsedMs}ms blocksNow={BlocksNow} blocksDelta={BlocksDelta} ps.lastBlockAgeMs={BlockAgeMs} hwPeak={HwPeak:F4} — feedback stream FROZE mid-over: no block delivered for {FrozenForMs}ms while keyed. This is a Zeus-side parse/dispatch fault, NOT an HW-peak or wiring problem.",
+                    "psAutoAttn.stall fb={Fb} info5={Cal} attn={Attn} for {ElapsedMs}ms blocksNow={BlocksNow} blocksDelta={BlocksDelta} ps.lastBlockAgeMs={BlockAgeMs} hwPeak={HwPeak:F4} — feedback stream FROZE mid-over: no block delivered for {FrozenForMs}ms while keyed. This is a SimpleHPSDR-side parse/dispatch fault, NOT an HW-peak or wiring problem.",
                     feedback, psm.CalibrationAttempts, attenuationDb, elapsedMs,
                     blocksNow, blocksDelta, blockAgeMs, hwPeak, blockAgeMs);
                 return;
@@ -432,7 +432,7 @@ public sealed class PsAutoAttenuateService : BackgroundService
                 // delivered but carry nothing on the antenna-side stream —
                 // the one stall class that points at the station's feedback
                 // source (external coupler where fitted, RF leakage on a
-                // stock HL2) rather than Zeus or HW peak.
+                // stock HL2) rather than SimpleHPSDR or HW peak.
                 _log.LogWarning(
                     "psAutoAttn.stall fb={Fb} info5={Cal} attn={Attn} for {ElapsedMs}ms blocksNow={BlocksNow} blocksDelta={BlocksDelta} ps.lastFb.rxPeak={LastRxPeak:F4} ps.lastFb.txPeak={LastTxPeak:F4} ps.lastFb.ageMs={LastAgeMs} hwPeak={HwPeak:F4} — TX reference is healthy but RX feedback is near zero: the feedback path (external coupler, or RF leakage on a stock HL2) is delivering no signal into the RX frontend. Check the feedback source wiring/level.",
                     feedback, psm.CalibrationAttempts, attenuationDb, elapsedMs,
@@ -483,7 +483,7 @@ public sealed class PsAutoAttenuateService : BackgroundService
     // internal (not private) so the PsAutoAttenuate test suites can drive
     // single deterministic ticks through the real gate + dispatch chain
     // without the PeriodicTimer — mirrors the ForTest seams elsewhere in
-    // Station.Engine.Hosting (InternalsVisibleTo Zeus.Server.Tests).
+    // Station.Engine.Hosting (InternalsVisibleTo SimpleHPSDR.Server.Tests).
     internal void Tick1() => Tick1(Environment.TickCount64);
 
     internal void Tick1(long nowMs)
@@ -494,7 +494,7 @@ public sealed class PsAutoAttenuateService : BackgroundService
         // TX step attenuation on every false→true.
         //
         // This used to force 0 on the premise that "the radio holds 0 between
-        // arms (matches pihpsdr)". That premise is false in Zeus: the ATTOnTX
+        // arms (matches pihpsdr)". That premise is false in SimpleHPSDR: the ATTOnTX
         // wire byte is sticky — nothing in the disarm/unkey path resets it —
         // so the radio holds the *last dance value* (e.g. ~21 dB for a hot
         // external-tap feedback chain). Forcing the model to 0 desynced it
@@ -956,7 +956,7 @@ public sealed class PsAutoAttenuateService : BackgroundService
     // Once we're past Monitor we MUST complete the cycle so PS gets re-enabled —
     // the early gates at the top of Tick1 honour that by only running while
     // in Monitor.
-    private void Tick1P2(StateDto s, IDspEngine engine, Zeus.Protocol2.Protocol2Client p2)
+    private void Tick1P2(StateDto s, IDspEngine engine, SimpleHPSDR.Protocol2.Protocol2Client p2)
     {
         switch (_p2State)
         {
@@ -1011,7 +1011,7 @@ public sealed class PsAutoAttenuateService : BackgroundService
                 // "no fit yet". Thetis handles this via the ddB rail —
                 // 20·log10(0/152.293) → −∞ → clamped to a −10 dB step
                 // (PSForm.cs:745-761) — walking the attenuator DOWN out of
-                // deafness. Zeus's old unconditional fb-zero skip is exactly
+                // deafness. SimpleHPSDR's old unconditional fb-zero skip is exactly
                 // the 31 dB deadlock from #1248: seeded deaf, fits report 0,
                 // skip forever. Scoped to HermesC10; other boards keep the
                 // shipped skip.

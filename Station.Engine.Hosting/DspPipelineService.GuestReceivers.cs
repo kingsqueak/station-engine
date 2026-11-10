@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
@@ -10,16 +10,16 @@
 // option) any later version. See the LICENSE file at the root of this
 // repository for the full text, or https://www.gnu.org/licenses/.
 //
-// Zeus is distributed WITHOUT ANY WARRANTY; see the GNU General Public
+// SimpleHPSDR is distributed WITHOUT ANY WARRANTY; see the GNU General Public
 // License for details.
 
 using Microsoft.Extensions.Logging;
-using Zeus.Contracts;
-using Zeus.Dsp;
-using Zeus.Server.PublicListen;
-using GuestDdcSpec = Zeus.Protocol2.Protocol2Client.GuestDdcSpec;
+using SimpleHPSDR.Contracts;
+using SimpleHPSDR.Dsp;
+using SimpleHPSDR.Server.PublicListen;
+using GuestDdcSpec = SimpleHPSDR.Protocol2.Protocol2Client.GuestDdcSpec;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 // Public Listening Phase 3 (docs/designs/public-listening.md, "Phase 3 — guest
 // receiver control protocol"): guest receivers on spare Protocol 2 DDCs.
@@ -142,7 +142,7 @@ public partial class DspPipelineService
 
     private void FeedGuestIq(IDspEngine engine, int receiverIndex, ReadOnlySpan<double> iq)
     {
-        int slot = Zeus.Protocol2.Protocol2Client.FirstGuestReceiverIndex - receiverIndex;
+        int slot = SimpleHPSDR.Protocol2.Protocol2Client.FirstGuestReceiverIndex - receiverIndex;
         if (slot is < 0 or >= GuestReceiverPool.MaxGuestSlots) return;
         var guest = _guestRx[slot];
         int chan = Volatile.Read(ref guest.ChannelId);

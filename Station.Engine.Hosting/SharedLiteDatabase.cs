@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
@@ -10,19 +10,19 @@
 using System.Globalization;
 using LiteDB;
 
-#if ZEUS_PRODUCT_HOST
-namespace Zeus.Product.Hosting.Data;
+#if SIMPLEHPSDR_PRODUCT_HOST
+namespace SimpleHPSDR.Product.Hosting.Data;
 #else
-namespace Zeus.Data;
+namespace SimpleHPSDR.Data;
 #endif
 
 // Process-wide, reference-counted registry of LiteDatabase instances keyed by
 // normalized file path. Guarantees EXACTLY ONE LiteDatabase (one LiteEngine)
 // per physical database file per process.
 //
-// Why this exists (the corruption root cause): Zeus had ~40 stores that each
+// Why this exists (the corruption root cause): SimpleHPSDR had ~40 stores that each
 // did `new LiteDatabase("Filename=...;Connection=shared")` against the SAME
-// zeus-prefs.db (and two more against the encrypted zeus.db). Many independent
+// simplehpsdr-prefs.db (and two more against the encrypted simplehpsdr.db). Many independent
 // engines on one file — each with its own page cache and its own
 // open/checkpoint/close lifecycle — is the documented LiteDB corruption
 // antipattern: an interrupted write (power loss, the app killed on a network
@@ -90,7 +90,7 @@ public static class SharedLiteDatabase
             if (!exception.IsCritical)
                 return false;
 
-#if ZEUS_PRODUCT_HOST
+#if SIMPLEHPSDR_PRODUCT_HOST
             return Trip(_entry, exception);
 #else
             return Interlocked.Exchange(ref _entry.Tripped, 1) == 0;
@@ -132,7 +132,7 @@ public static class SharedLiteDatabase
                 return new Lease(key, existing);
             }
 
-#if ZEUS_PRODUCT_HOST
+#if SIMPLEHPSDR_PRODUCT_HOST
             QuarantinePendingDatabase(key, warning);
 #endif
             var (db, tripped) = OpenWithIntegritySweep(key, password, warning);
@@ -155,7 +155,7 @@ public static class SharedLiteDatabase
         string? password,
         Action<string, Exception?>? warning)
     {
-#if ZEUS_PRODUCT_HOST
+#if SIMPLEHPSDR_PRODUCT_HOST
         LiteDatabase? db = null;
         try
         {
@@ -215,7 +215,7 @@ public static class SharedLiteDatabase
 #endif
     }
 
-#if ZEUS_PRODUCT_HOST
+#if SIMPLEHPSDR_PRODUCT_HOST
     // Full data-page enumeration is bounded: a product database that has grown
     // past this size (years of logbook) gets the cheap Count() pass only — the
     // durable trip marker remains the guarantee for anything the capped sweep
@@ -538,7 +538,7 @@ public static class SharedLiteDatabase
                 // Dispose path. The next launch's integrity guard handles a file
                 // left in a bad state.
             }
-#if ZEUS_PRODUCT_HOST
+#if SIMPLEHPSDR_PRODUCT_HOST
             // Durable-trip marker, written AFTER the dispose: the shutdown WAL
             // checkpoint mutates the file's length/mtime, so an identity
             // captured earlier (at trip time) would no longer match at the next
@@ -608,7 +608,7 @@ public static class SharedLiteDatabase
         lock (Gate) { return Open.ContainsKey(key); }
     }
 
-#if ZEUS_PRODUCT_HOST
+#if SIMPLEHPSDR_PRODUCT_HOST
     internal static void MarkTrippedForTests(string dbPath)
     {
         var key = Normalize(dbPath);

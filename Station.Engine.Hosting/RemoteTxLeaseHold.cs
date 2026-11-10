@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
-// Zeus is distributed WITHOUT ANY WARRANTY; see the GNU General Public
+// SimpleHPSDR is distributed WITHOUT ANY WARRANTY; see the GNU General Public
 // License for details.
 //
 // Held remote-TX lease: the product host keeps one loopback GET open for as
@@ -16,7 +16,7 @@
 // process that then dies would otherwise stay live, and a key it held would
 // last until the TX timeout.
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 internal static class RemoteTxLeaseHold
 {

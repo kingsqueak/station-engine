@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA), Christian Suarez (N9WAR), and contributors.
 
 using System.Globalization;
 using LiteDB;
-using Zeus.Contracts;
+using SimpleHPSDR.Contracts;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
 /// Persists the CW operator's preferences (WPM, Farnsworth split, 6 macro
@@ -22,7 +22,7 @@ namespace Zeus.Server;
 public sealed class CwSettingsStore : IDisposable
 {
     /// <summary>Default macros — match the previously-hardcoded list in
-    /// <c>zeus-web/src/components/design/CwKeyer.tsx</c> so a fresh install
+    /// <c>simplehpsdr-web/src/components/design/CwKeyer.tsx</c> so a fresh install
     /// shows the same six buttons the UI used pre-persistence.</summary>
     public static readonly string[] DefaultMacros =
         { "CQ CQ CQ", "TU 73", "QRZ?", "AGN?", "5NN TU", "UR RST" };
@@ -59,7 +59,7 @@ public sealed class CwSettingsStore : IDisposable
     /// reject runaway paste / accidental long strings at the API edge.</summary>
     public const int MaxMacroChars = 200;
 
-    private readonly Zeus.Data.SharedLiteDatabase.Lease _dbLease;
+    private readonly SimpleHPSDR.Data.SharedLiteDatabase.Lease _dbLease;
     private readonly LiteDatabase _db;
     private readonly ILiteCollection<CwSettingsEntry> _docs;
     private readonly ILogger<CwSettingsStore> _log;
@@ -83,7 +83,7 @@ public sealed class CwSettingsStore : IDisposable
         if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
             Directory.CreateDirectory(dir);
 
-        _dbLease = Zeus.Data.SharedLiteDatabase.Acquire(dbPath);
+        _dbLease = SimpleHPSDR.Data.SharedLiteDatabase.Acquire(dbPath);
         _db = _dbLease.Database;
         _docs = _db.GetCollection<CwSettingsEntry>("cw_settings");
         var stored = _docs.FindAll().FirstOrDefault()?.SettingsVersion ?? 0;

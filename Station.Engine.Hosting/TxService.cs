@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
@@ -10,11 +10,11 @@
 // option) any later version. See the LICENSE file at the root of this
 // repository for the full text, or https://www.gnu.org/licenses/.
 //
-// Zeus is an independent reimplementation in .NET — not a fork. Its
+// SimpleHPSDR is an independent reimplementation in .NET — not a fork. Its
 // Protocol-1 / Protocol-2 framing, WDSP integration, meter pipelines, and
 // TX behaviour were informed by studying the Thetis project
 // (https://github.com/ramdor/Thetis), the authoritative reference
-// implementation in the OpenHPSDR ecosystem. Zeus gratefully acknowledges
+// implementation in the OpenHPSDR ecosystem. SimpleHPSDR gratefully acknowledges
 // the Thetis contributors whose work made this possible:
 //
 //   Richard Samphire (MW0LGE), Warren Pratt (NR0V),
@@ -39,14 +39,14 @@
 // WDSP — loaded by Zeus via P/Invoke — is Copyright (C) Warren Pratt
 // (NR0V), distributed under GPL v2 or later.
 //
-// Zeus is distributed WITHOUT ANY WARRANTY; see the GNU General Public
+// SimpleHPSDR is distributed WITHOUT ANY WARRANTY; see the GNU General Public
 // License for details.
 
 using System.Text;
-using Zeus.Contracts;
-using Zeus.Server.Diagnostics;
+using SimpleHPSDR.Contracts;
+using SimpleHPSDR.Server.Diagnostics;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 public sealed class TxService
 {
@@ -304,7 +304,7 @@ public sealed class TxService
     }
 
     /// <summary>
-    /// Runs a short safety-critical operation only when every Zeus transmit
+    /// Runs a short safety-critical operation only when every SimpleHPSDR transmit
     /// intent is idle, while preventing a new MOX, TUN, or TwoTone transition
     /// from beginning until that operation returns. This is intentionally
     /// non-blocking: a concurrent transition wins and the caller must fail
@@ -315,7 +315,7 @@ public sealed class TxService
         ArgumentNullException.ThrowIfNull(operation);
         if (!Monitor.TryEnter(_transitionSync))
         {
-            error = "A Zeus transmit transition is already in progress.";
+            error = "A SimpleHPSDR transmit transition is already in progress.";
             return false;
         }
 
@@ -335,7 +335,7 @@ public sealed class TxService
 
             if (activeIntent is not null || moxOn || tunOn || twoToneOn || _radio.IsMox)
             {
-                error = "The Zeus transmitter is not idle.";
+                error = "The SimpleHPSDR transmitter is not idle.";
                 return false;
             }
 
@@ -945,7 +945,7 @@ public sealed class TxService
     private static bool IsToneBurstKeySource(MoxSource source) =>
         source is MoxSource.UI or MoxSource.Hardware or MoxSource.Midi or MoxSource.Cat;
 
-    /// <summary>FM access tone burst at the start of an over (Zeus extension,
+    /// <summary>FM access tone burst at the start of an over (SimpleHPSDR extension,
     /// European repeaters): MOX/PTT/VOX-keyed voice TX whose TX mode is FM with
     /// <see cref="FmConfig.ToneBurstOnKeyUp"/> set. Not TUN, two-tone, CW or
     /// digital. Best-effort — a failure never affects the key-up.</summary>

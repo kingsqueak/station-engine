@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
@@ -9,7 +9,7 @@
 
 using LiteDB;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 // Persists the single "send RX audio to the radio's onboard speaker/headphone
 // jacks" toggle for any codec-equipped radio (Hermes, ANAN-10/10E/100/100B,
@@ -17,7 +17,7 @@ namespace Zeus.Server;
 // RadioSpeakerAudioSink owns the P1 path (EP2 L/R slots) and
 // SaturnSpeakerAudioSink owns the P2 path (UDP port 1028) — issue #1122.
 //
-// Default is OFF (opt-in). Zeus already plays RX audio host-side (browser /
+// Default is OFF (opt-in). SimpleHPSDR already plays RX audio host-side (browser /
 // native sink); auto-enabling the radio-side codec output would make operators
 // hear doubled audio on connect. Operators who want the radio's own speaker
 // turn it on explicitly, and the choice survives a backend restart. Lives in
@@ -26,7 +26,7 @@ public sealed class RadioSpeakerSettingsStore : IDisposable
 {
     public const bool DefaultEnabled = false;
 
-    private readonly Zeus.Data.SharedLiteDatabase.Lease _dbLease;
+    private readonly SimpleHPSDR.Data.SharedLiteDatabase.Lease _dbLease;
     private readonly LiteDatabase _db;
     private readonly ILiteCollection<RadioSpeakerSettingsEntry> _docs;
     private readonly ILogger<RadioSpeakerSettingsStore> _log;
@@ -47,7 +47,7 @@ public sealed class RadioSpeakerSettingsStore : IDisposable
             Directory.CreateDirectory(dir);
         }
 
-        _dbLease = Zeus.Data.SharedLiteDatabase.Acquire(dbPath);
+        _dbLease = SimpleHPSDR.Data.SharedLiteDatabase.Acquire(dbPath);
         _db = _dbLease.Database;
         _docs = _db.GetCollection<RadioSpeakerSettingsEntry>("radio_speaker_settings");
 

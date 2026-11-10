@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
@@ -9,7 +9,7 @@
 
 using LiteDB;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
 /// Builds the byte payload served by /api/prefs/databases/export.
@@ -23,7 +23,7 @@ namespace Zeus.Server;
 /// would silently hand the operator a backup whose engine settings are frozen
 /// at the moment their install first ran the split.
 ///
-/// The merged snapshot keeps the single-file .zeusdb format (raw LiteDB) that
+/// The merged snapshot keeps the single-file .simplehpsdrdb format (raw LiteDB) that
 /// Import already accepts: start from the product file's bytes, then replace
 /// every mergeable engine-owned collection with the CURRENT contents of the
 /// profile's engine database. On import + activation the standard migration
@@ -53,7 +53,7 @@ internal static class PrefsProfileExport
         // window — a store committing during the copy itself — is the same
         // one the export has always had and is caught loudly when the merged
         // copy is opened below.
-        using (var productLease = Zeus.Data.SharedLiteDatabase.Acquire(productDbPath))
+        using (var productLease = SimpleHPSDR.Data.SharedLiteDatabase.Acquire(productDbPath))
         {
             productLease.Database.Checkpoint();
             using var fs = new FileStream(
@@ -70,14 +70,14 @@ internal static class PrefsProfileExport
         // and the temp file is exclusively ours, so no shared-connection or
         // lock ordering concerns apply to it.
         var tempPath = Path.Combine(
-            Path.GetTempPath(), $"zeus-profile-export-{Guid.NewGuid():N}.db");
+            Path.GetTempPath(), $"simplehpsdr-profile-export-{Guid.NewGuid():N}.db");
         try
         {
             File.WriteAllBytes(tempPath, productBytes);
 
             // The engine DB may be live (exporting the active profile); lease
             // it through the shared registry exactly like the stores do.
-            using (var engineLease = Zeus.Data.SharedLiteDatabase.Acquire(engineDbPath))
+            using (var engineLease = SimpleHPSDR.Data.SharedLiteDatabase.Acquire(engineDbPath))
             {
                 var engine = engineLease.Database;
                 using (var snapshot = new LiteDatabase(tempPath))

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-namespace Zeus.Server.Diagnostics;
+namespace SimpleHPSDR.Server.Diagnostics;
 
 /// <summary>
 /// Thread-safe in-memory ring buffer of recent formatted log lines. Registered

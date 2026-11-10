@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
@@ -10,15 +10,15 @@
 // option) any later version. See the LICENSE file at the root of this
 // repository for the full text, or https://www.gnu.org/licenses/.
 //
-// Zeus is distributed WITHOUT ANY WARRANTY; see the GNU General Public
+// SimpleHPSDR is distributed WITHOUT ANY WARRANTY; see the GNU General Public
 // License for details.
 
 using Microsoft.Extensions.Logging;
-using Zeus.Contracts;
-using Zeus.Dsp;
-using Zeus.Server.PublicListen;
+using SimpleHPSDR.Contracts;
+using SimpleHPSDR.Dsp;
+using SimpleHPSDR.Server.PublicListen;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 // Public Listening Phase 4 (docs/designs/public-listening.md, "Phase 4 —
 // virtual receivers"): every listener may run a WDSP RXA channel of their own,

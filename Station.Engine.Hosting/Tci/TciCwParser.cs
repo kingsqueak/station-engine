@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA), Christian Suarez (N9WAR), and contributors.
 
 using System.Globalization;
 using System.Text;
 
-namespace Zeus.Server.Tci;
+namespace SimpleHPSDR.Server.Tci;
 
 /// <summary>
 /// Pure-function parsers for the four TCI CW commands routed into
@@ -45,7 +45,7 @@ public static class TciCwParser
 
     /// <summary>Parsed shape of <c>cw_macros:slot</c>. Slot is 1-based
     /// per the TCI spec; the session resolves it against
-    /// <see cref="Zeus.Server.CwSettingsStore"/>.</summary>
+    /// <see cref="SimpleHPSDR.Server.CwSettingsStore"/>.</summary>
     public readonly record struct CwMacrosArgs(int Slot1Based);
 
     /// <summary>Parsed shape of <c>cw_macros_speed:wpm</c>. Null indicates
@@ -98,13 +98,13 @@ public static class TciCwParser
 
     /// <summary>
     /// Parse <c>cw_macros:slot;</c>. Slot is 1-based, rejected if &lt;= 0
-    /// or above <see cref="Zeus.Server.CwSettingsStore.MaxMacros"/>.
+    /// or above <see cref="SimpleHPSDR.Server.CwSettingsStore.MaxMacros"/>.
     /// </summary>
     public static CwMacrosArgs? ParseCwMacros(string[] args)
     {
         if (args is null || args.Length < 1) return null;
         if (!TciProtocol.TryParseInt(args[0], out int slot)) return null;
-        if (slot < 1 || slot > Zeus.Server.CwSettingsStore.MaxMacros) return null;
+        if (slot < 1 || slot > SimpleHPSDR.Server.CwSettingsStore.MaxMacros) return null;
         return new CwMacrosArgs(slot);
     }
 

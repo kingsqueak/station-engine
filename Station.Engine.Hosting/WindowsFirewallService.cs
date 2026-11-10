@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 
@@ -8,7 +8,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Text;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 public interface IWindowsFirewallService
 {
@@ -62,19 +62,19 @@ public sealed class WindowsFirewallService : IWindowsFirewallService
 {
     public const string RuleNameEnvironmentVariable = "STATION_ENGINE_FIREWALL_RULE";
 
-    // A host can name its own rule, so granting it never replaces Zeus's rule.
+    // A host can name its own rule, so granting it never replaces SimpleHPSDR's rule.
     public static string RuleName { get; } =
         Environment.GetEnvironmentVariable(RuleNameEnvironmentVariable) is { Length: > 0 } name
             ? name.Trim()
-            : "ZeusSDR (HPSDR receive)";
+            : "SimpleHPSDRSDR (HPSDR receive)";
 
-    // Only clean up Zeus's pre-rebrand rule when the rule is Zeus's own.
-    internal static bool RemovesLegacyRule => RuleName == "ZeusSDR (HPSDR receive)";
+    // Only clean up SimpleHPSDR's pre-rebrand rule when the rule is SimpleHPSDR's own.
+    internal static bool RemovesLegacyRule => RuleName == "SimpleHPSDRSDR (HPSDR receive)";
 
     // The firewall rule shipped under the pre-rebrand product name. We delete it
     // whenever we (re)apply the rule so an upgraded-over install doesn't leave an
     // orphaned duplicate in Windows Defender Firewall. Never re-added.
-    public const string LegacyRuleName = "OpenHPSDR Zeus (HPSDR receive)";
+    public const string LegacyRuleName = "OpenHPSDR SimpleHPSDR (HPSDR receive)";
 
     private readonly ILogger<WindowsFirewallService> _log;
     private readonly IWindowsFirewallCommandRunner _runner;
@@ -122,7 +122,7 @@ public sealed class WindowsFirewallService : IWindowsFirewallService
                 CanApply: false,
                 RuleName,
                 ProgramPath: null,
-                Message: "Could not resolve the Zeus executable path.");
+                Message: "Could not resolve the SimpleHPSDR executable path.");
         }
 
         return new(
@@ -130,7 +130,7 @@ public sealed class WindowsFirewallService : IWindowsFirewallService
             CanApply: true,
             RuleName,
             ProgramPath: programPath,
-            Message: "Ready to add the Zeus inbound allow rule.");
+            Message: "Ready to add the SimpleHPSDR inbound allow rule.");
     }
 
     public async Task<WindowsFirewallStatus> GetStatusAsync(CancellationToken ct = default)
@@ -155,18 +155,18 @@ public sealed class WindowsFirewallService : IWindowsFirewallService
         var message = status.Message;
         if (probe.Exists && probe.MatchesProgram)
         {
-            message = "Zeus is allowed through Windows Firewall.";
+            message = "SimpleHPSDR is allowed through Windows Firewall.";
         }
         else if (probe.Exists)
         {
             // Rule present but pointing elsewhere. Silent and total: it allows
             // nothing, and the operator has no way to notice without being told.
             message = "A firewall rule with this name exists but allows a different "
-                    + "copy of Zeus. Apply the rule to repoint it at this one.";
+                    + "copy of SimpleHPSDR. Apply the rule to repoint it at this one.";
         }
         else
         {
-            message = "Zeus is not allowed through Windows Firewall. Without this rule "
+            message = "SimpleHPSDR is not allowed through Windows Firewall. Without this rule "
                     + "the radio will most likely not be found.";
         }
 
@@ -290,7 +290,7 @@ public sealed class WindowsFirewallService : IWindowsFirewallService
             ElevationCanceled: false,
             RuleName,
             ProgramPath: status.ProgramPath,
-            Message: "Windows did not accept the firewall rule. Try running Zeus as administrator, then apply it again.");
+            Message: "Windows did not accept the firewall rule. Try running SimpleHPSDR as administrator, then apply it again.");
     }
 
     private string? ResolveProgramPath()
@@ -367,7 +367,7 @@ internal sealed class ProcessWindowsFirewallCommandRunner : IWindowsFirewallComm
         CancellationToken ct)
     {
         // Remove any pre-rebrand rule first so upgraders don't accumulate a
-        // stale "OpenHPSDR Zeus (HPSDR receive)" duplicate. Idempotent.
+        // stale "OpenHPSDR SimpleHPSDR (HPSDR receive)" duplicate. Idempotent.
         if (WindowsFirewallService.RemovesLegacyRule)
         await RunNetshAsync(
             [

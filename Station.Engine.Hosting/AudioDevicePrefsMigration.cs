@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
@@ -9,7 +9,7 @@
 
 using LiteDB;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
 /// One-time, destination-wins migration of the product's audio-device
@@ -44,7 +44,7 @@ internal static class AudioDevicePrefsMigration
         }
 
         var externalMarkerPath = ExternalMarkerPath(engineFullPath);
-        using var engineLease = Zeus.Data.SharedLiteDatabase.Acquire(engineFullPath);
+        using var engineLease = SimpleHPSDR.Data.SharedLiteDatabase.Acquire(engineFullPath);
         var engine = engineLease.Database;
         var markers = engine.GetCollection<BsonDocument>(MarkerCollectionName);
 
@@ -67,7 +67,7 @@ internal static class AudioDevicePrefsMigration
         var copied = false;
         if (destination.Count() == 0 && File.Exists(productFullPath))
         {
-            using var productLease = Zeus.Data.SharedLiteDatabase.Acquire(productFullPath);
+            using var productLease = SimpleHPSDR.Data.SharedLiteDatabase.Acquire(productFullPath);
             var sourceDocuments = productLease.Database
                 .GetCollection<BsonDocument>(CollectionName)
                 .FindAll()

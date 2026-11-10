@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
@@ -20,11 +20,11 @@
 // Both are GPL-2.0-or-later.
 
 using LiteDB;
-using Zeus.Contracts;
-using Zeus.Protocol1;
-using Zeus.Protocol1.Discovery;
+using SimpleHPSDR.Contracts;
+using SimpleHPSDR.Protocol1;
+using SimpleHPSDR.Protocol1.Discovery;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 // PA settings (per-band gain, OC pin masks, globals). Shares the unencrypted
 // station-engine.db with BandMemoryStore — neither PA gain values nor OC pin
@@ -37,7 +37,7 @@ public sealed class PaSettingsStore : IDisposable
     public const int MinCalibrationSafetyPercent = 105;
     public const int MaxCalibrationSafetyPercent = 200;
 
-    private readonly Zeus.Data.SharedLiteDatabase.Lease _dbLease;
+    private readonly SimpleHPSDR.Data.SharedLiteDatabase.Lease _dbLease;
     private readonly LiteDatabase _db;
     private readonly ILiteCollection<PaBandEntry> _bands;
     private readonly ILiteCollection<PaBandDriveEntry> _bandDrive;
@@ -94,7 +94,7 @@ public sealed class PaSettingsStore : IDisposable
             Directory.CreateDirectory(dir);
         }
 
-        _dbLease = Zeus.Data.SharedLiteDatabase.Acquire(dbPath);
+        _dbLease = SimpleHPSDR.Data.SharedLiteDatabase.Acquire(dbPath);
         _db = _dbLease.Database;
         _bands = _db.GetCollection<PaBandEntry>("pa_bands");
         _bands.EnsureIndex(x => x.Band, unique: true);
@@ -208,7 +208,7 @@ public sealed class PaSettingsStore : IDisposable
     }
 
     // Thetis VHF OC parity: a transverter (VHF0..VHF13) drives the OC pins
-    // from its own row. Before this, Zeus drove them from the transverter's
+    // from its own row. Before this, SimpleHPSDR drove them from the transverter's
     // hardware IF band's HF row, and its help text told operators to wire
     // transverter switching there. The first time a pa_bands data set is seen
     // by a build with VHF OC (store open, or a restored backup), the store

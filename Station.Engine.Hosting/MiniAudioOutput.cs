@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2026 Douglas J. Cerrato (KB2UKA), Christian Suarez (N9WAR), and contributors.
 
 using System.Runtime.InteropServices;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
 /// Thin managed wrapper around a miniaudio playback device. Owns the GC
@@ -98,8 +98,8 @@ internal sealed class MiniAudioOutput : IDisposable
         {
             throw new InvalidOperationException(
                 deviceIdHex is null
-                    ? "miniaudio: failed to open default playback device (zeus_ma_output_create returned NULL)."
-                    : "miniaudio: failed to open selected playback device (zeus_ma_output_create_for_device returned NULL).");
+                    ? "miniaudio: failed to open default playback device (simplehpsdr_ma_output_create returned NULL)."
+                    : "miniaudio: failed to open selected playback device (simplehpsdr_ma_output_create_for_device returned NULL).");
         }
 
         SampleRate = MiniAudioInterop.OutputSampleRate(_handle);
@@ -177,7 +177,7 @@ internal sealed class MiniAudioOutput : IDisposable
         _disposed = true;
         if (_handle != IntPtr.Zero)
         {
-            // ma_device_uninit() (inside zeus_ma_output_destroy) is documented
+            // ma_device_uninit() (inside simplehpsdr_ma_output_destroy) is documented
             // to block until the audio worker exits, so by the time we return
             // here the native side will no longer call back into our managed
             // delegates. Safe to drop the delegate roots after destroy.

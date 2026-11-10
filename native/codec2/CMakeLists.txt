@@ -1,11 +1,11 @@
-# native/codec2/CMakeLists.txt — Zeus libcodec2 shared-library build
+# native/codec2/CMakeLists.txt — SimpleHPSDR libcodec2 shared-library build
 #
 # Produces:
 #   macOS   : libcodec2.dylib  (arm64, x86_64)
 #   Linux   : libcodec2.so     (x86_64, arm64, Raspberry Pi)
 #   Windows : codec2.dll       (x64, arm64) — no "lib" prefix
 #
-# This is the FreeDV modem / Codec 2 library from drowe67/codec2. Zeus
+# This is the FreeDV modem / Codec 2 library from drowe67/codec2. SimpleHPSDR
 # P/Invokes it for FreeDV digital voice. The shared library is fetched
 # straight from the upstream repo with CMake FetchContent and built through
 # codec2's OWN CMake (required — codec2 generates version.h and its codebook
@@ -27,7 +27,7 @@
 # We do NOT set LPCNET / LPCNET_BUILD_DIR. This keeps libcodec2 dependency-free
 # (no FFTW, no neural-net runtime, no model files) and cross-platform-clean. The
 # resulting library still carries the classic FreeDV modes — 700C, 700D, 700E,
-# 1600, and 800XA — which is the full set Zeus targets. The ML-based 2020 / 2020B
+# 1600, and 800XA — which is the full set SimpleHPSDR targets. The ML-based 2020 / 2020B
 # modes are out of scope and would drag in LPCNet; do not enable them here.
 #
 # No vendored source
@@ -36,9 +36,9 @@
 # at configure time. "Update from the freedv repo" == bump CODEC2_GIT_TAG.
 
 cmake_minimum_required(VERSION 3.20)
-project(zeus_codec2
+project(simplehpsdr_codec2
     VERSION 1.2.0
-    DESCRIPTION "Codec 2 / FreeDV modem library, packaged for Zeus"
+    DESCRIPTION "Codec 2 / FreeDV modem library, packaged for SimpleHPSDR"
     LANGUAGES C
 )
 
@@ -58,7 +58,7 @@ endif()
 #
 #   BUILD_SHARED_LIBS=ON  — codec2's `add_library(codec2 ...)` honours this, so
 #                           we get libcodec2.{dylib,so}/codec2.dll, the form
-#                           .NET NativeLibrary resolves and Zeus P/Invokes.
+#                           .NET NativeLibrary resolves and SimpleHPSDR P/Invokes.
 #   UNITTEST=OFF          — skip codec2's unit-test binaries.
 #   LPCNET=OFF            — classic modes only, no neural-net dependency.
 #

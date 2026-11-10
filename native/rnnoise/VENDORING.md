@@ -14,7 +14,7 @@ as a STATIC sub-target and embedded into `libwdsp`.
   (`rnnoise_model_from_filename`, `rnnoise_model_free`) `rnnr.c` calls).
 - Model version (for the architecture header below):
   `0a8755f8e2d834eff6a54714ecc7d75f9932e845df35f8b59bc52a7cfe6e8b37`
-- License: **BSD-3-Clause** (see `COPYING`) — compatible with Zeus's
+- License: **BSD-3-Clause** (see `COPYING`) — compatible with SimpleHPSDR's
   GPL-2.0-or-later distribution (BSD → GPL is one-way compatible).
 
 `rnnr.c` itself (the ringbuffer + AGC wrapper around RNNoise) is MW0LGE's Thetis
@@ -42,7 +42,7 @@ Deliberately **excluded**:
 
 ### `rnnoise_data.{c,h}` — the no-bundled-model trick
 
-Zeus ships **no** RNNoise model. NR3 is inert (clean pass-through) until the
+SimpleHPSDR ships **no** RNNoise model. NR3 is inert (clean pass-through) until the
 operator installs a weights file from the DSP menu, which calls `RNNRloadModel`
 → `rnnoise_model_from_filename`.
 
@@ -125,12 +125,12 @@ treated as optional so older libwdsp builds still surface NR3) and reveals it in
 the UI once a model is active.
 
 Until the per-platform `libwdsp` binaries committed under
-`Zeus.Dsp/runtimes/<rid>/native/` are rebuilt by these workflows and committed,
+`SimpleHPSDR.Dsp/runtimes/<rid>/native/` are rebuilt by these workflows and committed,
 `Nr3RnnrAvailable` is `false` and NR3 stays hidden — by design, not a regression.
 
 ## Models for operators
 
-Zeus ships a **bundled default model**
+SimpleHPSDR ships a **bundled default model**
 (`Station.Engine.Hosting/nr3-data/rnnoise-default.bin`, copied next to the app and
 resolved by `Nr3ModelStore` via `AppContext.BaseDirectory`) so NR3 works out of
 the box. It is a standard xiph/rnnoise model in DNNw weights-file format,
@@ -143,7 +143,7 @@ Operators may override the default by installing their own RNNoise weights file
 same architecture) from the DSP menu (upload or URL). Removing the operator
 model reverts to the bundled default.
 
-> **Architecture note:** the model that matches Zeus's vendored
+> **Architecture note:** the model that matches SimpleHPSDR's vendored
 > `src/rnnoise_data.h` is the one whose `init_rnnoise()` dimensions line up
 > (`conv1` 195→128, `conv2` 384→384, the three GRUs 384→1152, plus `dense_out`
 > and `vad_dense`). A model from a *different* upstream `model_version` can parse

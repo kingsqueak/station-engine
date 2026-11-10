@@ -3,19 +3,19 @@
 
 using Microsoft.AspNetCore.Cors.Infrastructure;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
 /// Cross-origin policy for the installed Android/iOS wrappers and the signed,
-/// static Zeus PWA. Origins are fixed product surfaces; arbitrary public web
+/// static SimpleHPSDR PWA. Origins are fixed product surfaces; arbitrary public web
 /// origins remain outside this policy.
 /// </summary>
 public static class NativeWrapperCorsPolicy
 {
-    public const string Name = "ZeusNativeWrapper";
+    public const string Name = "SimpleHPSDRNativeWrapper";
     public const string AndroidOrigin = "http://localhost";
     public const string IosOrigin = "capacitor://localhost";
-    // SimpleHPSDR fork: Zeus's hosted web app is no longer allowed.
+    // SimpleHPSDR fork: SimpleHPSDR's hosted web app is no longer allowed.
     public const string HostedPwaOrigin = "https://app.zeussdr.com";
 
     public static bool IsAllowedOrigin(string origin) =>

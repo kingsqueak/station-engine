@@ -7,7 +7,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <OutputType>Exe</OutputType>
     <AssemblyName>StationEngine</AssemblyName>
-    <RootNamespace>Zeus.StationEngine</RootNamespace>
+    <RootNamespace>SimpleHPSDR.StationEngine</RootNamespace>
     <ServerGarbageCollection>false</ServerGarbageCollection>
     <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
   </PropertyGroup>
@@ -17,7 +17,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <InternalsVisibleTo Include="Zeus.Server.Tests" />
+    <InternalsVisibleTo Include="SimpleHPSDR.Server.Tests" />
   </ItemGroup>
 
 </Project>

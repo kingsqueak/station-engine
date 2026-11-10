@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Deterministic tests for the Zeus broadcast-AM extension of ammod.c,
+// Deterministic tests for the SimpleHPSDR broadcast-AM extension of ammod.c,
 // compiled standalone with WDSP_AMMOD_CORE_TEST (no FFTW / channel state).
 
 #include <assert.h>

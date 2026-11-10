@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus - OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR - OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2026 Douglas J. Cerrato (KB2UKA), Christian Suarez (N9WAR), and contributors.
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
 /// Runs a potentially-blocking native device open on a throwaway background
@@ -51,7 +51,7 @@ internal static class TimeboxedNativeOpen
         })
         {
             IsBackground = true,
-            Name = "zeus-native-open",
+            Name = "simplehpsdr-native-open",
         };
         worker.Start();
 

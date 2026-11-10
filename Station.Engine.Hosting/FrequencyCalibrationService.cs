@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 
 using System.Globalization;
-using Zeus.Contracts;
-using Zeus.Dsp;
+using SimpleHPSDR.Contracts;
+using SimpleHPSDR.Dsp;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 // Per-radio frequency calibration (issue #325). One-shot procedure
 // modelled on Thetis's `Console.WWVCalibration` (console.cs:9779-9854):
@@ -43,7 +43,7 @@ namespace Zeus.Server;
 // All four reference clients (piHPSDR, deskHPSDR, Thetis mainline,
 // mi0bot HL2 fork) use the same multiplicative-correction-at-tune-write
 // model; the per-board variation is in *where* the factor is applied
-// (host-side, never on a clock register), which is what Zeus already
+// (host-side, never on a clock register), which is what SimpleHPSDR already
 // does at `Protocol1Client.SetVfoAHz` + `Protocol2Client.SetVfoAHz`.
 public sealed class FrequencyCalibrationService
 {

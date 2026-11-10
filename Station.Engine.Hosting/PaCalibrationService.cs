@@ -2,9 +2,9 @@
 
 using System.Diagnostics;
 using System.Threading.Channels;
-using Zeus.Contracts;
+using SimpleHPSDR.Contracts;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 public sealed record PaCalibrationStartRequest(bool AmplifierOffConfirmed);
 
@@ -871,7 +871,7 @@ public sealed class PaCalibrationService
         // output it will really be sent (8-bit quantisation included).
         double OutputModel(double gain)
         {
-            Zeus.Protocol1.TxDriveOutput output = drive.EncodeDrive(tunePct, gain, ratedOutputWatts);
+            SimpleHPSDR.Protocol1.TxDriveOutput output = drive.EncodeDrive(tunePct, gain, ratedOutputWatts);
             double amplitude = output.DriveByte * output.IqScale;
             return amplitude * amplitude;
         }

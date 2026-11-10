@@ -3,7 +3,7 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 internal sealed record NativeHostAudioState(
     AudioHostApi Backend,

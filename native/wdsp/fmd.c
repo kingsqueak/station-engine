@@ -30,7 +30,7 @@ warren@pratt.one
 #include "wcpAGC.h"
 #include "fm_tone.h"
 
-// Zeus extension (FM tones): a CTCSS / DCS decoder taps the raw PLL
+// SimpleHPSDR extension (FM tones): a CTCSS / DCS decoder taps the raw PLL
 // discriminator output (ahead of de-emphasis, the audio band-pass and the
 // CTCSS notch, which all strip the sub-audible band) and drives an optional
 // tone squelch that ramps fmd's audio output (10 ms). fmsq's noise squelch
@@ -92,7 +92,7 @@ typedef struct _fmd
 	int lim_run;
 	double lim_gain;
 	double lim_pre_gain;
-	// ---- Zeus FM tone extension ----
+	// ---- SimpleHPSDR FM tone extension ----
 	int deemph_run;
 	int tone_stale;						// detector state predates the last run=0 period
 	fmtone_det tone;
@@ -122,7 +122,7 @@ void calc_fmd (FMD a)
 	a->again = a->rate / (a->deviation * TWOPI);
 	// CTCSS Removal
 	a->sntch = create_snotch(1, a->size, a->out, a->out, (int)a->rate, a->ctcss_freq, 0.0002);
-	// Zeus tone detector: rebuilds only on a rate change (lock state and
+	// SimpleHPSDR tone detector: rebuilds only on a rate change (lock state and
 	// squelch target otherwise persist across decalc/calc)
 	fmtone_det_setrate (&a->tone, a->rate);
 	// detector limiter
@@ -272,10 +272,10 @@ void xfmd (FMD a)
 			a->fmdc = a->mtau * a->fmdc + a->onem_mtau * a->fil_out;
 			a->audio[2 * i + 0] = a->again * (a->fil_out - a->fmdc);
 			a->audio[2 * i + 1] = a->audio[2 * i + 0];
-			// Zeus tone detector: raw discriminator, 1.0 = full deviation
+			// SimpleHPSDR tone detector: raw discriminator, 1.0 = full deviation
 			fmtone_det_process (&a->tone, a->again * a->fil_out);
 		}
-		// de-emphasis (Zeus: bypassable, audio band-pass still runs)
+		// de-emphasis (SimpleHPSDR: bypassable, audio band-pass still runs)
 		if (a->deemph_run)
 			xfircore (a->pde);
 		else
@@ -290,7 +290,7 @@ void xfmd (FMD a)
 				a->out[i] *= a->lim_pre_gain;
 			xwcpagc (a->plim);
 		}
-		// Zeus tone squelch (ramped) and status publication
+		// SimpleHPSDR tone squelch (ramped) and status publication
 		fmtone_det_gate (&a->tone, a->out, a->size);
 		EnterCriticalSection (&a->cs_tone);
 		fmtone_det_status (&a->tone, &a->st_ctcss_hz, &a->st_dcs_code, &a->st_dcs_inv, &a->st_open);
@@ -517,7 +517,7 @@ void SetRXAFMAFFilter(int channel, double low, double high)
 
 /********************************************************************************************************
 *																										*
-*								Zeus extension (FM tones): RXA Properties								*
+*								SimpleHPSDR extension (FM tones): RXA Properties								*
 *																										*
 ********************************************************************************************************/
 

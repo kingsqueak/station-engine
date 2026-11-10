@@ -6,7 +6,7 @@ using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 
-namespace Zeus.Server.Tci;
+namespace SimpleHPSDR.Server.Tci;
 
 /// <summary>Shared Kestrel binding and request branch for the TCI listener.</summary>
 public static class TciHostingExtensions

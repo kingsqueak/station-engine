@@ -4,7 +4,7 @@
 using System.Diagnostics;
 using System.Net;
 
-namespace Zeus.StationEngine;
+namespace SimpleHPSDR.StationEngine;
 
 internal static class ReceiveOnlyRuntime
 {

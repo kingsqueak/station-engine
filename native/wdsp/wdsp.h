@@ -460,7 +460,7 @@ extern void SetTXAFMEmphMP (int channel, int mp);
 extern void SetTXAFMEmphNC (int channel, int nc);
 extern void SetTXAFMPreEmphFreqs (int channel, double low, double high);
 extern void SetTXAFMEmphPosition (int channel, int position);
-extern void SetTXAFMEmphRun (int channel, int run);                  // Zeus extension
+extern void SetTXAFMEmphRun (int channel, int run);                  // SimpleHPSDR extension
 
 //
 // Interfaces from eq.c
@@ -515,7 +515,7 @@ extern void SetRXAFMMPaud (int channel, int mp);
 extern void SetRXAFMLimRun (int channel, int run);
 extern void SetRXAFMLimGain (int channel, double gaindB);
 extern void SetRXAFMAFFilter(int channel, double low, double high);
-// Zeus extension (FM tones / de-emphasis bypass)
+// SimpleHPSDR extension (FM tones / de-emphasis bypass)
 extern void SetRXAFMToneSquelch (int channel, int mode, double ctcssHz, int dcsCode, int dcsInverted);
 extern void GetRXAFMToneStatus (int channel, double* ctcssHz, int* dcsCode, int* dcsInverted, int* squelchOpen);
 extern void SetRXAFMDeemphRun (int channel, int run);
@@ -530,7 +530,7 @@ extern void SetTXACTCSSRun (int channel, int run);
 extern void SetTXAFMNC (int channel, int nc);
 extern void SetTXAFMMP (int channel, int mp);
 extern void SetTXAFMAFFreqs (int channel, double low, double high);
-// Zeus extension (FM tones)
+// SimpleHPSDR extension (FM tones)
 extern void SetTXACTCSSLevel (int channel, double level);
 extern void SetTXADCSRun (int channel, int run);
 extern void SetTXADCSCode (int channel, int code, int inverted);

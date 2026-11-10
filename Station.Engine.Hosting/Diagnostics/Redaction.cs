@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 using System.Text.RegularExpressions;
 
-namespace Zeus.Server.Diagnostics;
+namespace SimpleHPSDR.Server.Diagnostics;
 
 /// <summary>
 /// Pure, deterministic PII/secret scrubber for log + free-text lines that ship

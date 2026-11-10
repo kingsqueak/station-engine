@@ -1,7 +1,7 @@
 # native/ — WDSP cross-platform build
 
 This directory vendors the WDSP DSP engine (Warren Pratt, GPL-2.0-or-later) and builds it
-as a shared library that `Zeus.Dsp` loads via P/Invoke.
+as a shared library that `SimpleHPSDR.Dsp` loads via P/Invoke.
 
 Source baseline: **WDSP 2.11 (upstream revision 2.1.1)** (Warren Pratt) plus a
 `linux_port.{c,h}` portability shim and `#ifdef _WIN32` guards to get WDSP off
@@ -18,7 +18,7 @@ native/
   wdsp/wdsp_export.h     # WDSP_EXPORT visibility macro (replaces PORT)
   wdsp/CMakeLists.txt    # the real build
   libspecbleach/         # vendored libspecbleach for NR4 (Phase 1a of #162)
-  build.sh               # convenience wrapper -> stages .dylib into Zeus.Dsp
+  build.sh               # convenience wrapper -> stages .dylib into SimpleHPSDR.Dsp
   build/                 # generated CMake cache (gitignored)
 ```
 
@@ -57,12 +57,12 @@ and invalidates only `wdspWisdom01`, preserving preferences and calibrations.
 
 ```sh
 brew install fftw cmake
-./native/build.sh                # Release, output -> Zeus.Dsp/runtimes/<rid>/native/
+./native/build.sh                # Release, output -> SimpleHPSDR.Dsp/runtimes/<rid>/native/
 ./native/build.sh Debug          # optional: Debug build
 ```
 
 The script auto-detects `osx-arm64` vs `osx-x64` and stages `libwdsp.dylib`
-into the matching `Zeus.Dsp/runtimes/<rid>/native/` directory. .NET's default
+into the matching `SimpleHPSDR.Dsp/runtimes/<rid>/native/` directory. .NET's default
 native library resolution picks it up with no extra configuration.
 
 ## Build on Linux (x86_64 / arm64)
@@ -77,7 +77,7 @@ sudo dnf install fftw-devel cmake gcc pkgconf                      # Fedora/RHEL
 ./native/build.sh
 ```
 
-Produces `Zeus.Dsp/runtimes/linux-x64/native/libwdsp.so` (or `linux-arm64`).
+Produces `SimpleHPSDR.Dsp/runtimes/linux-x64/native/libwdsp.so` (or `linux-arm64`).
 
 ## Build on Windows (x64 / arm64)
 
@@ -112,8 +112,8 @@ cmake -S native\wdsp -B native\build -G "Visual Studio 17 2022" -A ARM64 `
 cmake --build native\build --config Release
 
 # Stage
-copy native\build\Release\wdsp.dll Zeus.Dsp\runtimes\win-x64\native\
-# or for ARM64: copy native\build\Release\wdsp.dll Zeus.Dsp\runtimes\win-arm64\native\
+copy native\build\Release\wdsp.dll SimpleHPSDR.Dsp\runtimes\win-x64\native\
+# or for ARM64: copy native\build\Release\wdsp.dll SimpleHPSDR.Dsp\runtimes\win-arm64\native\
 ```
 
 ## Automated Builds via GitHub Actions
@@ -125,7 +125,7 @@ Native libraries for Windows and Linux are built by the manual
 - Builds for Linux (x64, arm64) using GCC/aarch64 cross-compilation
 - Verifies NR4/SBNR exports on every WDSP artifact
 - Bundles the FFTW side-by-side libraries for dynamically linked RIDs
-- Stages the libraries in `Zeus.Dsp/runtimes/<rid>/native/`
+- Stages the libraries in `SimpleHPSDR.Dsp/runtimes/<rid>/native/`
 - Can be triggered manually via workflow_dispatch
 
 To trigger a manual build, go to Actions → "Build Native Libraries" → "Run workflow".
@@ -135,13 +135,13 @@ To trigger a manual build, go to Actions → "Build Native Libraries" → "Run w
 `-fvisibility=hidden` is set at the compiler level, so only the functions
 marked `PORT` (→ `WDSP_EXPORT`) in the upstream WDSP headers are exported.
 That's ~500 symbols on the current build — a proper superset of the ~20 the
-C# wrapper in `Zeus.Dsp/` uses. The wrapper only P/Invokes names that
+C# wrapper in `SimpleHPSDR.Dsp/` uses. The wrapper only P/Invokes names that
 actually exist.
 
 Verify the MVP surface after a build:
 
 ```sh
-nm -gU Zeus.Dsp/runtimes/osx-arm64/native/libwdsp.dylib \
+nm -gU SimpleHPSDR.Dsp/runtimes/osx-arm64/native/libwdsp.dylib \
   | grep -E 'OpenChannel|CloseChannel|SetRXAMode|XCreateAnalyzer|SetAnalyzer|GetPixels|Spectrum0|fexchange0|DestroyAnalyzer'
 ```
 
@@ -155,7 +155,7 @@ Before claiming packaged current WDSP noise-reduction support for a RID, run:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File tools\audit-wdsp-runtime-artifacts.ps1 -FailOnMissingWinX64CurrentNr
-powershell -NoProfile -ExecutionPolicy Bypass -File tools\audit-wdsp-native-symbols.ps1 -BinaryPath Zeus.Dsp\runtimes\win-x64\native\wdsp.dll -RequireBinaryExports
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\audit-wdsp-native-symbols.ps1 -BinaryPath SimpleHPSDR.Dsp\runtimes\win-x64\native\wdsp.dll -RequireBinaryExports
 ```
 
 Release packaging status:
@@ -173,9 +173,9 @@ Release packaging status:
 
 ## Source provenance and local patches
 
-See [wdsp/ZEUS-PATCHES.md](wdsp/ZEUS-PATCHES.md) for the pinned 2.11 source
+See [wdsp/SIMPLEHPSDR-PATCHES.md](wdsp/SIMPLEHPSDR-PATCHES.md) for the pinned 2.11 source
 mirrors, upstream manual, and the exact integration changes to retain when
-upgrading. Zeus carries NR3/NR4, CESSB controls, filter/cache improvements,
+upgrading. SimpleHPSDR carries NR3/NR4, CESSB controls, filter/cache improvements,
 PureSignal compatibility and platform fixes; replacing every C/header file
 with an upstream directory would remove features.
 

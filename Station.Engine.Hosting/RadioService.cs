@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
@@ -10,11 +10,11 @@
 // option) any later version. See the LICENSE file at the root of this
 // repository for the full text, or https://www.gnu.org/licenses/.
 //
-// Zeus is an independent reimplementation in .NET — not a fork. Its
+// SimpleHPSDR is an independent reimplementation in .NET — not a fork. Its
 // Protocol-1 / Protocol-2 framing, WDSP integration, meter pipelines, and
 // TX behaviour were informed by studying the Thetis project
 // (https://github.com/ramdor/Thetis), the authoritative reference
-// implementation in the OpenHPSDR ecosystem. Zeus gratefully acknowledges
+// implementation in the OpenHPSDR ecosystem. SimpleHPSDR gratefully acknowledges
 // the Thetis contributors whose work made this possible:
 //
 //   Richard Samphire (MW0LGE), Warren Pratt (NR0V),
@@ -39,7 +39,7 @@
 // WDSP — loaded by Zeus via P/Invoke — is Copyright (C) Warren Pratt
 // (NR0V), distributed under GPL v2 or later.
 //
-// Zeus is distributed WITHOUT ANY WARRANTY; see the GNU General Public
+// SimpleHPSDR is distributed WITHOUT ANY WARRANTY; see the GNU General Public
 // License for details.
 
 using System.Net;
@@ -47,13 +47,13 @@ using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using Zeus.Contracts;
-using Zeus.Dsp;
-using Zeus.Protocol1;
-using Zeus.Protocol1.Discovery;
-using Zeus.Protocol2;
+using SimpleHPSDR.Contracts;
+using SimpleHPSDR.Dsp;
+using SimpleHPSDR.Protocol1;
+using SimpleHPSDR.Protocol1.Discovery;
+using SimpleHPSDR.Protocol2;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 public sealed partial class RadioService : IDisposable
 {
@@ -301,7 +301,7 @@ public sealed partial class RadioService : IDisposable
         public double AgcOffsetDb;
     }
     private readonly ExtraReceiver[] _extraReceivers = CreateExtraReceivers();
-    // Current Zeus ordinary Protocol-1 ingest decodes one DDC stream and fans it
+    // Current SimpleHPSDR ordinary Protocol-1 ingest decodes one DDC stream and fans it
     // out only to RX1/RX2. The P1 wire and some gateware can carry more, but
     // advertising RX3+ before Protocol1Client has a variable-DDC parser produces
     // enabled receivers with no samples. Keep this host capability separate from
@@ -309,7 +309,7 @@ public sealed partial class RadioService : IDisposable
     private const int Protocol1OrdinaryMaxReceivers = 2;
     private static ExtraReceiver[] CreateExtraReceivers()
     {
-        var a = new ExtraReceiver[Zeus.Contracts.WireContract.MaxReceivers];
+        var a = new ExtraReceiver[SimpleHPSDR.Contracts.WireContract.MaxReceivers];
         for (int i = 2; i < a.Length; i++) a[i] = new ExtraReceiver();
         return a;
     }
@@ -349,11 +349,11 @@ public sealed partial class RadioService : IDisposable
     // Brick2 is Hermes-on-P2, not OrionMkII). Unknown stays unknown; Decision 4
     // forbids inventing an OrionMkII identity for TX safety policy.
     private HpsdrBoardKind _p2BoardKind = HpsdrBoardKind.Unknown;
-    // True while Zeus is connected through the private N9DSP Protocol 3
+    // True while SimpleHPSDR is connected through the private N9DSP Protocol 3
     // sidecar. The public host deliberately keeps only connection metadata;
     // the sidecar owns all P3/N9DSP runtime code and binaries.
     private bool _p3Active;
-    private int _p3MaxReceivers = Zeus.Contracts.WireContract.MaxReceivers;
+    private int _p3MaxReceivers = SimpleHPSDR.Contracts.WireContract.MaxReceivers;
     // Firmware / gateware version string for the live connection, captured at
     // connect time from the discovery reply (P1: code-version byte raw[9];
     // P2: raw[13] + beta). Diagnostics-only — surfaced by ConnectionProbe so a
@@ -430,7 +430,7 @@ public sealed partial class RadioService : IDisposable
     //
     // Thetis user offset on the floor (udRX1AutoAGCOffset). The shipped setup
     // control starts at +20 dB and its startup handler copies that value into
-    // AutoAGCOffsetRX1. Zeus has no separate offset knob yet, so use the actual
+    // AutoAGCOffsetRX1. SimpleHPSDR has no separate offset knob yet, so use the actual
     // reference default rather than the old 0 dB assumption, which seated the
     // automatic threshold roughly 20 dB too hot.
     // SimpleHPSDR: settable (Thetis udRX1AutoAGCOffset), +20 dB by default.
@@ -460,7 +460,7 @@ public sealed partial class RadioService : IDisposable
     // ANALYZER FFT size here (console.cs:45987 — specRX FFTSize, 4096 by
     // default) because the floor was measured from that analyzer's bins: the
     // term converts per-bin noise to in-passband noise, so it MUST match the
-    // FFT the floor came from. Zeus's RX analyzer runs 16384 (8192 on the
+    // FFT the floor came from. SimpleHPSDR's RX analyzer runs 16384 (8192 on the
     // low-power profile) — plumbed in from DisplayPerformanceOptions by
     // DspPipelineService at construction. (The old hardcoded 1024 — the WDSP
     // channel block size, not any FFT — under-corrected by 12 dB and seated
@@ -496,7 +496,7 @@ public sealed partial class RadioService : IDisposable
     // P2 consumers) can hook a freshly-opened Protocol2Client without
     // probing DspPipelineService. Issue #174 — needed so the meter service
     // can wire its OnTelemetry handler to client.TelemetryReceived.
-    public event Action<Zeus.Protocol2.Protocol2Client>? P2Connected;
+    public event Action<SimpleHPSDR.Protocol2.Protocol2Client>? P2Connected;
     public event Action? P2Disconnected;
     // Fires whenever the effective PA snapshot changes (store edit, VFO band
     // crossing, drive slider). DspPipelineService consumes this to forward the
@@ -576,13 +576,13 @@ public sealed partial class RadioService : IDisposable
     // writes into the same instance; this is the seam between "mic arrived
     // over WS" and "EP2 packet got real IQ". When null the client falls back
     // to its internal test-tone generator (dev / tests without a hub).
-    private readonly Zeus.Protocol1.ITxIqSource? _txIqSource;
+    private readonly SimpleHPSDR.Protocol1.ITxIqSource? _txIqSource;
 
     // Optional RX-audio source for the Protocol-1 EP2 L/R slots (radio-codec
     // speaker output). Drained by Protocol1Client during RX; fed host-side by
     // RadioSpeakerAudioSink. Null in tests / hosts without the feature wired,
     // in which case P1 frames carry no RX audio (legacy behaviour).
-    private readonly Zeus.Protocol1.IRxAudioSource? _rxAudioSource;
+    private readonly SimpleHPSDR.Protocol1.IRxAudioSource? _rxAudioSource;
 
     // Optional non-hardware external slice receiver. When present its entry is
     // appended to the projected receiver list (reserved index
@@ -593,7 +593,7 @@ public sealed partial class RadioService : IDisposable
 
     public bool ReceiveOnly { get; }
 
-    public RadioService(ILoggerFactory loggerFactory, DspSettingsStore dspSettingsStore, PaSettingsStore paStore, FilterPresetStore? filterPresetStore = null, Zeus.Protocol1.ITxIqSource? txIqSource = null, PreferredRadioStore? preferredRadioStore = null, PsSettingsStore? psStore = null, RadioStateStore? radioStateStore = null, CwSettingsStore? cwSettingsStore = null, IInitialTxAudioConfigSource? initialTxAudioConfigSource = null, AntennaSettingsStore? antennaStore = null, AudioSettingsStore? audioStore = null, Nr3ModelStore? nr3ModelStore = null, Hl2GpioSettingsStore? hl2GpioStore = null, BandMemoryStore? bandMemoryStore = null, IExternalReceiverSource? externalReceiverSource = null, Zeus.Protocol1.IRxAudioSource? rxAudioSource = null, RfFilterSettingsStore? rfFilterStore = null, IConfiguration? configuration = null, IRadioDiscovery? p1Discovery = null, TransverterSettingsStore? transverterSettingsStore = null, LayoutStore? layoutStore = null, IBandPlanService? bandPlan = null, StationReceiveOnlyPolicy? receiveOnlyPolicy = null)
+    public RadioService(ILoggerFactory loggerFactory, DspSettingsStore dspSettingsStore, PaSettingsStore paStore, FilterPresetStore? filterPresetStore = null, SimpleHPSDR.Protocol1.ITxIqSource? txIqSource = null, PreferredRadioStore? preferredRadioStore = null, PsSettingsStore? psStore = null, RadioStateStore? radioStateStore = null, CwSettingsStore? cwSettingsStore = null, IInitialTxAudioConfigSource? initialTxAudioConfigSource = null, AntennaSettingsStore? antennaStore = null, AudioSettingsStore? audioStore = null, Nr3ModelStore? nr3ModelStore = null, Hl2GpioSettingsStore? hl2GpioStore = null, BandMemoryStore? bandMemoryStore = null, IExternalReceiverSource? externalReceiverSource = null, SimpleHPSDR.Protocol1.IRxAudioSource? rxAudioSource = null, RfFilterSettingsStore? rfFilterStore = null, IConfiguration? configuration = null, IRadioDiscovery? p1Discovery = null, TransverterSettingsStore? transverterSettingsStore = null, LayoutStore? layoutStore = null, IBandPlanService? bandPlan = null, StationReceiveOnlyPolicy? receiveOnlyPolicy = null)
     {
         ReceiveOnly = receiveOnlyPolicy?.Enabled ?? false;
         _loggerFactory = loggerFactory;
@@ -913,7 +913,7 @@ public sealed partial class RadioService : IDisposable
             // libwdsp's RNNR exports; the installed-model name comes from the
             // operator's model store. The frontend reveals NR3 only when both
             // are present (symbols available AND a model installed).
-            WdspNr3RnnrAvailable: Zeus.Dsp.Wdsp.WdspDspEngine.Nr3RnnrAvailable,
+            WdspNr3RnnrAvailable: SimpleHPSDR.Dsp.Wdsp.WdspDspEngine.Nr3RnnrAvailable,
             Nr3ModelName: _nr3ModelStore?.GetActiveModelName(),
             Nr3UsingBundledDefault: _nr3ModelStore?.UsingBundledDefault() ?? false,
             ZoomLevel: rsSnap?.ZoomLevel ?? 1,
@@ -989,7 +989,7 @@ public sealed partial class RadioService : IDisposable
                     rsSnap?.Mode ?? RxMode.USB,
                     rsSnap?.VfoHz ?? 14_200_000),
             Rx2Enabled: rsSnap?.Rx2Enabled ?? false,
-            Rx2AudioMode: rsSnap?.Rx2AudioMode ?? Zeus.Contracts.Rx2AudioMode.Both,
+            Rx2AudioMode: rsSnap?.Rx2AudioMode ?? SimpleHPSDR.Contracts.Rx2AudioMode.Both,
             TxVfo: rsSnap?.TxVfo ?? TxVfo.A,
             CwPitchHz: CwOffset.CwPitchHz,
             CtunEnabled: rsSnap?.CtunEnabled ?? false,
@@ -1700,7 +1700,7 @@ public sealed partial class RadioService : IDisposable
 
             // Drop any RX-audio buffered from a previous session so a fresh
             // P1 connect starts from silence rather than replaying a stale tail.
-            (_rxAudioSource as Zeus.Protocol1.RxAudioRing)?.Clear();
+            (_rxAudioSource as SimpleHPSDR.Protocol1.RxAudioRing)?.Clear();
             client = new Protocol1Client(
                 _loggerFactory.CreateLogger<Protocol1Client>(),
                 _txIqSource,
@@ -1816,7 +1816,7 @@ public sealed partial class RadioService : IDisposable
             // very first outgoing Config frame carries the correct bit.
             // Honoured on HL2 only; on every other board the flag is set
             // but the wire effect (legacy LT2208 DITHER) is not requested
-            // here, since Zeus only flips it from the HL2 settings panel.
+            // here, since SimpleHPSDR only flips it from the HL2 settings panel.
             if (client.BoardKind == HpsdrBoardKind.HermesLite2
                 && _preferredRadioStore is not null)
             {
@@ -2019,7 +2019,7 @@ public sealed partial class RadioService : IDisposable
     internal StateDto ReconcileProductPluginTxState(StateDto state) =>
         Interlocked.Read(ref _productPluginNativeFrequencyHz) > 0 ? Snapshot() : state;
 
-    // Zeus P1 shares its primary host frequency slot with TX. Serialize the final write with the
+    // SimpleHPSDR P1 shares its primary host frequency slot with TX. Serialize the final write with the
     // channel hold, so a delayed RX setter cannot overwrite the admitted TX
     // carrier after key-on. P2 has a separate DUC and reconciles its snapshot.
     internal void PushPrimaryRadioFrequency(long frequencyHz)
@@ -2794,7 +2794,7 @@ public sealed partial class RadioService : IDisposable
         lock (_sync)
         {
             var state = ProjectedStateUnderLock();
-            if (ActiveClient is Zeus.Protocol1.Protocol1Client p1)
+            if (ActiveClient is SimpleHPSDR.Protocol1.Protocol1Client p1)
                 p1.SetHardwareCwTxFrequency(HardwareCwOwnsCarrier(state)
                     ? ToHardwareFrequencyHz(TxCarrierHz(state)) : 0);
             if (includeProtocol2)
@@ -3497,7 +3497,7 @@ public sealed partial class RadioService : IDisposable
     public StateDto RequestAtuTune(int durationMs)
     {
         int ms = Math.Clamp(durationMs, 100, 30_000);
-        (ActiveClient as Zeus.Protocol1.Protocol1Client)?.RequestAtuTune(ms);
+        (ActiveClient as SimpleHPSDR.Protocol1.Protocol1Client)?.RequestAtuTune(ms);
         return Snapshot();
     }
 
@@ -3525,7 +3525,7 @@ public sealed partial class RadioService : IDisposable
 
     // TX-side per-family filter memory. Thetis stores a single TX filter Lo/Hi
     // (setup.cs:5029-5066); pihpsdr uses hardcoded per-mode shapes
-    // (transmitter.c:2108-2211). Zeus mirrors the RX per-family model so the
+    // (transmitter.c:2108-2211). SimpleHPSDR mirrors the RX per-family model so the
     // operator's USB TX width survives an AM round-trip, and LSB/USB share
     // absolute values with sign flipped at apply time. Defaults track Thetis
     // stock: SSB 150-2850, AM/DSB 0-4000, FM 0-3000 (Thetis narrowest FM TX
@@ -4980,7 +4980,7 @@ public sealed partial class RadioService : IDisposable
         double noiseOffset = 10.0 * Math.Log10(bwHz * _autoAgcAnalyzerFftSize / rate);
         // 3) top = 20·log10(max_gain) = 20·log10(out_target) − 20·log10(var_gain)
         //    − (thresh + noiseOffset). WDSP sets var_gain=10^(slope/200),
-        //    while Zeus/Thetis send Custom's UI slope multiplied by 10. Its dB
+        //    while SimpleHPSDR/Thetis send Custom's UI slope multiplied by 10. Its dB
         //    contribution is therefore exactly the UI slope. Canned modes use 0.
         double slopeDb = agc.Mode == AgcMode.Custom
             ? Math.Clamp(agc.Slope ?? 0, 0, 20)
@@ -5302,7 +5302,7 @@ public sealed partial class RadioService : IDisposable
     }
 
     // ---- TX tail (MOX hang) delay (issue #1294) --------------------------
-    // Thetis exposes PTT Delay up to 5000 ms. Zeus uses this specifically as a
+    // Thetis exposes PTT Delay up to 5000 ms. SimpleHPSDR uses this specifically as a
     // browser/WebSocket TX audio drain before the software MOX bit drops.
     internal const int MaxTailDelayMs = 5000;
 
@@ -5518,7 +5518,7 @@ public sealed partial class RadioService : IDisposable
     private Func<StateDto, bool>? _hardwareCwArmEvaluator;
     private int _hardwareCwSafetyBlocked;
     // Socketless observer of the exact config handed to the P2 client.
-    internal Action<Zeus.Protocol2.CwKeyerWireConfig>? HardwareCwConfigSinkForTests { get; set; }
+    internal Action<SimpleHPSDR.Protocol2.CwKeyerWireConfig>? HardwareCwConfigSinkForTests { get; set; }
 
     // The shared P1/P2 standing "no competing host transmission" gate: host CW
     // sender idle and no hardware-CW safety block latched. Lock-free volatile
@@ -5613,7 +5613,7 @@ public sealed partial class RadioService : IDisposable
             // additionally routes the standing permission through the engine
             // safety module; isolated RadioService tests retain the legacy
             // allow when no evaluator has been installed.
-            var config = new Zeus.Protocol2.CwKeyerWireConfig
+            var config = new SimpleHPSDR.Protocol2.CwKeyerWireConfig
             {
                 Active = active,
                 Mode = (CwKeyerMode)Volatile.Read(ref _cwKeyerMode),
@@ -5708,7 +5708,7 @@ public sealed partial class RadioService : IDisposable
         // wire MOX bit rises for both TUN and regular TX, so the client needs a
         // separate signal to decide. The P2 client picks up TUN through
         // DspPipelineService's TunActiveChanged subscription.
-        (ActiveClient as Zeus.Protocol1.Protocol1Client)?.SetTune(on);
+        (ActiveClient as SimpleHPSDR.Protocol1.Protocol1Client)?.SetTune(on);
         RecomputePaAndPush();
         TunActiveChanged?.Invoke(on);
         if (tuneFell) ApplyBoardKindToActiveClientIfSafe();
@@ -5724,7 +5724,7 @@ public sealed partial class RadioService : IDisposable
             _tunSwrFoldbackActive = 0;
             _txFrequencyTransition = false;
         }
-        (ActiveClient as Zeus.Protocol1.Protocol1Client)?.SetTune(false);
+        (ActiveClient as SimpleHPSDR.Protocol1.Protocol1Client)?.SetTune(false);
         TunActiveChanged?.Invoke(false);
         if (tuneFell) ApplyBoardKindToActiveClientIfSafe();
     }
@@ -5977,7 +5977,7 @@ public sealed partial class RadioService : IDisposable
     /// HL2 Band Volts PWM enable (issue #279). Updates the persisted
     /// per-radio preference AND any live Protocol-1 client so the next
     /// outgoing Config frame carries the new bit. Honoured on HL2 only;
-    /// non-HL2 boards never see this bit on the wire because Zeus' UI gate
+    /// non-HL2 boards never see this bit on the wire because SimpleHPSDR' UI gate
     /// (<c>HasHl2OptionalToggles</c>) hides the control there. Returns the
     /// effective value (echoes the input — present for symmetry with other
     /// state setters that may sanitize).
@@ -6176,7 +6176,7 @@ public sealed partial class RadioService : IDisposable
     /// Raised after the operator's frequency-correction factor (issue #325)
     /// has been persisted and pushed to the active P1 client. P2 subscribers
     /// (<c>DspPipelineService</c>) use this to forward the new factor to the
-    /// live <see cref="Zeus.Protocol2.Protocol2Client"/>, since
+    /// live <see cref="SimpleHPSDR.Protocol2.Protocol2Client"/>, since
     /// <see cref="ActiveClient"/> is always null in P2 mode.
     /// </summary>
     public event Action<double>? FrequencyCorrectionFactorChanged;
@@ -6708,7 +6708,7 @@ public sealed partial class RadioService : IDisposable
     }
 
     // ---- NR3 (RNNoise) model management ----
-    // The operator installs an RNNoise weights file (Zeus ships none). The model
+    // The operator installs an RNNoise weights file (SimpleHPSDR ships none). The model
     // store persists the file to disk and raises Changed, which the DSP pipeline
     // observes to (re)load it into libwdsp (process-global RNNRloadModel). We
     // mirror the active model name into StateDto so the UI can reveal NR3 once a
@@ -6725,7 +6725,7 @@ public sealed partial class RadioService : IDisposable
         // engine is live the result is null (unverified) and we accept it; the
         // load is re-attempted on the next connect.
         _nr3ModelStore.Install(content, fileName);
-        if (_nr3ModelStore.LastLoadResult == Zeus.Dsp.Nr3ModelLoadResult.LoadFailed)
+        if (_nr3ModelStore.LastLoadResult == SimpleHPSDR.Dsp.Nr3ModelLoadResult.LoadFailed)
         {
             _nr3ModelStore.Remove(); // drop the bad file — reverts to the bundled default
             throw new ArgumentException(
@@ -6969,7 +6969,7 @@ public sealed partial class RadioService : IDisposable
     }
 
     // RX/TX bandpass resolution — both selectors extend beyond the Thetis tap
-    // ladder through Zeus WDSP 2.0's 262144 planning ceiling. The pipeline
+    // ladder through SimpleHPSDR WDSP 2.0's 262144 planning ceiling. The pipeline
     // applies the enum live and the store preserves it across restarts.
     public StateDto SetRxBandpassWindow(BandpassWindow window)
     {
@@ -6978,7 +6978,7 @@ public sealed partial class RadioService : IDisposable
         return Snapshot();
     }
 
-    // Thetis caps the TX linear-phase bandpass at 16384 taps. Zeus exposes the
+    // Thetis caps the TX linear-phase bandpass at 16384 taps. SimpleHPSDR exposes the
     // extended tap ladder up to 262144 for minimum-phase TX (where the long
     // resolution rides a single master FIR) and for RX. In linear phase the
     // native ApplyTXABandpassProfile rebuilds ALL THREE serial TX bandpass
@@ -7140,7 +7140,7 @@ public sealed partial class RadioService : IDisposable
     // Mirrors the SetNr shape: validate, mutate state, persist, return
     // snapshot. DspPipelineService picks up the change-detect on the next
     // OnRadioStateChanged tick and pushes through to the engine.
-    internal Func<bool> CfcFftSizeAvailable { get; set; } = () => Zeus.Dsp.Wdsp.WdspDspEngine.CfcFftSizeAvailable;
+    internal Func<bool> CfcFftSizeAvailable { get; set; } = () => SimpleHPSDR.Dsp.Wdsp.WdspDspEngine.CfcFftSizeAvailable;
 
     public StateDto SetCfc(CfcSetRequest req)
     {
@@ -7388,7 +7388,7 @@ public sealed partial class RadioService : IDisposable
             // peak per Thetis clsHardwareSpecific.cs:313; everything else
             // sharing the byte (7000DLE / 8000DLE / Apache OrionMkII /
             // ANVELINA-PRO3 / Red Pitaya) takes the default. Default
-            // variant G2 preserves Zeus' pre-#218 P2 behaviour.
+            // variant G2 preserves SimpleHPSDR' pre-#218 P2 behaviour.
             (true,  HpsdrBoardKind.OrionMkII)                 => variant switch
             {
                 OrionMkIIVariant.G2     => 0.6121,
@@ -8066,7 +8066,7 @@ public sealed partial class RadioService : IDisposable
             _p2Active = true;
             _p2BoardKind = boardKind;
             _p3Active = false;
-            _p3MaxReceivers = Zeus.Contracts.WireContract.MaxReceivers;
+            _p3MaxReceivers = SimpleHPSDR.Contracts.WireContract.MaxReceivers;
             // Record the discovered firmware for the diagnostics snapshot.
             _connectedFirmware = firmware;
             ResetPhysicalProtectionNoLock();
@@ -8206,7 +8206,7 @@ public sealed partial class RadioService : IDisposable
             _p2Active = false;
             _p2BoardKind = HpsdrBoardKind.Unknown;
             _p3Active = true;
-            _p3MaxReceivers = Math.Clamp(maxReceivers, 1, Zeus.Contracts.WireContract.MaxReceivers);
+            _p3MaxReceivers = Math.Clamp(maxReceivers, 1, SimpleHPSDR.Contracts.WireContract.MaxReceivers);
             _connectedFirmware = firmware;
             ResetPhysicalProtectionNoLock();
             _attOffsetDb = 0;
@@ -8248,7 +8248,7 @@ public sealed partial class RadioService : IDisposable
         lock (_sync)
         {
             _p3Active = false;
-            _p3MaxReceivers = Zeus.Contracts.WireContract.MaxReceivers;
+            _p3MaxReceivers = SimpleHPSDR.Contracts.WireContract.MaxReceivers;
             _connectedFirmware = null;
             ResetPhysicalProtectionNoLock();
             _attOffsetDb = 0;
@@ -8308,7 +8308,7 @@ public sealed partial class RadioService : IDisposable
                 // Normal path: use discovery result.
                 if (_p2Active)
                 {
-                    // Brick2 announces as Hermes (0x01) on P2; older Zeus
+                    // Brick2 announces as Hermes (0x01) on P2; older SimpleHPSDR
                     // assumed every P2 radio was OrionMkII because the connect
                     // API did not carry discovery identity (issue #171).
                     // Decision 4 makes an absent identity fail-safe Unknown.
@@ -8378,7 +8378,7 @@ public sealed partial class RadioService : IDisposable
     // Orion-family boards reserve the first RxBaseDdc slots (DDC0/1) for the
     // PureSignal feedback pair, leaving user RX = MaxRxDdc - RxBaseDdc(board):
     // 8 on Hermes-class/Saturn, 6 on other Orion-family boards. Ordinary Protocol-1 is capped to the two
-    // receivers Zeus currently feeds; this is a host-ingest capability limit,
+    // receivers SimpleHPSDR currently feeds; this is a host-ingest capability limit,
     // not a claim about the P1 wire or board gateware. Disconnected state keeps
     // the flat wire ceiling so a later P2/P3 connection can be preconfigured.
     public int EffectiveMaxReceivers
@@ -8388,13 +8388,13 @@ public sealed partial class RadioService : IDisposable
             lock (_sync)
             {
                 if (_p2Active)
-                    return Zeus.Protocol2.Protocol2Client.RxDdcCapacityFor(ConnectedBoardKind, EffectiveOrionMkIIVariant)
-                         - Zeus.Protocol2.Protocol2Client.RxBaseDdc(ConnectedBoardKind);
+                    return SimpleHPSDR.Protocol2.Protocol2Client.RxDdcCapacityFor(ConnectedBoardKind, EffectiveOrionMkIIVariant)
+                         - SimpleHPSDR.Protocol2.Protocol2Client.RxBaseDdc(ConnectedBoardKind);
                 if (_p3Active)
                     return _p3MaxReceivers;
                 if (_activeClient is not null)
                     return Protocol1OrdinaryMaxReceivers;
-                return Zeus.Contracts.WireContract.MaxReceivers;
+                return SimpleHPSDR.Contracts.WireContract.MaxReceivers;
             }
         }
     }
@@ -8403,7 +8403,7 @@ public sealed partial class RadioService : IDisposable
     // Read by dispatch helpers (RadioCalibrations.For / PaDefaults.* /
     // BoardCapabilitiesTable.For) when EffectiveBoardKind == OrionMkII;
     // ignored for every other board. Default OrionMkIIVariant.G2 preserves
-    // Zeus' pre-#218 behaviour for operators who never touch this setting.
+    // SimpleHPSDR' pre-#218 behaviour for operators who never touch this setting.
     public OrionMkIIVariant EffectiveOrionMkIIVariant =>
         _preferredRadioStore?.GetOrionMkIIVariant() ?? OrionMkIIVariant.G2;
 

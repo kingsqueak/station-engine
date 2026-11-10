@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
@@ -10,11 +10,11 @@
 // option) any later version. See the LICENSE file at the root of this
 // repository for the full text, or https://www.gnu.org/licenses/.
 //
-// Zeus is an independent reimplementation in .NET — not a fork. Its
+// SimpleHPSDR is an independent reimplementation in .NET — not a fork. Its
 // Protocol-1 / Protocol-2 framing, WDSP integration, meter pipelines, and
 // TX behaviour were informed by studying the Thetis project
 // (https://github.com/ramdor/Thetis), the authoritative reference
-// implementation in the OpenHPSDR ecosystem. Zeus gratefully acknowledges
+// implementation in the OpenHPSDR ecosystem. SimpleHPSDR gratefully acknowledges
 // the Thetis contributors whose work made this possible:
 //
 //   Richard Samphire (MW0LGE), Warren Pratt (NR0V),
@@ -39,15 +39,15 @@
 // WDSP — loaded by Zeus via P/Invoke — is Copyright (C) Warren Pratt
 // (NR0V), distributed under GPL v2 or later.
 //
-// Zeus is distributed WITHOUT ANY WARRANTY; see the GNU General Public
+// SimpleHPSDR is distributed WITHOUT ANY WARRANTY; see the GNU General Public
 // License for details.
 
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Zeus.Contracts;
-using Zeus.Dsp;
+using SimpleHPSDR.Contracts;
+using SimpleHPSDR.Dsp;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
 /// Consumes raw FWD/REF ADC readings from Protocol1, smooths them with an
@@ -207,15 +207,15 @@ public sealed class TxMetersService : BackgroundService
 
     // Holds the last subscribed client so OnDisconnected can detach the
     // TelemetryReceived handler once the Protocol1 surface lands.
-    private Zeus.Protocol1.IProtocol1Client? _subscribedClient;
+    private SimpleHPSDR.Protocol1.IProtocol1Client? _subscribedClient;
     // Same idea, P2 side. Tracked separately so a P1 disconnect doesn't
     // accidentally detach a P2 handler (the two protocols can't be live at
     // the same time, but the events are independent and this keeps the
     // coupling clean).
-    private Zeus.Protocol2.Protocol2Client? _subscribedP2Client;
+    private SimpleHPSDR.Protocol2.Protocol2Client? _subscribedP2Client;
 
     // HL2 C&C-echo addresses that carry the alex FWD/REF ADCs and the PA
-    // temperature (see TelemetryReading docs in Zeus.Protocol1).
+    // temperature (see TelemetryReading docs in SimpleHPSDR.Protocol1).
     // addr=1 (C0=0x08): Ain0 = HL2 PA temperature;   Ain1 = alex_forward_power
     // addr=2 (C0=0x10): Ain0 = alex_reverse_power;   Ain1 = ADC0 bias
     // Match on bits 4:1 only — C0[0] is the PTT/MOX echo (so a live TX packet
@@ -228,11 +228,11 @@ public sealed class TxMetersService : BackgroundService
     /// <summary>
     /// Entry point for telemetry consumers. FWD+temperature share the 0x08
     /// slot (Ain1 / Ain0 respectively); REF arrives on 0x10 (Ain0). One
-    /// <see cref="Zeus.Protocol1.TelemetryReading"/> may update multiple axes
+    /// <see cref="SimpleHPSDR.Protocol1.TelemetryReading"/> may update multiple axes
     /// on the 0x08 slot (FWD + temperature) but never more than one slot's
     /// worth per call — packets carry the echo-slot map, not a combined blob.
     /// </summary>
-    public void OnTelemetry(Zeus.Protocol1.TelemetryReading reading)
+    public void OnTelemetry(SimpleHPSDR.Protocol1.TelemetryReading reading)
     {
         switch (reading.C0Address & C0AddrMask)
         {
@@ -467,7 +467,7 @@ public sealed class TxMetersService : BackgroundService
             tempC = null;
             ageMs = null;
             updatedUtc = null;
-            recommendation = "The G2 manual confirms current, voltage, temperature sensors and fan cooling, but Zeus has not mapped the G2 Protocol-2 PA-temperature word yet. Capture P2 diagnostics markers during TX warm-up and fan transitions before arming thermal inhibit; use RF, SWR, supply, and duty-cycle telemetry as live protection evidence meanwhile.";
+            recommendation = "The G2 manual confirms current, voltage, temperature sensors and fan cooling, but SimpleHPSDR has not mapped the G2 Protocol-2 PA-temperature word yet. Capture P2 diagnostics markers during TX warm-up and fan transitions before arming thermal inhibit; use RF, SWR, supply, and duty-cycle telemetry as live protection evidence meanwhile.";
         }
         else if (seen)
         {
@@ -482,7 +482,7 @@ public sealed class TxMetersService : BackgroundService
             source = "p2-g2-temperature-slot-unmapped";
             status = "p2-g2-temp-unmapped";
             decoded = false;
-            recommendation = "The G2 manual confirms current, voltage, temperature sensors and fan cooling, but Zeus has not mapped the G2 Protocol-2 PA-temperature word yet. Capture P2 diagnostics markers during TX warm-up and fan transitions before arming thermal inhibit; use RF, SWR, supply, and duty-cycle telemetry as live protection evidence meanwhile.";
+            recommendation = "The G2 manual confirms current, voltage, temperature sensors and fan cooling, but SimpleHPSDR has not mapped the G2 Protocol-2 PA-temperature word yet. Capture P2 diagnostics markers during TX warm-up and fan transitions before arming thermal inhibit; use RF, SWR, supply, and duty-cycle telemetry as live protection evidence meanwhile.";
         }
         else if (hl2Class)
         {
@@ -495,7 +495,7 @@ public sealed class TxMetersService : BackgroundService
             source = "unavailable";
             status = "unsupported";
             decoded = false;
-            recommendation = "This board does not currently have a mapped PA-temperature telemetry path in Zeus; PA protection should rely on SWR, timeout, RF power, supply, and duty-cycle diagnostics.";
+            recommendation = "This board does not currently have a mapped PA-temperature telemetry path in SimpleHPSDR; PA protection should rely on SWR, timeout, RF power, supply, and duty-cycle diagnostics.";
         }
 
         return new(
@@ -950,7 +950,7 @@ public sealed class TxMetersService : BackgroundService
         return (fwdW, refW, swr);
     }
 
-    private void OnConnected(Zeus.Protocol1.IProtocol1Client client)
+    private void OnConnected(SimpleHPSDR.Protocol1.IProtocol1Client client)
     {
         _subscribedClient = client;
         client.TelemetryReceived += OnTelemetry;
@@ -1002,13 +1002,13 @@ public sealed class TxMetersService : BackgroundService
     ///
     /// Runs on the Protocol2Client RX thread; OnTelemetryRaw takes _sync.
     /// </summary>
-    public void OnP2Telemetry(Zeus.Protocol2.P2TelemetryReading reading)
+    public void OnP2Telemetry(SimpleHPSDR.Protocol2.P2TelemetryReading reading)
     {
         OnTelemetryRaw(reading.FwdAdc, reading.RevAdc);
         ApplyPaVoltsSmoothed(reading.UserAdc0);
     }
 
-    private void OnP2Connected(Zeus.Protocol2.Protocol2Client client)
+    private void OnP2Connected(SimpleHPSDR.Protocol2.Protocol2Client client)
     {
         _subscribedP2Client = client;
         client.TelemetryReceived += OnP2Telemetry;

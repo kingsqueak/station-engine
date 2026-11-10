@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
@@ -15,7 +15,7 @@
 // Thetis CWX defaults (Project Files/Source/Console/cwx.cs, load_alpha at
 // the morsedef.txt boot). Thetis is GPL-2.0+; preserving the lineage.
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
 /// One emitted CW timing symbol: a stretch of key-down (carrier on) or

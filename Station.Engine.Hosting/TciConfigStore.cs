@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
@@ -14,9 +14,9 @@
 // statement and per-component attribution.
 
 using LiteDB;
-using Zeus.Contracts;
+using SimpleHPSDR.Contracts;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 // TCI runtime config persistence. Holds the operator's pending Enabled/Bind/Port
 // selection so it survives restarts — TCI shares Kestrel's listener, which
@@ -24,12 +24,12 @@ namespace Zeus.Server;
 // re-read at next startup. Lives in station-engine.db alongside the other
 // engine-owned preference stores.
 //
-// Single-row collection: there is one TCI server per Zeus instance, so a
+// Single-row collection: there is one TCI server per SimpleHPSDR instance, so a
 // profile key would just be ceremony. Everything else (PaSettings, PsSettings)
 // uses Upsert keyed by ProfileId; here the row identity is implicit.
 public sealed class TciConfigStore : IDisposable
 {
-    private readonly Zeus.Data.SharedLiteDatabase.Lease _dbLease;
+    private readonly SimpleHPSDR.Data.SharedLiteDatabase.Lease _dbLease;
     private readonly LiteDatabase _db;
     private readonly ILiteCollection<TciConfigEntry> _entries;
     private readonly ILogger<TciConfigStore> _log;
@@ -43,7 +43,7 @@ public sealed class TciConfigStore : IDisposable
         if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
             Directory.CreateDirectory(dir);
 
-        _dbLease = Zeus.Data.SharedLiteDatabase.Acquire(dbPath);
+        _dbLease = SimpleHPSDR.Data.SharedLiteDatabase.Acquire(dbPath);
         _db = _dbLease.Database;
         _entries = _db.GetCollection<TciConfigEntry>("tci_config");
 

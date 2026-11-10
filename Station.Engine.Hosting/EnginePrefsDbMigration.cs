@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
@@ -9,12 +9,12 @@
 
 using LiteDB;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
 /// One-time, rollback-safe split of engine-owned collections from the product
 /// preferences database into station-engine.db. Source collections are never
-/// changed or deleted, so an older Zeus build can still use zeus-prefs.db.
+/// changed or deleted, so an older SimpleHPSDR build can still use simplehpsdr-prefs.db.
 /// </summary>
 internal static class EnginePrefsDbMigration
 {
@@ -41,10 +41,10 @@ internal static class EnginePrefsDbMigration
             yield return name;
     }
 
-    // Per-plugin settings collections (Zeus.Plugins.Host PluginSettingsStore
+    // Per-plugin settings collections (SimpleHPSDR.Plugins.Host PluginSettingsStore
     // names each one "plugin_" + sanitized plugin id). The set is dynamic, so
     // it is matched by prefix instead of being listed. The desktop host keeps
-    // them in zeus-prefs.db and the standalone engine in station-engine.db.
+    // them in simplehpsdr-prefs.db and the standalone engine in station-engine.db.
     internal const string PluginSettingsCollectionPrefix = "plugin_";
 
     internal static bool IsPluginSettingsCollection(string collectionName) =>
@@ -125,7 +125,7 @@ internal static class EnginePrefsDbMigration
                 "Product and engine preferences must use different database files.");
 
         var externalMarkerPath = ExternalMarkerPath(engineFullPath);
-        using var engineLease = Zeus.Data.SharedLiteDatabase.Acquire(engineFullPath);
+        using var engineLease = SimpleHPSDR.Data.SharedLiteDatabase.Acquire(engineFullPath);
         var engine = engineLease.Database;
         var marker = engine.GetCollection<BsonDocument>(MarkerCollectionName);
         var v1Complete = marker.FindById(V1MarkerId) is not null;
@@ -215,7 +215,7 @@ internal static class EnginePrefsDbMigration
         if (!File.Exists(productFullPath))
             return;
 
-        using var productLease = Zeus.Data.SharedLiteDatabase.Acquire(productFullPath);
+        using var productLease = SimpleHPSDR.Data.SharedLiteDatabase.Acquire(productFullPath);
         var product = productLease.Database;
         for (var index = 0; index < collectionNames.Count; index++)
         {
@@ -260,7 +260,7 @@ internal static class EnginePrefsDbMigration
             throw new ArgumentOutOfRangeException(nameof(version));
 
         var engineFullPath = Path.GetFullPath(engineDbPath);
-        using var engineLease = Zeus.Data.SharedLiteDatabase.Acquire(engineFullPath);
+        using var engineLease = SimpleHPSDR.Data.SharedLiteDatabase.Acquire(engineFullPath);
         var engine = engineLease.Database;
         var marker = engine.GetCollection<BsonDocument>(MarkerCollectionName);
         WriteMarker(engine, marker, V1MarkerId, version: 1);

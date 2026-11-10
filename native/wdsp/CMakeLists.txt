@@ -1,4 +1,4 @@
-# CMakeLists.txt — Zeus WDSP shared library build
+# CMakeLists.txt — SimpleHPSDR WDSP shared library build
 #
 # Produces:
 #   macOS   : libwdsp.dylib  (arm64, x86_64)
@@ -25,7 +25,7 @@
 cmake_minimum_required(VERSION 3.20)
 project(wdsp
     VERSION 2.10.0
-    DESCRIPTION "WDSP DSP engine, packaged for Zeus"
+    DESCRIPTION "WDSP DSP engine, packaged for SimpleHPSDR"
     LANGUAGES C
 )
 
@@ -199,7 +199,7 @@ endif()
 # library to ship.
 #
 # Thetis's libspecbleach/CMakeLists.txt is Windows-only (hardcoded fftw_x64
-# path, find_library lookup for the import .lib). We don't use it here — Zeus
+# path, find_library lookup for the import .lib). We don't use it here — SimpleHPSDR
 # drives the build directly so we get cross-platform behaviour with one
 # detection chain. Thetis's CMakeLists stays in-tree as upstream reference.
 # -----------------------------------------------------------------------------
@@ -321,10 +321,10 @@ endif()
 # librnnoise (NR3 / RNNoise) — vendored at native/rnnoise/, built inline as a
 # STATIC sub-target so it embeds into libwdsp (same pattern as libspecbleach).
 #
-# Built WITHOUT the baked-in default model: Zeus requires the operator to
+# Built WITHOUT the baked-in default model: SimpleHPSDR requires the operator to
 # install a model (RNNRloadModel / rnnoise_model_from_filename). USE_WEIGHTS_FILE
 # compiles out the default-weight arrays (all guarded by #ifndef USE_WEIGHTS_FILE
-# in upstream's rnnoise_data.c); Zeus vendors a *minimal* rnnoise_data.c carrying
+# in upstream's rnnoise_data.c); SimpleHPSDR vendors a *minimal* rnnoise_data.c carrying
 # only init_rnnoise(), so no stock weights ship. NR3 is then inert (clean
 # pass-through) until a model file is loaded. See native/rnnoise/VENDORING.md for
 # the vendor step and the pinned upstream commit.
@@ -339,7 +339,7 @@ if(WDSP_WITH_NR3)
     # vendored tree deliberately omits upstream's standalone tools (dump_features,
     # dump_rnnoise_tables, write_weights) and the x86 SIMD .c files, so a
     # non-recursive glob is exactly the library set. NOTE: rnnoise_data.c MUST be
-    # compiled — it is Zeus's minimal init_rnnoise()-only unit (denoise.c calls
+    # compiled — it is SimpleHPSDR's minimal init_rnnoise()-only unit (denoise.c calls
     # init_rnnoise even in weights-file mode); USE_WEIGHTS_FILE drops the default
     # weights at compile time so nothing large ships.
     file(GLOB RNNOISE_SRCS "${RNNOISE_DIR}/src/*.c")
@@ -429,7 +429,7 @@ endif()
 # which already enables that flag and runs ctest, covers it.
 if(WDSP_BUILD_FM_TESTS OR WDSP_BUILD_OSCTRL_TESTS)
     enable_testing()
-    # Zeus FM tone extension (fm_tone.c): DCS Golay codewords vs published
+    # SimpleHPSDR FM tone extension (fm_tone.c): DCS Golay codewords vs published
     # vectors, CTCSS Goertzel bank, DCS slicer and tone-squelch gate. The
     # helpers are WDSP-free, so the test links only fm_tone.c.
     add_executable(wdsp_fm_tests
@@ -446,7 +446,7 @@ if(WDSP_BUILD_FM_TESTS OR WDSP_BUILD_OSCTRL_TESTS)
     endif()
     add_test(NAME wdsp_fm_tests COMMAND wdsp_fm_tests)
 
-    # Zeus contiguous siphon reader (sip_cursor.c): every block once, in
+    # SimpleHPSDR contiguous siphon reader (sip_cursor.c): every block once, in
     # order, across ring wrap, backlog, flush and partial blocks. WDSP-free.
     add_executable(wdsp_sip_cursor_tests
         sip_cursor.c

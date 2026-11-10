@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
@@ -19,10 +19,10 @@
 // (https://github.com/dl1bz/deskhpsdr), maintained by Heiko (DL1BZ).
 // Both are GPL-2.0-or-later.
 
-using Zeus.Contracts;
-using Zeus.Protocol1.Discovery;
+using SimpleHPSDR.Contracts;
+using SimpleHPSDR.Protocol1.Discovery;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
 /// Dispatch from <see cref="HpsdrBoardKind"/> to the per-board
@@ -33,7 +33,7 @@ namespace Zeus.Server;
 ///
 /// Constants come from Thetis <c>console.cs</c> <c>computeAlexFwdPower</c> and
 /// <c>computeRefPower</c>. Where Thetis distinguishes flavours that
-/// Zeus' single-byte board id collapses (the 0x0A wire-byte family —
+/// SimpleHPSDR' single-byte board id collapses (the 0x0A wire-byte family —
 /// ANAN-G2 vs Apache OrionMkII vs ANAN-8000D etc.), the operator selects
 /// the variant via <see cref="OrionMkIIVariant"/> and the dispatch routes
 /// to the right bucket. Default <see cref="OrionMkIIVariant.G2"/> matches
@@ -75,7 +75,7 @@ internal static class RadioCalibrations
         HpsdrBoardKind.Orion       => RadioCalibration.Anan200,
         // Board id 0x0A aliases six radios. Operator selects the variant
         // via PreferredRadioStore.GetOrionMkIIVariant(); default G2
-        // preserves Zeus' pre-#218 behaviour. Sources:
+        // preserves SimpleHPSDR' pre-#218 behaviour. Sources:
         //  - G2 / 7000DLE / G2-1K / ANVELINA / RedPitaya: FWD bridge 0.12 /
         //    offset 32; REF bridge 0.15 / offset 28.
         //  - 8000DLE / Apache OrionMkII original: FWD bridge 0.08 / offset 18;

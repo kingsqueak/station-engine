@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA), Christian Suarez (N9WAR), and contributors.
 //
 // See ATTRIBUTIONS.md at the repository root for the full provenance
 // statement and per-component attribution.
 
-using Zeus.Contracts;
+using SimpleHPSDR.Contracts;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
 /// Maps the operator UI preference routes (theme, display, toolbar, NR
@@ -79,7 +79,7 @@ public static class OperatorUiSettingsEndpoints
             return Results.Ok(saved with { ActivePanadapterWidth = dsp.ConfiguredPanadapterWidth });
         });
 
-        // SimpleHPSDR fork: the Zeus browser app's screen settings (background
+        // SimpleHPSDR fork: the SimpleHPSDR browser app's screen settings (background
         // images, bottom pin, panadapter/waterfall split, toolbar, NR screen
         // prefs, clock, theme) and the wideband signal markers are gone.
 

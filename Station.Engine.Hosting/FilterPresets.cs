@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
@@ -10,12 +10,12 @@
 // option) any later version. See the LICENSE file at the root of this
 // repository for the full text, or https://www.gnu.org/licenses/.
 //
-// Zeus is an independent reimplementation in .NET — not a fork.
+// SimpleHPSDR is an independent reimplementation in .NET — not a fork.
 // Thetis is the authoritative reference; see ATTRIBUTIONS.md.
 
-using Zeus.Contracts;
+using SimpleHPSDR.Contracts;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 // Thetis default filter preset tables from console.cs:5182–5585
 // InitFilterPresets. Numbers are signed Hz VFO-relative. CW uses
@@ -128,10 +128,10 @@ public static class FilterPresets
         new("VAR2", "Var 2", -3300, 3300, true),
     ];
 
-    // DIGU/DIGL passbands are one-sided in Zeus (see SignedFilterForMode /
+    // DIGU/DIGL passbands are one-sided in SimpleHPSDR (see SignedFilterForMode /
     // WdspDspEngine.ApplyBandpassForMode: DIGU sits in the positive baseband
     // (0..+N), DIGL in the negative (-N..0)). Thetis presets the pair symmetric
-    // around 0 because Thetis re-maps by mode inside the WDSP RXA setter; Zeus
+    // around 0 because Thetis re-maps by mode inside the WDSP RXA setter; SimpleHPSDR
     // does not, so a symmetric ±N pair here would abs-fold to (N, N) — a
     // zero-width DIGU passband floored to a 10 Hz slot at ±N Hz (issue #159:
     // audio disappears when picking any DIGU/DIGL preset).

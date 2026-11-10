@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 public sealed record WaveformSnapshot(bool Available, string Source, string Kind,
     int ReceiverIndex, int SampleRateHz, int Channels, long Seq, long Generation,

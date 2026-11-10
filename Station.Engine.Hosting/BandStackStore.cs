@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
@@ -11,9 +11,9 @@
 // repository for the full text, or https://www.gnu.org/licenses/.
 
 using LiteDB;
-using Zeus.Contracts;
+using SimpleHPSDR.Contracts;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 // Band stack (issue #179): a collection of operator-pinned named presets per
 // band that snapshot (hz, mode, filter). Lives in station-engine.db alongside
@@ -22,7 +22,7 @@ namespace Zeus.Server;
 // here have a stable Id + Label and are managed only by explicit push/delete.
 public sealed class BandStackStore : IDisposable
 {
-    private readonly Zeus.Data.SharedLiteDatabase.Lease _dbLease;
+    private readonly SimpleHPSDR.Data.SharedLiteDatabase.Lease _dbLease;
     private readonly LiteDatabase _db;
     private readonly ILiteCollection<BandStackEntry> _entries;
     private readonly ILogger<BandStackStore> _log;
@@ -38,7 +38,7 @@ public sealed class BandStackStore : IDisposable
             Directory.CreateDirectory(dir);
         }
 
-        _dbLease = Zeus.Data.SharedLiteDatabase.Acquire(dbPath);
+        _dbLease = SimpleHPSDR.Data.SharedLiteDatabase.Acquire(dbPath);
         _db = _dbLease.Database;
         _entries = _db.GetCollection<BandStackEntry>("band_stack");
         _entries.EnsureIndex(x => x.Band);

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 public sealed record BandwidthSpectrumSnapshot(bool Available, string Source, int ReceiverIndex,
     float[] Bins, int Width, double CenterHz, long CarrierHz, string Mode, double HzPerBin,

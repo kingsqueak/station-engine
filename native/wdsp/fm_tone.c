@@ -1,8 +1,8 @@
 /*  fm_tone.c
 
-Zeus extension (FM sub-audible signalling) -- not part of upstream WDSP.
+SimpleHPSDR extension (FM sub-audible signalling) -- not part of upstream WDSP.
 
-This file is part of Zeus's vendored copy of WDSP, a program that implements
+This file is part of SimpleHPSDR's vendored copy of WDSP, a program that implements
 a Software-Defined Radio. WDSP is Copyright (C) Warren Pratt, NR0V.
 
 This program is free software; you can redistribute it and/or
@@ -17,7 +17,7 @@ GNU General Public License for more details.
 
 */
 
-// Zeus extension (FM tones). See fm_tone.h for the DCS codeword layout.
+// SimpleHPSDR extension (FM tones). See fm_tone.h for the DCS codeword layout.
 //
 // DCS references (codeword construction and bit order):
 //   * Golay (23,12) layout "P11..P1-100-C9..C1", DCS 023 =

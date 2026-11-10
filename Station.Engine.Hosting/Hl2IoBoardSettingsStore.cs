@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 using LiteDB;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 public sealed record Hl2IoBoardBand(string Band, byte RxAntenna = 0, byte TxAntenna = 0);
 
 public sealed class Hl2IoBoardSettingsStore : IDisposable
 {
-    private readonly Zeus.Data.SharedLiteDatabase.Lease _lease;
+    private readonly SimpleHPSDR.Data.SharedLiteDatabase.Lease _lease;
     private readonly ILiteCollection<Hl2IoBoardBandEntry> _bands;
     private readonly object _sync = new();
     public event Action? Changed;
@@ -17,7 +17,7 @@ public sealed class Hl2IoBoardSettingsStore : IDisposable
         var path = dbPathOverride ?? PrefsDbPath.EngineGet();
         var directory = Path.GetDirectoryName(path);
         if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
-        _lease = Zeus.Data.SharedLiteDatabase.Acquire(path);
+        _lease = SimpleHPSDR.Data.SharedLiteDatabase.Acquire(path);
         _bands = _lease.Database.GetCollection<Hl2IoBoardBandEntry>("hl2_io_bands");
     }
 

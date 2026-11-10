@@ -2,9 +2,9 @@
 
 # RADE V1 native source and rebuild procedure
 
-`zeus_rade` is one shared library containing the Python-free RADE C modem,
+`simplehpsdr_rade` is one shared library containing the Python-free RADE C modem,
 Opus DNN/FARGAN, FreeDV reliable text and its five Codec2 LDPC units, and the
-Zeus BSD-2-Clause shim. `CMakeLists.txt` is the authoritative composition.
+SimpleHPSDR BSD-2-Clause shim. `CMakeLists.txt` is the authoritative composition.
 
 ## Obtain and verify the exact upstream source
 
@@ -61,8 +61,8 @@ Install CMake and Ninja, then run:
 cmake -S native/radae -B native/build-rade -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
   -DOPUS_DISABLE_INTRINSICS=ON \
-  -DZEUS_RADE_VENDOR="$PWD/native/radae/vendor" \
-  -DZEUS_RADE_BUILD_TEST=OFF
+  -DSIMPLEHPSDR_RADE_VENDOR="$PWD/native/radae/vendor" \
+  -DSIMPLEHPSDR_RADE_BUILD_TEST=OFF
 cmake --build native/build-rade --config Release --parallel
 ```
 
@@ -79,8 +79,8 @@ sets the Windows output name and static GCC runtime link. macOS uses the same
 scalar recipe; its conveyed arm64 dylib was built locally with AppleClang
 21.0.0, CMake 4.3.2, and Ninja 1.13.0 and passed the managed RADE test families.
 
-The result is `libzeus_rade.so` on Linux, `zeus_rade.dll` on Windows, or
-`libzeus_rade.dylib` on macOS. Stage only a library built and validated for its
+The result is `libsimplehpsdr_rade.so` on Linux, `simplehpsdr_rade.dll` on Windows, or
+`libsimplehpsdr_rade.dylib` on macOS. Stage only a library built and validated for its
 matching RID.
 
 ## Binary/source binding and license disposition

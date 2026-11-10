@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2026 Christian Suarez (N9WAR), and contributors.
 //
 // Protocol-2 radio-side speaker sink. DeskHPSDR / Thetis feed the radio's
 // onboard codec (TLV320 → speaker / headphone / line-out jack) under
 // Protocol 2 by sending compact UDP audio packets to the firmware's speaker
-// port (1028). This sink gives Zeus the same path so a P2 operator can hear
+// port (1028). This sink gives SimpleHPSDR the same path so a P2 operator can hear
 // RX through the radio's own speaker jack, mirroring the P1 RadioSpeakerAudioSink
 // behaviour. Works for any P2 board with an onboard codec (Hermes / ANAN-10E /
 // ANAN-100D/200D / HermesC10 / Saturn family) — the byte_to_32bits gateware
@@ -15,15 +15,15 @@
 using System.Buffers.Binary;
 using System.Diagnostics;
 using System.Net.Sockets;
-using Zeus.Contracts;
-using Zeus.Protocol2;
+using SimpleHPSDR.Contracts;
+using SimpleHPSDR.Protocol2;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
 /// Sends RX audio to the connected Protocol-2 radio's onboard codec via UDP
 /// port 1028. Gated on the operator opt-in <see cref="RadioSpeakerSettingsStore"/>
-/// (default off) so a Zeus user who already hears RX audio host-side doesn't get
+/// (default off) so a SimpleHPSDR user who already hears RX audio host-side doesn't get
 /// doubled output until they ask for it. The Protocol-1 counterpart is
 /// <see cref="RadioSpeakerAudioSink"/> (writes into the EP2 frame's L/R slots);
 /// the two are mutually exclusive at
@@ -183,7 +183,7 @@ internal sealed class SaturnSpeakerAudioSink : IRxAudioSink, IHostedService, IDi
         _worker = new Thread(WorkerLoop)
         {
             IsBackground = true,
-            Name = "zeus-p2-speaker-tx",
+            Name = "simplehpsdr-p2-speaker-tx",
         };
         _worker.Start();
         return Task.CompletedTask;

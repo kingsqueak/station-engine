@@ -4,10 +4,10 @@ using System.Reflection;
 using System.Net;
 using System.Text.Json;
 using Station.AudioRing;
-using Zeus.Contracts;
-using Zeus.Dsp.Wdsp;
+using SimpleHPSDR.Contracts;
+using SimpleHPSDR.Dsp.Wdsp;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>Maps the versioned SPA-to-station protocol discovery surface.</summary>
 public static class StationProtocolEndpoints
@@ -333,7 +333,7 @@ public static class StationProtocolEndpoints
                 return;
             }
             var log = context.RequestServices.GetRequiredService<ILoggerFactory>()
-                .CreateLogger("Zeus.Server.RemoteTxLeaseHold");
+                .CreateLogger("SimpleHPSDR.Server.RemoteTxLeaseHold");
             await RemoteTxLeaseHold.RunAsync(
                 context,
                 leaseId,

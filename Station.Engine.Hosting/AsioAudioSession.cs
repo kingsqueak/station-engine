@@ -2,7 +2,7 @@
 
 using System.Runtime.InteropServices;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 internal sealed record AsioDriverInfo(string Id, string Name);
 internal sealed record AsioChannelInfo(int Index, string Name);
@@ -275,7 +275,7 @@ internal sealed class AsioAudioSession : IAsioSession
         int rate = checked((int)AsioInterop.SampleRate(_handle));
         if (rate != RequiredSampleRate)
         {
-            string error = $"The ASIO driver negotiated {rate} Hz; Zeus requires exactly {RequiredSampleRate} Hz.";
+            string error = $"The ASIO driver negotiated {rate} Hz; SimpleHPSDR requires exactly {RequiredSampleRate} Hz.";
             AsioInterop.SessionDestroy(_handle);
             _handle = IntPtr.Zero;
             throw new InvalidOperationException(error);
@@ -314,7 +314,7 @@ internal sealed class AsioAudioSession : IAsioSession
             _pump = new Thread(PumpLoop)
             {
                 IsBackground = true,
-                Name = "zeus-asio-pump",
+                Name = "simplehpsdr-asio-pump",
                 Priority = ThreadPriority.AboveNormal,
             };
             _started = true;
@@ -673,7 +673,7 @@ internal sealed class AsioAudioSession : IAsioSession
         if (stopError is not null) throw stopError;
     }
 
-    // Values match native/asio/zeus_asio.h zeus_asio_event.
+    // Values match native/asio/simplehpsdr_asio.h simplehpsdr_asio_event.
     [Flags]
     internal enum AsioEvents : uint
     {

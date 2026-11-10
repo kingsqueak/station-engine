@@ -2,7 +2,7 @@
 
 # Steinberg ASIO SDK vendoring
 
-Zeus builds its Windows-only `zeus_asio.dll` host shim against the ASIO SDK
+SimpleHPSDR builds its Windows-only `simplehpsdr_asio.dll` host shim against the ASIO SDK
 2.3.4 interface headers. The project elects the GNU GPL version 3 option in
 Steinberg's dual license. No proprietary-license agreement, sample driver,
 logo, artwork, or branding asset is included.
@@ -21,7 +21,7 @@ Only these unmodified files are vendored:
 - `vendor/asiosdk-2.3.4/common/asiosys.h`
 - `vendor/asiosdk-2.3.4/common/iasiodrv.h`
 
-The Steinberg host helpers are intentionally not used. `zeus_asio.cpp` owns
+The Steinberg host helpers are intentionally not used. `simplehpsdr_asio.cpp` owns
 driver registry enumeration, COM lifetime, format conversion, synchronization,
 and the narrow exported C ABI. This avoids carrying obsolete sample projects
 or a second public ABI into the product.

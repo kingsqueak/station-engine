@@ -8,7 +8,7 @@
 #include <cstdint>
 #include <cstring>
 
-namespace zeus_asio::detail {
+namespace simplehpsdr_asio::detail {
 
 inline uint16_t read_u16_be(const uint8_t* p) noexcept
 {
@@ -228,4 +228,4 @@ inline bool valid_input_pair(int32_t first, uint32_t width, int32_t count) noexc
         && first < count && (width == 1 || (first % 2 == 0 && count - first >= 2));
 }
 
-} // namespace zeus_asio::detail
+} // namespace simplehpsdr_asio::detail

@@ -1,4 +1,4 @@
-# native/miniaudio/CMakeLists.txt — Zeus miniaudio shim build
+# native/miniaudio/CMakeLists.txt — SimpleHPSDR miniaudio shim build
 #
 # Produces:
 #   macOS   : libminiaudio.dylib  (arm64, x86_64) — CoreAudio backend
@@ -6,19 +6,19 @@
 #   Windows : miniaudio.dll       (x64, arm64)    — WASAPI
 #
 # Source is vendored upstream `miniaudio.h` (David Reid / mackron, v0.11.25,
-# MIT-0 / public-domain) plus `zeus_miniaudio.c` which wraps it in the small
-# stable C ABI the Zeus C# P/Invoke binds against. See README.md.
+# MIT-0 / public-domain) plus `simplehpsdr_miniaudio.c` which wraps it in the small
+# stable C ABI the SimpleHPSDR C# P/Invoke binds against. See README.md.
 
 cmake_minimum_required(VERSION 3.20)
-project(zeus_miniaudio
+project(simplehpsdr_miniaudio
     VERSION 0.11.25
-    DESCRIPTION "miniaudio audio I/O — Zeus desktop-mode RX sink + TX mic capture"
+    DESCRIPTION "miniaudio audio I/O — SimpleHPSDR desktop-mode RX sink + TX mic capture"
     LANGUAGES C
 )
 
 set(CMAKE_C_STANDARD 11)
-# Hide everything by default; the Zeus ABI uses an explicit visibility
-# attribute so only zeus_ma_* exports leak out. Keeps miniaudio's giant
+# Hide everything by default; the SimpleHPSDR ABI uses an explicit visibility
+# attribute so only simplehpsdr_ma_* exports leak out. Keeps miniaudio's giant
 # internal symbol table from polluting the .dylib.
 set(CMAKE_C_VISIBILITY_PRESET hidden)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
@@ -28,7 +28,7 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
 endif()
 
 add_library(miniaudio SHARED
-    zeus_miniaudio.c
+    simplehpsdr_miniaudio.c
 )
 
 target_include_directories(miniaudio PRIVATE

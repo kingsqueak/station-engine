@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA), Christian Suarez (N9WAR), and contributors.
 
-using Zeus.Contracts;
+using SimpleHPSDR.Contracts;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 // CW-mode dial/LO offset helpers.
 //
@@ -16,7 +16,7 @@ namespace Zeus.Server;
 // Thetis's convention (console.cs:31845-31858, the click-tune-display path).
 //
 // Without this offset the WDSP filter at +475..+725 Hz audio sits 600 Hz
-// to the right of the dial in spectrum coordinates, which is what Zeus
+// to the right of the dial in spectrum coordinates, which is what SimpleHPSDR
 // did up to this commit — and why operators had to manually tune
 // 600 Hz off the signal to hear it.
 internal static class CwOffset

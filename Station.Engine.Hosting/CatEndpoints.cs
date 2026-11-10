@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright (C) 2026 Douglas J. Cerrato (KB2UKA) and contributors.
 
-using Zeus.Contracts;
-using Zeus.Server.Cat;
+using SimpleHPSDR.Contracts;
+using SimpleHPSDR.Server.Cat;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>Maps the engine-owned network and serial CAT management routes.</summary>
 public static class CatEndpoints

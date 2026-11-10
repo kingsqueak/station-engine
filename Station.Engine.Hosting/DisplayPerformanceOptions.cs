@@ -9,7 +9,7 @@ using System.Runtime.InteropServices;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Configuration;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 public sealed record DisplayPerformanceSnapshot(
     string Profile,
@@ -76,7 +76,7 @@ public readonly record struct DisplayHardwareProfile(
     // catches many-core SBC swaps such as the Radxa CM5 / RK3588 class that
     // core count misses. Ampere/Graviton servers and VMs have no matching
     // device-tree model. A Linux arm64 VM with <=4 vCPUs is still treated as a
-    // Pi, unchanged from today; ZEUS_DISPLAY_PROFILE=normal opts anything out.
+    // Pi, unchanged from today; SIMPLEHPSDR_DISPLAY_PROFILE=normal opts anything out.
     public bool IsPiClass =>
         IsLinuxArm64 &&
         (ProcessorCount <= 4 || IsKnownSbcModel(DeviceTreeModel));
@@ -153,12 +153,12 @@ public static class DisplayPerformanceOptions
         // colouring. This lets the appliance run a clean 30 fps (LowPower=false)
         // AND pin WebGL, instead of dropping below 30 just to get PreferWebgl.
         var forceWebgl =
-            IsTruthy(environment("ZEUS_PREFER_WEBGL")) ||
-            IsTruthy(configuration?["Zeus:Display:PreferWebgl"]);
+            IsTruthy(environment("SIMPLEHPSDR_PREFER_WEBGL")) ||
+            IsTruthy(configuration?["SimpleHPSDR:Display:PreferWebgl"]);
 
-        if (TryParseFrameRate(environment("ZEUS_DISPLAY_MAX_FPS"), out var envFps) ||
-            TryParseFrameRate(configuration?["Zeus:Display:MaxFps"], out envFps) ||
-            TryParseFrameRate(configuration?["Zeus:Display:FrameRateHz"], out envFps))
+        if (TryParseFrameRate(environment("SIMPLEHPSDR_DISPLAY_MAX_FPS"), out var envFps) ||
+            TryParseFrameRate(configuration?["SimpleHPSDR:Display:MaxFps"], out envFps) ||
+            TryParseFrameRate(configuration?["SimpleHPSDR:Display:FrameRateHz"], out envFps))
         {
             return new DisplayPerformanceSnapshot(
                 Profile: Math.Abs(envFps - DefaultFrameRateHz) < 0.0001 ? "normal" : "custom",
@@ -172,8 +172,8 @@ public static class DisplayPerformanceOptions
         }
 
         var profile = FirstNonBlank(
-            environment("ZEUS_DISPLAY_PROFILE"),
-            configuration?["Zeus:Display:Profile"]);
+            environment("SIMPLEHPSDR_DISPLAY_PROFILE"),
+            configuration?["SimpleHPSDR:Display:Profile"]);
         // Unset profile defaults to auto so Pi-class hosts get low-power out
         // of the box; any explicit profile string (normal/full/unknown)
         // defeats auto by its mere presence, and the explicit low-power
@@ -182,8 +182,8 @@ public static class DisplayPerformanceOptions
         var autoPi = auto && hw.IsPiClass;
         var lowPower = autoPi ||
             IsLowPowerProfile(profile) ||
-            IsTruthy(environment("ZEUS_LOW_POWER_DISPLAY")) ||
-            IsTruthy(configuration?["Zeus:Display:LowPower"]);
+            IsTruthy(environment("SIMPLEHPSDR_LOW_POWER_DISPLAY")) ||
+            IsTruthy(configuration?["SimpleHPSDR:Display:LowPower"]);
 
         if (lowPower)
         {
@@ -387,10 +387,10 @@ public static class DisplayPerformanceOptions
         IConfiguration? configuration,
         Func<string, string?> environment)
     {
-        if (TryParseInt(environment("ZEUS_RX_ANALYZER_FFT"), out var envValue))
+        if (TryParseInt(environment("SIMPLEHPSDR_RX_ANALYZER_FFT"), out var envValue))
             return ClampRxAnalyzerFftSizeForProfile(NormalizeRxAnalyzerFftSize(envValue), lowPower);
 
-        if (TryParseInt(configuration?["Zeus:Display:RxAnalyzerFftSize"], out var configValue))
+        if (TryParseInt(configuration?["SimpleHPSDR:Display:RxAnalyzerFftSize"], out var configValue))
             return ClampRxAnalyzerFftSizeForProfile(NormalizeRxAnalyzerFftSize(configValue), lowPower);
 
         return profileDefault;
@@ -402,17 +402,17 @@ public static class DisplayPerformanceOptions
         IConfiguration? configuration,
         Func<string, string?> environment)
     {
-        if (TryParseInt(environment("ZEUS_PANADAPTER_WIDTH"), out var envValue))
+        if (TryParseInt(environment("SIMPLEHPSDR_PANADAPTER_WIDTH"), out var envValue))
             return ClampPanadapterWidthForProfile(NormalizePanadapterWidth(envValue), lowPower);
 
-        if (TryParseInt(configuration?["Zeus:Display:PanadapterWidth"], out var configValue))
+        if (TryParseInt(configuration?["SimpleHPSDR:Display:PanadapterWidth"], out var configValue))
             return ClampPanadapterWidthForProfile(NormalizePanadapterWidth(configValue), lowPower);
 
         return profileDefault;
     }
 
     private static int? ResolveDefaultConnectSampleRateHz(IConfiguration? configuration) =>
-        TryParseInt(configuration?["Zeus:Display:DefaultConnectSampleRateHz"], out var value) && value > 0
+        TryParseInt(configuration?["SimpleHPSDR:Display:DefaultConnectSampleRateHz"], out var value) && value > 0
             ? value
             : null;
 

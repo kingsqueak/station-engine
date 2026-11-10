@@ -4,7 +4,7 @@
 using System.Globalization;
 using System.Runtime.InteropServices;
 
-namespace Zeus.Server.Diagnostics;
+namespace SimpleHPSDR.Server.Diagnostics;
 
 /// <summary>
 /// Synchronous, direct-to-sink lifecycle markers for the standalone engine.

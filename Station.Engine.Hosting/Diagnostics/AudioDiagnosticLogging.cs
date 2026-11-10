@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging.Console;
 using Microsoft.Extensions.Logging.Debug;
 using Microsoft.Extensions.Logging.EventSource;
 
-namespace Zeus.Server.Diagnostics;
+namespace SimpleHPSDR.Server.Diagnostics;
 
 public static class AudioDiagnosticLogging
 {
@@ -13,10 +13,10 @@ public static class AudioDiagnosticLogging
     // providers must not format the same event again on the audio caller.
     internal static readonly string[] Categories =
     [
-        "Zeus.Protocol1", "Zeus.Protocol2", "Zeus.Dsp",
-        "Zeus.Server.NativeMicCapture", "Zeus.Server.MiniAudioInput",
-        "Zeus.Server.TxAudioIngest", "Zeus.Server.TxTuneDriver",
-        "Zeus.Server.SaturnSpeakerAudioSink", "Zeus.Server.DspPipelineService",
+        "SimpleHPSDR.Protocol1", "SimpleHPSDR.Protocol2", "SimpleHPSDR.Dsp",
+        "SimpleHPSDR.Server.NativeMicCapture", "SimpleHPSDR.Server.MiniAudioInput",
+        "SimpleHPSDR.Server.TxAudioIngest", "SimpleHPSDR.Server.TxTuneDriver",
+        "SimpleHPSDR.Server.SaturnSpeakerAudioSink", "SimpleHPSDR.Server.DspPipelineService",
     ];
 
     public static void Configure(ILoggingBuilder logging)

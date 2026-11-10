@@ -5,15 +5,15 @@ using System.Net;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Http.Json;
 using Microsoft.Extensions.Logging.Abstractions;
-using Zeus.Contracts;
-using Zeus.Hosting;
-using Zeus.Protocol2;
-using Zeus.Server;
-using Zeus.Server.Cat;
-using Zeus.Server.Diagnostics;
-using Zeus.Server.Tci;
+using SimpleHPSDR.Contracts;
+using SimpleHPSDR.Hosting;
+using SimpleHPSDR.Protocol2;
+using SimpleHPSDR.Server;
+using SimpleHPSDR.Server.Cat;
+using SimpleHPSDR.Server.Diagnostics;
+using SimpleHPSDR.Server.Tci;
 
-namespace Zeus.StationEngine;
+namespace SimpleHPSDR.StationEngine;
 
 internal enum StationEngineBindMode
 {
@@ -23,15 +23,15 @@ internal enum StationEngineBindMode
 
 public partial class Program
 {
-    private const string CorsPolicyName = "ZeusLinkLocalAttach";
-    internal const string StationAccessTokenEnvironmentVariable = "ZEUS_STATION_ACCESS_TOKEN";
+    private const string CorsPolicyName = "SimpleHPSDRLocalAttach";
+    internal const string StationAccessTokenEnvironmentVariable = "SIMPLEHPSDR_STATION_ACCESS_TOKEN";
 
     public static async Task<int> Main(string[] args)
     {
         // SimpleHPSDR: a worker planning part of the FFTW wisdom (started by
         // the engine itself); nothing else of the engine starts.
-        if (args.Length > 0 && args[0] == Zeus.Dsp.Wdsp.WdspWisdomParallel.WorkerArgument)
-            return Zeus.Dsp.Wdsp.WdspWisdomParallel.RunWorker(args);
+        if (args.Length > 0 && args[0] == SimpleHPSDR.Dsp.Wdsp.WdspWisdomParallel.WorkerArgument)
+            return SimpleHPSDR.Dsp.Wdsp.WdspWisdomParallel.RunWorker(args);
 
         // Must run before any TX pacing starts — see RaiseTimerResolutionOnWindows.
         var timerResolution = RaiseTimerResolutionOnWindows();
@@ -39,7 +39,7 @@ public partial class Program
         // Eager self-diagnostics: stamp the startup banner into the rolling
         // on-disk log BEFORE anything else can throw. The banner is the only
         // artifact that can prove WHICH engine build actually launched on an
-        // operator's machine — without it, "no zeus-app.log" cannot distinguish
+        // operator's machine — without it, "no simplehpsdr-app.log" cannot distinguish
         // "the launcher ran an old cached engine" from "the new engine died
         // before its first framework log line". Best-effort: the sink never
         // throws into logging, so an unwritable log dir degrades to
@@ -78,7 +78,7 @@ public partial class Program
         catch (Exception ex)
         {
             // The sink is still alive here (app disposal happens in finally),
-            // so the crash lands in zeus-app.log before the process exits.
+            // so the crash lands in simplehpsdr-app.log before the process exits.
             EngineStartupLog.WriteFatal(diagnosticLogFileSink, "run", ex);
             return 1;
         }
@@ -142,10 +142,10 @@ public partial class Program
             ContentRootPath = AppContext.BaseDirectory,
         });
 
-        // Self-diagnostic log capture, mirroring the product host (ZeusHost): a
+        // Self-diagnostic log capture, mirroring the product host (SimpleHPSDRHost): a
         // singleton ring buffer retains the last ~4000 formatted log lines and a
         // rolling on-disk sink mirrors the same redacted lines to
-        // DataDir/logs/zeus-app.log so the recent log SURVIVES an engine crash —
+        // DataDir/logs/simplehpsdr-app.log so the recent log SURVIVES an engine crash —
         // a Zeus Link tester whose engine dies before the panadapter paints
         // otherwise has no log to send. Best-effort: the sink never throws into
         // logging, so an unwritable log dir degrades to in-memory-only rather
@@ -290,7 +290,7 @@ public partial class Program
                 options.BindMode,
                 options.LanHttpsPort),
             allowLanHttpsSameHost: options.LanHttpsPort is not null);
-        // SimpleHPSDR fork: no plugin or VST host. Zeus's could install plugins
+        // SimpleHPSDR fork: no plugin or VST host. SimpleHPSDR's could install plugins
         // from its online registry and load DLLs and VST/AU effects from a folder.
         return app;
     }
@@ -443,7 +443,7 @@ public partial class Program
                 $"Station engine preferences are corrupt and unavailable at '{enginePath}'.");
 
         // Product stores (Kiwi, display, bundle) and the two migrations below
-        // open zeus-prefs.db. Probe it before any of them do. A file moved
+        // open simplehpsdr-prefs.db. Probe it before any of them do. A file moved
         // aside — page damage, or a wrong-shaped row the typed check below
         // rejects — is recreated by the stores; startup continues on the
         // original path. A corrupt file that cannot be moved cannot be opened,
@@ -477,25 +477,25 @@ public partial class Program
 
     // EnsureUsable returned false: the product file is corrupt and could not
     // be moved. Mirror the desktop host (record a fatal log, keep launching)
-    // without pointing ZEUS_PREFS_PATH at a temp directory. EngineGet follows
-    // ZEUS_PREFS_PATH unless ZEUS_ENGINE_PREFS_PATH is set, and LogbookPath,
+    // without pointing SIMPLEHPSDR_PREFS_PATH at a temp directory. EngineGet follows
+    // SIMPLEHPSDR_PREFS_PATH unless SIMPLEHPSDR_ENGINE_PREFS_PATH is set, and LogbookPath,
     // LogDir, CrashDir and VersionFloorPath all take their directory from
-    // ZEUS_PREFS_PATH. Pin the engine file that was already resolved, then
+    // SIMPLEHPSDR_PREFS_PATH. Pin the engine file that was already resolved, then
     // put the throwaway product file in the directory those paths already
-    // use — DataDir when ZEUS_PREFS_PATH is unset, otherwise that override's
+    // use — DataDir when SIMPLEHPSDR_PREFS_PATH is unset, otherwise that override's
     // directory — so the operator's station-engine.db, logbook and engine log
     // stay where they are.
     private static string FallBackFromUnmovableProductPrefs(string productPath, string enginePath)
     {
         var fatalLog = Path.Combine(
             Path.GetDirectoryName(productPath) ?? ".",
-            "zeus-prefs-fatal.log");
+            "simplehpsdr-prefs-fatal.log");
         try
         {
             File.AppendAllText(
                 fatalLog,
                 $"{DateTime.UtcNow:o} prefs DB corrupt and locked at {productPath}; " +
-                "close any other Zeus instance or delete the file. " +
+                "close any other SimpleHPSDR instance or delete the file. " +
                 "Running on temporary settings for this session.\n");
         }
         catch
@@ -505,13 +505,13 @@ public partial class Program
 
         Environment.SetEnvironmentVariable(PrefsDbPath.EnginePathEnvironmentVariable, enginePath);
 
-        var env = Environment.GetEnvironmentVariable("ZEUS_PREFS_PATH");
+        var env = Environment.GetEnvironmentVariable("SIMPLEHPSDR_PREFS_PATH");
         var anchor = string.IsNullOrEmpty(env)
             ? PrefsDbPath.DataDir
             : Path.GetDirectoryName(Path.GetFullPath(env)) ?? PrefsDbPath.DataDir;
         Directory.CreateDirectory(anchor);
-        var fallback = Path.Combine(anchor, $"zeus-prefs-fallback-{Guid.NewGuid():N}.db");
-        Environment.SetEnvironmentVariable("ZEUS_PREFS_PATH", fallback);
+        var fallback = Path.Combine(anchor, $"simplehpsdr-prefs-fallback-{Guid.NewGuid():N}.db");
+        Environment.SetEnvironmentVariable("SIMPLEHPSDR_PREFS_PATH", fallback);
         Console.Error.WriteLine(
             $"prefs.guard falling back to temporary prefs DB at {fallback}; settings will not persist this session.");
         return fallback;
@@ -559,11 +559,11 @@ public partial class Program
     private static void WireEngineBroadcasts(WebApplication app)
     {
         var hub = app.Services.GetRequiredService<StreamingHub>();
-        var wisdom = app.Services.GetRequiredService<Zeus.Dsp.Wdsp.WdspWisdomInitializer>();
+        var wisdom = app.Services.GetRequiredService<SimpleHPSDR.Dsp.Wdsp.WdspWisdomInitializer>();
         hub.SetWisdomPhase(wisdom.Phase);
         hub.SetWisdomStatus(wisdom.Status);
-        wisdom.PhaseChanged += phase => hub.Broadcast(new Zeus.Contracts.WisdomStatusFrame(phase, wisdom.Status));
-        wisdom.StatusChanged += status => hub.Broadcast(new Zeus.Contracts.WisdomStatusFrame(wisdom.Phase, status));
+        wisdom.PhaseChanged += phase => hub.Broadcast(new SimpleHPSDR.Contracts.WisdomStatusFrame(phase, wisdom.Status));
+        wisdom.StatusChanged += status => hub.Broadcast(new SimpleHPSDR.Contracts.WisdomStatusFrame(wisdom.Phase, status));
 
         var bandPlan = app.Services.GetRequiredService<BandPlanService>();
         bandPlan.PlanChanged += () => hub.BroadcastBandPlanChanged(bandPlan.CurrentRegion.Id);

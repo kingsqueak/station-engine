@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
@@ -10,45 +10,45 @@
 using LiteDB;
 using Microsoft.Extensions.Logging;
 using System.Text;
-using Zeus.Contracts;
+using SimpleHPSDR.Contracts;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
-// Central database-path resolver for the product zeus-prefs.db and the
-// engine-owned station-engine.db. When ZEUS_PREFS_PATH is set, the engine DB
-// follows it into the same directory unless ZEUS_ENGINE_PREFS_PATH explicitly
+// Central database-path resolver for the product simplehpsdr-prefs.db and the
+// engine-owned station-engine.db. When SIMPLEHPSDR_PREFS_PATH is set, the engine DB
+// follows it into the same directory unless SIMPLEHPSDR_ENGINE_PREFS_PATH explicitly
 // overrides the engine file — useful for dev, CI, and isolated recovery.
 //
 // Profiles (issue: prefs-database selector). The operator can keep multiple
 // named prefs databases under DataDir/profiles/*.db and switch between them.
 // The active choice is held in DataDir/active-profile.txt — a tiny pointer
 // file NOT stored inside any prefs DB, since the path resolver runs before any
-// store is open (chicken/egg). The legacy DataDir/zeus-prefs.db is always the
+// store is open (chicken/egg). The legacy DataDir/simplehpsdr-prefs.db is always the
 // "Default" profile. Switching applies on the next launch (each path is
 // resolved once at startup), so the endpoint that flips the pointer also asks
 // the host to relaunch.
 public static class PrefsDbPath
 {
-    public const string LegacyFileName = "zeus-prefs.db";
+    public const string LegacyFileName = "simplehpsdr-prefs.db";
     public const string EngineFileName = "station-engine.db";
-    public const string EnginePathEnvironmentVariable = "ZEUS_ENGINE_PREFS_PATH";
+    public const string EnginePathEnvironmentVariable = "SIMPLEHPSDR_ENGINE_PREFS_PATH";
     private const string ProfileEngineFileSuffix = "-station-engine.db";
     private const string ProfilesDirName = "profiles";
     private const string PointerFileName = "active-profile.txt";
 
-    // %LOCALAPPDATA%/Zeus — the directory that has always held zeus-prefs.db.
+    // %LOCALAPPDATA%/SimpleHPSDR — the directory that has always held simplehpsdr-prefs.db.
     public static string DataDir
     {
-        get => Zeus.Contracts.EngineDataRoot.Resolve();
+        get => SimpleHPSDR.Contracts.EngineDataRoot.Resolve();
     }
 
     public static string Get() =>
-        Environment.GetEnvironmentVariable("ZEUS_PREFS_PATH")
+        Environment.GetEnvironmentVariable("SIMPLEHPSDR_PREFS_PATH")
         ?? Path.Combine(DataDir, ActiveRelativePath());
 
     /// <summary>
     /// Resolve the engine-owned settings database. By default it sits beside
-    /// the active product preferences file, so ZEUS_PREFS_PATH continues to
+    /// the active product preferences file, so SIMPLEHPSDR_PREFS_PATH continues to
     /// isolate both databases. The dedicated override is intentionally narrow:
     /// it moves only station-engine.db and never changes product preferences.
     /// </summary>
@@ -87,28 +87,28 @@ public static class PrefsDbPath
         fileName.Equals(EngineFileName, StringComparison.OrdinalIgnoreCase)
         || fileName.EndsWith(ProfileEngineFileSuffix, StringComparison.OrdinalIgnoreCase);
 
-    // The QSO logbook lives in its own plaintext DB (zeus-logbook.db), separate
+    // The QSO logbook lives in its own plaintext DB (simplehpsdr-logbook.db), separate
     // from the prefs profiles. It sits in the SAME directory as the active prefs
-    // file, so a ZEUS_PREFS_PATH override (dev `/run fresh`, CI, tests) isolates
+    // file, so a SIMPLEHPSDR_PREFS_PATH override (dev `/run fresh`, CI, tests) isolates
     // the logbook alongside the throwaway prefs. Unlike the prefs DB it does NOT
     // fork per profile — there is exactly one logbook per data directory.
     public static string LogbookPath()
     {
-        var env = Environment.GetEnvironmentVariable("ZEUS_PREFS_PATH");
+        var env = Environment.GetEnvironmentVariable("SIMPLEHPSDR_PREFS_PATH");
         var dir = string.IsNullOrEmpty(env)
             ? DataDir
             : (Path.GetDirectoryName(Path.GetFullPath(env)) ?? DataDir);
-        return Path.Combine(dir, "zeus-logbook.db");
+        return Path.Combine(dir, "simplehpsdr-logbook.db");
     }
 
     // Directory for the rolling on-disk runtime log (DiagnosticLogFileSink). Lives
     // under DataDir/logs so it can be tailed by the out-of-process support sidecar
-    // after a backend crash. Follows the same ZEUS_PREFS_PATH override as the
+    // after a backend crash. Follows the same SIMPLEHPSDR_PREFS_PATH override as the
     // logbook so dev `/run fresh`, CI, and tests write their logs into the
-    // throwaway data dir instead of the operator's real %LOCALAPPDATA%/Zeus.
+    // throwaway data dir instead of the operator's real %LOCALAPPDATA%/SimpleHPSDR.
     public static string LogDir()
     {
-        var env = Environment.GetEnvironmentVariable("ZEUS_PREFS_PATH");
+        var env = Environment.GetEnvironmentVariable("SIMPLEHPSDR_PREFS_PATH");
         var dir = string.IsNullOrEmpty(env)
             ? DataDir
             : (Path.GetDirectoryName(Path.GetFullPath(env)) ?? DataDir);
@@ -116,11 +116,11 @@ public static class PrefsDbPath
     }
 
     // Highest packaged version observed on this machine. Uses the same
-    // ZEUS_PREFS_PATH data-dir isolation as LogDir(), so dev/test instances
+    // SIMPLEHPSDR_PREFS_PATH data-dir isolation as LogDir(), so dev/test instances
     // write beside their throwaway prefs DB instead of the operator's real dir.
     public static string VersionFloorPath()
     {
-        var env = Environment.GetEnvironmentVariable("ZEUS_PREFS_PATH");
+        var env = Environment.GetEnvironmentVariable("SIMPLEHPSDR_PREFS_PATH");
         var dir = string.IsNullOrEmpty(env)
             ? DataDir
             : (Path.GetDirectoryName(Path.GetFullPath(env)) ?? DataDir);
@@ -128,15 +128,15 @@ public static class PrefsDbPath
     }
 
     // Full path of the active rolling runtime log file.
-    public static string AppLogPath() => Path.Combine(LogDir(), "zeus-app.log");
+    public static string AppLogPath() => Path.Combine(LogDir(), "simplehpsdr-app.log");
 
     // Directory for support-sidecar artifacts: the per-PID clean-exit markers the
     // backend drops at a deliberate shutdown and the crash records the sidecar
-    // writes when the backend dies unexpectedly. Same ZEUS_PREFS_PATH isolation as
+    // writes when the backend dies unexpectedly. Same SIMPLEHPSDR_PREFS_PATH isolation as
     // the logs so tests/dev never touch the operator's real data dir.
     public static string CrashDir()
     {
-        var env = Environment.GetEnvironmentVariable("ZEUS_PREFS_PATH");
+        var env = Environment.GetEnvironmentVariable("SIMPLEHPSDR_PREFS_PATH");
         var dir = string.IsNullOrEmpty(env)
             ? DataDir
             : (Path.GetDirectoryName(Path.GetFullPath(env)) ?? DataDir);
@@ -144,7 +144,7 @@ public static class PrefsDbPath
     }
 
     // Relative path (under DataDir) of the active profile. Reads the pointer
-    // file; falls back to the legacy zeus-prefs.db when the pointer is absent,
+    // file; falls back to the legacy simplehpsdr-prefs.db when the pointer is absent,
     // unreadable, or names a file that no longer exists.
     public static string ActiveRelativePath()
     {
@@ -169,7 +169,7 @@ public static class PrefsDbPath
 
     // ---- Startup corruption guard (#637) --------------------------------
     //
-    // Product preference stores share ONE physical zeus-prefs.db. If that file
+    // Product preference stores share ONE physical simplehpsdr-prefs.db. If that file
     // is corrupt — most often an
     // interrupted write (power loss, a network/IP change that knocked the app
     // over mid-flush) — the FIRST store's open throws a LiteException during DI
@@ -286,7 +286,7 @@ public static class PrefsDbPath
                 if (File.Exists(src)) File.Move(src, dst);
             }
             // TX/PA calibration lives in the engine database. Product files
-            // (zeus-prefs.db and operator profiles) hold UI preferences only.
+            // (simplehpsdr-prefs.db and operator profiles) hold UI preferences only.
             var lost = IsEngineDatabaseFileName(Path.GetFileName(dbPath))
                 ? "Prior settings (including TX/PA calibration) were lost"
                 : "Prior UI/product preferences were reset";
@@ -328,7 +328,7 @@ public static class PrefsDbPath
             throw new ArgumentException("Relative path is required.", nameof(relativePath));
 
         var full = ResolveUnderDataDir(relativePath)
-            ?? throw new ArgumentException("Path is outside the Zeus data directory.", nameof(relativePath));
+            ?? throw new ArgumentException("Path is outside the SimpleHPSDR data directory.", nameof(relativePath));
         if (IsEngineDatabaseFileName(Path.GetFileName(full)))
             throw new ArgumentException(
                 "Engine databases cannot be selected as product preference profiles.",
@@ -452,7 +452,7 @@ public static class PrefsDbPath
         {
             TryDeleteDbFiles(target);
             throw new InvalidOperationException(
-                "That file is not a valid Zeus settings database (it may be corrupt or a different kind of file).");
+                "That file is not a valid SimpleHPSDR settings database (it may be corrupt or a different kind of file).");
         }
         return ProfilesDirName + "/" + safe + ".db";
     }
@@ -484,7 +484,7 @@ public static class PrefsDbPath
         {
             TryDeleteDbFiles(target);
             throw new InvalidOperationException(
-                "That file is not a valid Zeus settings database (it may be corrupt or a different kind of file).");
+                "That file is not a valid SimpleHPSDR settings database (it may be corrupt or a different kind of file).");
         }
         return ProfilesDirName + "/" + safe + ".db";
     }
@@ -499,7 +499,7 @@ public static class PrefsDbPath
             throw new ArgumentException("Relative path is required.", nameof(relativePath));
 
         var full = ResolveUnderDataDir(relativePath)
-            ?? throw new ArgumentException("Path is outside the Zeus data directory.", nameof(relativePath));
+            ?? throw new ArgumentException("Path is outside the SimpleHPSDR data directory.", nameof(relativePath));
         if (!File.Exists(full))
             throw new FileNotFoundException("Database does not exist.", full);
         return full;

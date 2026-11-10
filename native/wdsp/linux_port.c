@@ -235,11 +235,11 @@ HANDLE _beginthread( void( __cdecl *start_address )( void * ), unsigned stack_si
 
 #ifdef __APPLE__
   //
-  // Zeus #3241: the channel DSP and display-analyzer workers would otherwise
+  // SimpleHPSDR #3241: the channel DSP and display-analyzer workers would otherwise
   // inherit the default QoS class, which macOS may run on efficiency cores;
   // demoting the engine there clicks the receiver and jumps the panadapter.
   // Create them in USER_INTERACTIVE. QoS only, no mach real-time reservation
-  // (Zeus #2069). Windows promotes wdspmain itself via MMCSS (main.c).
+  // (SimpleHPSDR #2069). Windows promotes wdspmain itself via MMCSS (main.c).
   //
   {
     void sendbuf(void *arg); // declared in analyzer.c but not in header file

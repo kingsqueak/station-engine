@@ -1,0 +1,104 @@
+# Builds the native libraries SimpleHPSDR names itself (miniaudio, RADE, ASIO)
+# for Linux and Windows. macOS ones are built on a Mac (see NATIVE-BUILD.md).
+# WDSP, codec2 and FFTW don't change here and keep their committed binaries.
+# The artifacts are copied into SimpleHPSDR.Dsp/runtimes/<rid>/native by hand.
+name: Native libraries
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'native/miniaudio/**'
+      - 'native/radae/**'
+      - 'native/asio/**'
+      - '.github/workflows/native.yml'
+
+jobs:
+  linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { rid: linux-x64, runner: ubuntu-24.04 }
+          - { rid: linux-arm64, runner: ubuntu-24.04-arm }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      # Debian bookworm (glibc 2.36): the oldest system SimpleHPSDR supports,
+      # including the G2's own Raspberry Pi.
+      - name: Build in Debian bookworm
+        run: |
+          docker run --rm -v "$PWD:/w" -w /w debian:bookworm bash -euo pipefail -c '
+            apt-get update -qq
+            apt-get install -y -qq build-essential cmake ninja-build pkg-config >/dev/null
+            cmake -S native/miniaudio -B /tmp/ma -G Ninja -DCMAKE_BUILD_TYPE=Release
+            cmake --build /tmp/ma --parallel
+            cp -R native/radae /tmp/radae
+            cd /tmp/radae/vendor/opus_dnn
+            for t in $(grep -ohE "(silk|celt|dnn|src)/[A-Za-z0-9_/.-]+\.[ch]\b" *.mk | sort -u); do
+              [ -e "$t" ] || { mkdir -p "$(dirname "$t")"; : > "$t"; }
+            done
+            cd /w
+            cmake -S /tmp/radae -B /tmp/rade -G Ninja -DCMAKE_BUILD_TYPE=Release \
+              -DOPUS_DISABLE_INTRINSICS=ON -DSIMPLEHPSDR_RADE_VENDOR=/tmp/radae/vendor \
+              -DSIMPLEHPSDR_RADE_BUILD_TEST=OFF
+            cmake --build /tmp/rade --parallel
+            mkdir -p out
+            cp /tmp/ma/libminiaudio.so out/
+            cp "$(readlink -f /tmp/rade/libsimplehpsdr_rade.so)" out/libsimplehpsdr_rade.so
+            strip --strip-unneeded out/*.so
+            chown -R '"$(id -u):$(id -g)"' out
+          '
+      - name: Check exports
+        run: |
+          nm -D --defined-only out/libminiaudio.so | grep -c " simplehpsdr_ma_"
+          nm -D --defined-only out/libsimplehpsdr_rade.so | grep -c " simplehpsdr_rade_"
+          ! nm -D out/*.so | grep -i zeus
+          objdump -T out/*.so | grep -oE 'GLIBC_[0-9.]+' | sort -Vu | tail -1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.rid }}
+          path: out/*.so
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: miniaudio and ASIO (Visual Studio)
+        shell: pwsh
+        run: |
+          cmake -S native/miniaudio -B build-ma -A x64
+          cmake --build build-ma --config Release --parallel
+          cmake -S native/asio -B build-asio -A x64
+          cmake --build build-asio --config Release --parallel
+          New-Item -ItemType Directory -Force out | Out-Null
+          Copy-Item build-ma/Release/miniaudio.dll out/
+          Copy-Item build-asio/Release/simplehpsdr_asio.dll out/
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+      - name: RADE (MSYS2 UCRT64)
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          cp -R native/radae /tmp/radae
+          cd /tmp/radae/vendor/opus_dnn
+          for t in $(grep -ohE "(silk|celt|dnn|src)/[A-Za-z0-9_/.-]+\.[ch]\b" *.mk | sort -u); do
+            [ -e "$t" ] || { mkdir -p "$(dirname "$t")"; : > "$t"; }
+          done
+          cd -
+          cmake -S /tmp/radae -B /tmp/rade -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DOPUS_DISABLE_INTRINSICS=ON -DSIMPLEHPSDR_RADE_VENDOR=/tmp/radae/vendor \
+            -DSIMPLEHPSDR_RADE_BUILD_TEST=OFF
+          cmake --build /tmp/rade --parallel
+          cp /tmp/rade/simplehpsdr_rade.dll out/
+          objdump -p out/simplehpsdr_rade.dll | grep "DLL Name"
+          objdump -p out/simplehpsdr_rade.dll | grep -c "simplehpsdr_rade_"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-win-x64
+          path: out/*.dll

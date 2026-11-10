@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA), Christian Suarez (N9WAR), and contributors.
 //
 // See ATTRIBUTIONS.md at the repository root for the full provenance
@@ -8,14 +8,14 @@
 
 using LiteDB;
 using Microsoft.Extensions.Configuration;
-using Zeus.Contracts;
+using SimpleHPSDR.Contracts;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 // Persists the panadapter background mode (basic / beam-map / image), the
 // image-fit variant, and (optionally) a single user-supplied background
 // image stored as raw bytes, plus the independent Bandwidth Filter mini-pan
-// background settings and image. Lives in the same zeus-prefs.db as PA /
+// background settings and image. Lives in the same simplehpsdr-prefs.db as PA /
 // band-memory / layout — none of these values are sensitive.
 //
 // Why server-side: the previous implementation stored panBackground +
@@ -23,7 +23,7 @@ namespace Zeus.Server;
 // device. Operators connecting from a phone (different origin / device than
 // the desktop where the picture was set) saw an empty panel. Moving it to
 // LiteDB lets a single setting follow the operator across every browser
-// pointed at the Zeus instance.
+// pointed at the SimpleHPSDR instance.
 public sealed class DisplaySettingsStore : IDisposable
 {
     internal const string CollectionName = "display_settings";
@@ -35,10 +35,10 @@ public sealed class DisplaySettingsStore : IDisposable
         "combined background images exceed the 12 MB storage budget: remove or shrink the other background image";
 
     // Defensive bounds for any persisted dB window. Mirrors DB_ABS_LIMIT /
-    // MIN_SPAN_DB in zeus-web's display-settings-store.ts. A range outside
+    // MIN_SPAN_DB in simplehpsdr-web's display-settings-store.ts. A range outside
     // these bounds (or with span < MIN_SPAN_DB) would render the panadapter
     // or waterfall as a single flat colour, so we drop the write instead of
-    // poisoning zeus-prefs.db. Either endpoint being null means "field not
+    // poisoning simplehpsdr-prefs.db. Either endpoint being null means "field not
     // provided in this PUT" and is handled by the caller.
     private const double DbAbsLimit = 200;
     private const double MinSpanDb = 20;
@@ -109,7 +109,7 @@ public sealed class DisplaySettingsStore : IDisposable
         v.HasValue && !double.IsNaN(v.Value) && !double.IsInfinity(v.Value)
         && v.Value >= 0.0 && v.Value <= TxAvgTauMaxMs;
 
-    private readonly Zeus.Data.SharedLiteDatabase.Lease _dbLease;
+    private readonly SimpleHPSDR.Data.SharedLiteDatabase.Lease _dbLease;
     private readonly LiteDatabase _db;
     private readonly ILiteCollection<DisplaySettingsEntry> _docs;
     private readonly ILogger<DisplaySettingsStore> _log;
@@ -134,7 +134,7 @@ public sealed class DisplaySettingsStore : IDisposable
             Directory.CreateDirectory(dir);
         }
 
-        _dbLease = Zeus.Data.SharedLiteDatabase.Acquire(dbPath);
+        _dbLease = SimpleHPSDR.Data.SharedLiteDatabase.Acquire(dbPath);
         _db = _dbLease.Database;
         _docs = _db.GetCollection<DisplaySettingsEntry>(CollectionName);
 
@@ -383,7 +383,7 @@ public sealed class DisplaySettingsStore : IDisposable
             // Accept a (min, max) pair only when it's a non-degenerate window.
             // The old code wrote whatever the client sent, so a dB drag that
             // hit the abs-limit on both endpoints persisted min == max == -200
-            // and the next page load rendered a solid colour. See zeus-web's
+            // and the next page load rendered a solid colour. See simplehpsdr-web's
             // sanitizeRange + clampShift for the matching client-side guard.
             if (IsValidRange(dbMin, dbMax)) { e.DbMin = dbMin; e.DbMax = dbMax; }
             if (IsValidRange(txDbMin, txDbMax)) { e.TxDbMin = txDbMin; e.TxDbMax = txDbMax; }
@@ -680,7 +680,7 @@ public sealed class DisplaySettingsEntry
     // higher values lower display resolution and websocket payload size.
     public int? DisplayDecimation { get; set; }
     // Waterfall row decimation, expressed like Thetis: scroll/update one row
-    // every N generated display frames. 1 preserves the current Zeus behavior.
+    // every N generated display frames. 1 preserves the current SimpleHPSDR behavior.
     public int? WaterfallUpdatePeriod { get; set; }
     public string? WaterfallColormap { get; set; }
     public double? WaterfallScrollSpeed { get; set; }

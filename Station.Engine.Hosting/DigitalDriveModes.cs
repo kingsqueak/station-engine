@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-using Zeus.Contracts;
+using SimpleHPSDR.Contracts;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
 /// Which digital mode the transmitter is in, for the station-wide per-mode
 /// Drive memory. The engine only sees DIGU/DIGL, so FT8 / FT4 / WSPR are told
 /// apart by the standard USB dial the TX receiver is tuned to. Those dials are
-/// fixed by convention and shared by the Zeus digital workspace and external
+/// fixed by convention and shared by the SimpleHPSDR digital workspace and external
 /// apps (WSJT-X over CAT), so both land on the same memory. Any other DIGU
 /// dial (JS8, RTTY, PSK, ...) is plain DIGU.
 ///
@@ -34,7 +34,7 @@ public static class DigitalDriveModes
     // the 17 m and 30 m FT4/WSPR pairs never both match one dial.
     internal const long StepToleranceHz = 40;
 
-    // Mirrors DIGITAL_BANDS in zeus-web/src/dsp/digital-segments.ts (WSJT-X
+    // Mirrors DIGITAL_BANDS in simplehpsdr-web/src/dsp/digital-segments.ts (WSJT-X
     // FT8/FT4 defaults, WSPRnet WSPR dials). Keep the two in step.
     private static readonly (string Mode, long DialHz)[] Dials =
     [

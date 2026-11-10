@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 using System.Net.Sockets;
-using Zeus.Contracts;
-using Zeus.Protocol1;
-using Zeus.Protocol2;
+using SimpleHPSDR.Contracts;
+using SimpleHPSDR.Protocol1;
+using SimpleHPSDR.Protocol2;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 public sealed partial class RadioService
 {

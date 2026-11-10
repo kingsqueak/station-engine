@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA), Christian Suarez (N9WAR), and contributors.
 
-using Zeus.Contracts;
+using SimpleHPSDR.Contracts;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
 /// Snapshot of the on-board iambic keyer knobs the host emulator must
@@ -41,7 +41,7 @@ public sealed class HostIambicKeyer
     public const int ClockKhz = CwSidetoneSource.OutputRateHz / 1000;
 
     // iambic.v localparam — LETTERSPACE is kept for fidelity but is
-    // unreachable: Zeus pins strict spacing OFF on the wire
+    // unreachable: SimpleHPSDR pins strict spacing OFF on the wire
     // (Protocol2Client.CwKeyerSpacing = false), so DOTHELD/DASHHELD
     // always take the `else key_state <= LOOP` arm.
     private const int Loop = 0;

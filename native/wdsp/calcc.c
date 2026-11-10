@@ -1114,7 +1114,7 @@ void destroy_calcc (CALCC a)
 	destroy_delay (a->txdelay);
 	destroy_delay (a->rxdelay);
 	_aligned_free (a->temptx);
-	_aligned_free (a->temprx);	// Zeus: psccF staging buffers
+	_aligned_free (a->temprx);	// SimpleHPSDR: psccF staging buffers
 	DeleteCriticalSection (&txa[a->channel].calcc.cs_update);
 	_aligned_free (a->binfo);
 	_aligned_free (a->info);
@@ -2088,7 +2088,7 @@ void pscc (int channel, int size, double* tx, double* rx)
 PORT
 void psccF (int channel, int size, float *Itxbuff, float *Qtxbuff, float *Irxbuff, float *Qrxbuff, int mox, int solidmox)
 {
-	// Zeus: float split-buffer wrapper retained from WDSP 1.29 (removed upstream in 2.00)
+	// SimpleHPSDR: float split-buffer wrapper retained from WDSP 1.29 (removed upstream in 2.00)
 	int i;
 	CALCC a;
 	EnterCriticalSection (&txa[channel].calcc.cs_update);

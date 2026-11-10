@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright (C) 2026 Douglas J. Cerrato (KB2UKA) and contributors.
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 internal readonly record struct AmplifierTunePreflightResult(
     bool Ready,
@@ -15,7 +15,7 @@ internal readonly record struct AmplifierTunePreflightResult(
 }
 
 /// <summary>
-/// Optional amplifier-specific work that must complete before Zeus is allowed
+/// Optional amplifier-specific work that must complete before SimpleHPSDR is allowed
 /// to generate a tune carrier. Implementations must be inert unless explicitly
 /// enabled by the operator and must honor cancellation promptly.
 /// </summary>

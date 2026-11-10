@@ -10,8 +10,8 @@
 #   ./native/build.sh Release vstbridge # build only the VST3 host bridge
 #
 # Run from the repo root. libwdsp / libminiaudio stage to
-# Zeus.Dsp/runtimes/<rid>/native/; the VST3 bridge stages to
-# Zeus.Plugins.Host/runtimes/<rid>/native/. NativeLibrary.Load picks each up
+# SimpleHPSDR.Dsp/runtimes/<rid>/native/; the VST3 bridge stages to
+# SimpleHPSDR.Plugins.Host/runtimes/<rid>/native/. NativeLibrary.Load picks each up
 # from its RID path automatically (no extra runtime config).
 
 set -euo pipefail
@@ -31,7 +31,7 @@ case "$(uname -s)" in
         esac
         WDSP_LIB="libwdsp.dylib"
         MA_LIB="libminiaudio.dylib"
-        VST_LIB="libzeus-vst-bridge.dylib"
+        VST_LIB="libsimplehpsdr-vst-bridge.dylib"
         ;;
     Linux)
         case "$(uname -m)" in
@@ -41,7 +41,7 @@ case "$(uname -s)" in
         esac
         WDSP_LIB="libwdsp.so"
         MA_LIB="libminiaudio.so"
-        VST_LIB="libzeus-vst-bridge.so"
+        VST_LIB="libsimplehpsdr-vst-bridge.so"
         ;;
     *)
         echo "Unsupported host OS: $(uname -s). Use cmake directly on Windows." >&2
@@ -49,12 +49,12 @@ case "$(uname -s)" in
         ;;
 esac
 
-DEST_DIR="${REPO_ROOT}/Zeus.Dsp/runtimes/${RID}/native"
+DEST_DIR="${REPO_ROOT}/SimpleHPSDR.Dsp/runtimes/${RID}/native"
 mkdir -p "${DEST_DIR}"
 
 # The VST3 host bridge stages next to the .NET plugin host (its loader,
-# VstBridgeNativeLoader, probes Zeus.Plugins.Host/runtimes/<rid>/native first).
-VST_DEST_DIR="${REPO_ROOT}/Zeus.Plugins.Host/runtimes/${RID}/native"
+# VstBridgeNativeLoader, probes SimpleHPSDR.Plugins.Host/runtimes/<rid>/native first).
+VST_DEST_DIR="${REPO_ROOT}/SimpleHPSDR.Plugins.Host/runtimes/${RID}/native"
 
 build_wdsp() {
     local src="${SCRIPT_DIR}/wdsp"
@@ -81,7 +81,7 @@ build_miniaudio() {
 }
 
 build_vstbridge() {
-    local src="${SCRIPT_DIR}/zeus-vst-bridge"
+    local src="${SCRIPT_DIR}/simplehpsdr-vst-bridge"
     local build="${src}/build"
     if [ ! -d "${src}" ]; then
         echo "==> [vst-bridge] SKIPPED: optional proprietary bridge source is not present in this source tree."
@@ -93,7 +93,7 @@ build_vstbridge() {
         echo "==> [vst-bridge] NOTE: vst3sdk or its nested submodules are missing."
         echo "    CMake will build a STUB (loads, but hosts no real VST3)."
         echo "    For real hosting run:"
-        echo "      git submodule update --init --recursive native/zeus-vst-bridge/third_party/vst3sdk"
+        echo "      git submodule update --init --recursive native/simplehpsdr-vst-bridge/third_party/vst3sdk"
     fi
     echo "==> [vst-bridge] Configuring (${BUILD_TYPE}, ${RID})"
     cmake -S "${src}" -B "${build}" -DCMAKE_BUILD_TYPE="${BUILD_TYPE}"

@@ -20,7 +20,7 @@
 // proof the cushion was too thin for this source's jitter, so it grows and
 // trimming pauses; it relaxes back slowly once the stream is stable.
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>Host-side TX IQ queued ahead of the radio plus the transport's
 /// running underrun count. BacklogSamples &lt; 0 = transport can't report.</summary>

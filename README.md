@@ -33,9 +33,9 @@ compositions. Individual source files retain their stated licenses.
 
 This repository is the **complete corresponding source** for the station engine
 binary distributed with Zeus SDR. Each release tag here matches the engine
-shipped in the corresponding Zeus release.
+shipped in the corresponding SimpleHPSDR release.
 
-Windows artifacts containing `zeus_asio.dll` fail packaging unless the public
+Windows artifacts containing `simplehpsdr_asio.dll` fail packaging unless the public
 source tag is exactly `v<engineVersion>` and already exists. This rule also
 applies to dev builds; a pointer to the latest stable source is not accepted for
 an ASIO-bearing artifact. Non-Windows dev builds, which do not convey ASIO,
@@ -44,7 +44,7 @@ retain the existing stable-source pointer and exact per-native source pins.
 ## Native libraries
 
 The native source used by the station engine is included under `native/`:
-Zeus-modified WDSP, its statically embedded libspecbleach and RNNoise sources,
+SimpleHPSDR-modified WDSP, its statically embedded libspecbleach and RNNoise sources,
 miniaudio, the GPL-3.0-only ASIO 2.3.4 host bridge and SDK-derived source, the
 pinned codec2 fetch recipe and patch, and the RADE build glue, shim, exact
 materialized upstream slices, integrity record, and binary/source binding.
@@ -52,10 +52,10 @@ Artifact-to-source mapping and the exact
 per-platform build commands are in [`NATIVE-BUILD.md`](NATIVE-BUILD.md).
 The proprietary VST3 and Audio Unit bridge binaries are not part of the station
 engine and are not included; the published tree builds against
-`Zeus.Plugins.VstHostStub` instead.
+`SimpleHPSDR.Plugins.VstHostStub` instead.
 
 `Station.AudioRing` is first-party code additionally published under the MIT
-license so it can be reused outside Zeus. Third-party components carry their own
+license so it can be reused outside SimpleHPSDR. Third-party components carry their own
 licences — see [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).
 
 The Zeus SDR client that drives this engine is a separate, proprietary program
@@ -65,7 +65,7 @@ source and binaries do not enter that product.
 
 ## Trademarks
 
-**ZeusSDR™** and **Zeus™** are trademarks of the Zeus project maintainers. The
+**SimpleHPSDRSDR™** and **SimpleHPSDR™** are trademarks of the SimpleHPSDR project maintainers. The
 engine's GPL licences cover its source code; they grant no right to use those
 names, logos, or branding for a modified or derivative product. This is the
 ordinary separation of copyright from trademark, not an added GPL restriction.

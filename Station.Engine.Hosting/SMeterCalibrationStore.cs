@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
@@ -11,9 +11,9 @@
 // repository for the full text, or https://www.gnu.org/licenses/.
 
 using LiteDB;
-using Zeus.Contracts;
+using SimpleHPSDR.Contracts;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
 /// Persists the operator's additive S-meter calibration in the shared
@@ -28,7 +28,7 @@ public sealed class SMeterCalibrationStore : IDisposable
     public const double StepDb = 0.1;
 
     private const string ProfileId = "default";
-    private readonly Zeus.Data.SharedLiteDatabase.Lease _dbLease;
+    private readonly SimpleHPSDR.Data.SharedLiteDatabase.Lease _dbLease;
     private readonly ILiteCollection<SMeterCalibrationEntry> _entries;
     private readonly object _sync = new();
 
@@ -43,7 +43,7 @@ public sealed class SMeterCalibrationStore : IDisposable
         if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
             Directory.CreateDirectory(directory);
 
-        _dbLease = Zeus.Data.SharedLiteDatabase.Acquire(dbPath);
+        _dbLease = SimpleHPSDR.Data.SharedLiteDatabase.Acquire(dbPath);
         _entries = _dbLease.Database.GetCollection<SMeterCalibrationEntry>(
             "smeter_calibration");
         _entries.EnsureIndex(x => x.ProfileId, unique: true);

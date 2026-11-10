@@ -5,9 +5,9 @@ using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using Station.AudioRing;
-using Zeus.Contracts;
+using SimpleHPSDR.Contracts;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 public delegate void ProductPluginTxAudioSink(ReadOnlySpan<float> block48k);
 public delegate bool ProductPluginMonitorAudioSink(ReadOnlySpan<float> block48k);

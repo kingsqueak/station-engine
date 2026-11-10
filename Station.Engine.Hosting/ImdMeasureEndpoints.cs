@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>Maps the engine-owned two-tone IMD measurement route.</summary>
 public static class ImdMeasureEndpoints

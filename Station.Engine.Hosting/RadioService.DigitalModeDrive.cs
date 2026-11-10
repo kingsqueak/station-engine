@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 using Microsoft.Extensions.Logging;
-using Zeus.Contracts;
+using SimpleHPSDR.Contracts;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 // Station-wide Drive memory per digital mode. Each digital mode
 // (DigitalDriveModes: FT8 / FT4 / WSPR / DIGU / DIGL / FREEDV) keeps the last

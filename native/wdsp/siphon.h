@@ -53,7 +53,7 @@ typedef struct _siphon {
   int n_alloc_disps;      // number of additional allocated displays for this channel
   int* alloc_run;       // vector of corresponding 'run' variables for the additional allocated disps
   int* alloc_disp;      // vector of 'disp' identifiers for the additional allocated disps
-  sip_cursor cursor;    // Zeus: contiguous reader position (TXAGetaSipBlocksF1)
+  sip_cursor cursor;    // SimpleHPSDR: contiguous reader position (TXAGetaSipBlocksF1)
 } siphon, *SIPHON;
 
 extern SIPHON create_siphon (int run, int position, int mode, int disp, int insize, double* in, int sipsize,
@@ -82,7 +82,7 @@ extern __declspec (dllexport) void RXAGetaSipF1 (int channel, float* out, int si
 
 // TXA Properties
 
-// Zeus extension: every block written since the previous call, exactly once.
+// SimpleHPSDR extension: every block written since the previous call, exactly once.
 extern __declspec (dllexport) int TXAGetaSipBlocksF1 (int channel, float* out, int block_size, int max_blocks);
 
 extern __declspec (dllexport) void TXAGetaSipF  (int channel, float* out, int size);

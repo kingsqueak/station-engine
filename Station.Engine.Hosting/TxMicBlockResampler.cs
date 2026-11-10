@@ -3,7 +3,7 @@
 // Streaming mono float32 sample-rate converter for sources that feed the
 // TX mic-block contract: 960 samples at 48 kHz.
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 internal delegate void TxMicBlockReady(ReadOnlySpan<float> block);
 

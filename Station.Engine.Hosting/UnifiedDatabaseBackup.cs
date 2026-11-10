@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 
@@ -11,24 +11,24 @@ using System.Text.Json;
 using LiteDB;
 using JsonSerializer = System.Text.Json.JsonSerializer;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
-/// The single operator-facing Zeus database. The .zeusdb payload is a
+/// The single operator-facing SimpleHPSDR database. The .simplehpsdrdb payload is a
 /// versioned ZIP container because the live processes intentionally retain
 /// separate LiteDB ownership boundaries. Operators nevertheless only need to
 /// keep track of this one file.
 /// </summary>
 internal static class UnifiedDatabaseBackup
 {
-    internal const string Format = "zeus-database-backup";
+    internal const string Format = "simplehpsdr-database-backup";
     internal const int CurrentVersion = 1;
     internal const string PendingRestoreDirectoryEnvironmentVariable =
-        "ZEUS_PENDING_DATABASE_RESTORE_PATH";
+        "SIMPLEHPSDR_PENDING_DATABASE_RESTORE_PATH";
     internal const string ProductPreferencesPathEnvironmentVariable =
-        "ZEUS_PRODUCT_PREFS_PATH";
+        "SIMPLEHPSDR_PRODUCT_PREFS_PATH";
     internal const string ProductDataDirectoryEnvironmentVariable =
-        "ZEUS_PRODUCT_DATA_DIR";
+        "SIMPLEHPSDR_PRODUCT_DATA_DIR";
 
     private const string ManifestEntryName = "manifest.json";
     private const string PendingDirectoryName = ".pending-database-restore";
@@ -146,7 +146,7 @@ internal static class UnifiedDatabaseBackup
                 totalBytes = checked(totalBytes + bytes.LongLength);
                 if (totalBytes > MaximumBackupBytes)
                     throw new InvalidOperationException(
-                        $"The Zeus settings database became too large while adding the '{store.Key}' store.");
+                        $"The SimpleHPSDR settings database became too large while adding the '{store.Key}' store.");
 
                 var archivePath = $"data/{store.Key}{(store.Kind == "litedb" ? ".db" : ".json")}";
                 var zipEntry = archive.CreateEntry(archivePath, CompressionLevel.Optimal);
@@ -164,7 +164,7 @@ internal static class UnifiedDatabaseBackup
             if (!entryKeys.Contains("preferences") || !entryKeys.Contains("station-engine"))
             {
                 throw new InvalidOperationException(
-                    "Zeus could not read every part of the complete settings database.");
+                    "SimpleHPSDR could not read every part of the complete settings database.");
             }
 
             var manifest = new BackupManifest(
@@ -184,7 +184,7 @@ internal static class UnifiedDatabaseBackup
     {
         ArgumentNullException.ThrowIfNull(source);
         var incomingPath = Path.Combine(
-            Path.GetTempPath(), $"zeus-database-import-{Guid.NewGuid():N}.tmp");
+            Path.GetTempPath(), $"simplehpsdr-database-import-{Guid.NewGuid():N}.tmp");
         try
         {
             using (var destination = new FileStream(
@@ -192,7 +192,7 @@ internal static class UnifiedDatabaseBackup
             {
                 source.CopyTo(destination);
                 if (destination.Length > MaximumBackupBytes)
-                    throw new InvalidOperationException("That Zeus database backup is too large.");
+                    throw new InvalidOperationException("That SimpleHPSDR database backup is too large.");
             }
 
             if (IsZip(incomingPath))
@@ -209,7 +209,7 @@ internal static class UnifiedDatabaseBackup
 
     /// <summary>
     /// Applies every Station-owned file in the operator-facing settings
-    /// database. Product-owned entries stay staged for ZeusProduct to consume
+    /// database. Product-owned entries stay staged for SimpleHPSDRProduct to consume
     /// before it opens its own stores.
     /// </summary>
     internal static void ApplyPendingStationRestore(TimeSpan? restoreLockTimeout = null)
@@ -348,7 +348,7 @@ internal static class UnifiedDatabaseBackup
     }
 
     /// <summary>How long product-owned entries may wait in the shared
-    /// staging directory for ZeusProduct to consume them.</summary>
+    /// staging directory for SimpleHPSDRProduct to consume them.</summary>
     internal static readonly TimeSpan ProductEntryRetention = TimeSpan.FromDays(7);
     internal const string StagedMarkerName = "staged-utc.txt";
 
@@ -383,7 +383,7 @@ internal static class UnifiedDatabaseBackup
     internal static IReadOnlyList<StoreSpec> DiscoverStores()
     {
         // Zeus Link's stores belong to another program when the engine has its own folder.
-        if (Zeus.Contracts.EngineDataRoot.IsIsolated)
+        if (SimpleHPSDR.Contracts.EngineDataRoot.IsIsolated)
             return
             [
                 new("preferences", "litedb", PrefsDbPath.Get(), StationOwned: true),
@@ -418,13 +418,13 @@ internal static class UnifiedDatabaseBackup
         var local = Environment.GetFolderPath(
             Environment.SpecialFolder.LocalApplicationData,
             Environment.SpecialFolderOption.Create);
-        return Path.Combine(local, "Zeus", "zeus-link-product.db");
+        return Path.Combine(local, "SimpleHPSDR", "zeus-link-product.db");
     }
 
     private static string ProductLogbookPath() =>
-        Path.Combine(ProductDataDirectory(), "logbook", "zeus-logbook.db");
+        Path.Combine(ProductDataDirectory(), "logbook", "simplehpsdr-logbook.db");
 
-    // Mirrors ZeusProduct's ProductBundleStore.ResolveDataDirectory; the
+    // Mirrors SimpleHPSDRProduct's ProductBundleStore.ResolveDataDirectory; the
     // host-parity test pins the two equal.
     private static string ProductDataDirectory()
     {
@@ -435,7 +435,7 @@ internal static class UnifiedDatabaseBackup
         var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         if (string.IsNullOrWhiteSpace(local))
             local = AppContext.BaseDirectory;
-        return Path.Combine(local, "ZeusProduct");
+        return Path.Combine(local, "SimpleHPSDRProduct");
     }
 
     private static byte[] SnapshotLiteDatabase(
@@ -444,14 +444,14 @@ internal static class UnifiedDatabaseBackup
         Action<string>? snapshotObserver = null)
     {
         var tempPath = Path.Combine(
-            Path.GetTempPath(), $"zeus-database-snapshot-{Guid.NewGuid():N}.db");
+            Path.GetTempPath(), $"simplehpsdr-database-snapshot-{Guid.NewGuid():N}.db");
         try
         {
             if (stationOwned)
             {
                 // Station-owned stores share this process's lease registry, so
                 // they can be checkpointed before the stable byte copy.
-                using var lease = Zeus.Data.SharedLiteDatabase.Acquire(sourcePath);
+                using var lease = SimpleHPSDR.Data.SharedLiteDatabase.Acquire(sourcePath);
                 lease.Database.Checkpoint();
                 CopySnapshotFile(sourcePath, tempPath);
             }
@@ -514,7 +514,7 @@ internal static class UnifiedDatabaseBackup
     {
         using var archive = ZipFile.OpenRead(path);
         var manifestZipEntry = archive.GetEntry(ManifestEntryName)
-            ?? throw new InvalidOperationException("That file has no Zeus database manifest.");
+            ?? throw new InvalidOperationException("That file has no SimpleHPSDR database manifest.");
         BackupManifest manifest;
         using (var stream = manifestZipEntry.Open())
         using (var memory = new MemoryStream())
@@ -541,13 +541,13 @@ internal static class UnifiedDatabaseBackup
                         $"The '{entry.Key}' entry kind does not match its destination.");
                 var zipEntry = archive.GetEntry(entry.ArchivePath)
                     ?? throw new InvalidOperationException(
-                        $"The Zeus database backup is missing '{entry.Key}'.");
+                        $"The SimpleHPSDR database backup is missing '{entry.Key}'.");
                 if (entry.Length < 0 || entry.Length > MaximumEntryBytes)
                     throw new InvalidOperationException(
                         $"The '{entry.Key}' entry has an invalid size.");
                 total = checked(total + entry.Length);
                 if (total > MaximumBackupBytes)
-                    throw new InvalidOperationException("That Zeus database backup is too large.");
+                    throw new InvalidOperationException("That SimpleHPSDR database backup is too large.");
 
                 var outputPath = SafePendingEntryPath(temporaryDirectory, entry.ArchivePath);
                 Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
@@ -608,7 +608,7 @@ internal static class UnifiedDatabaseBackup
                 .ToHashSet(StringComparer.Ordinal);
             if (!stagedKeys.Contains("preferences") || !stagedKeys.Contains("station-engine"))
                 throw new InvalidOperationException(
-                    "That file is missing part of the complete Zeus settings database.");
+                    "That file is missing part of the complete SimpleHPSDR settings database.");
 
             WriteManifestAtomically(
                 Path.Combine(temporaryDirectory, ManifestEntryName),
@@ -618,7 +618,7 @@ internal static class UnifiedDatabaseBackup
                 pendingDirectory,
                 TimeSpan.FromSeconds(30))
                 ?? throw new InvalidOperationException(
-                    "Zeus is currently applying another database restore; try the import again.");
+                    "SimpleHPSDR is currently applying another database restore; try the import again.");
             RejectIfRollbackPending(pendingDirectory);
             ReplacePendingDirectory(temporaryDirectory, pendingDirectory);
         }
@@ -657,7 +657,7 @@ internal static class UnifiedDatabaseBackup
                 pendingDirectory,
                 TimeSpan.FromSeconds(30))
                 ?? throw new InvalidOperationException(
-                    "Zeus is currently applying another database restore; try the import again.");
+                    "SimpleHPSDR is currently applying another database restore; try the import again.");
             RejectIfRollbackPending(pendingDirectory);
             ReplacePendingDirectory(temporaryDirectory, pendingDirectory);
         }
@@ -679,7 +679,7 @@ internal static class UnifiedDatabaseBackup
     private static byte[] BuildLegacyEngineSnapshot(string legacyPath)
     {
         var temporaryPath = Path.Combine(
-            Path.GetTempPath(), $"zeus-legacy-engine-{Guid.NewGuid():N}.db");
+            Path.GetTempPath(), $"simplehpsdr-legacy-engine-{Guid.NewGuid():N}.db");
         try
         {
             var currentEnginePath = PrefsDbPath.EngineGet();
@@ -699,7 +699,7 @@ internal static class UnifiedDatabaseBackup
                 var sourceNames = source.GetCollectionNames().ToHashSet(StringComparer.Ordinal);
                 // Per-plugin settings are a dynamic name set. The standalone
                 // engine reads them from station-engine.db, while the desktop
-                // host keeps them in zeus-prefs.db (restored wholesale above).
+                // host keeps them in simplehpsdr-prefs.db (restored wholesale above).
                 // A legacy file cannot prove its plugin_* copies are newer than
                 // the engine's: product files never carry the engine migration
                 // markers and keep their frozen pre-split engine families after
@@ -991,7 +991,7 @@ internal static class UnifiedDatabaseBackup
         catch (Exception ex)
         {
             throw new InvalidOperationException(
-                "That file is not a valid Zeus database backup.", ex);
+                "That file is not a valid SimpleHPSDR database backup.", ex);
         }
     }
 
@@ -1006,10 +1006,10 @@ internal static class UnifiedDatabaseBackup
             //    and every product-family database carries at least one;
             //  - prefs-resident engine anchors (display/theme/layout) with NO
             //    engine-exclusive collection present: a fresh split-era
-            //    zeus-prefs.db whose operator has only touched those.
+            //    simplehpsdr-prefs.db whose operator has only touched those.
             // A file whose recognized names are engine-exclusive (radio_state,
             // dsp_settings, ...) is station-engine.db or a copy; staging it
-            // would replace zeus-prefs.db wholesale and silently revert every
+            // would replace simplehpsdr-prefs.db wholesale and silently revert every
             // product setting, so those stay rejected on purpose. Names alone
             // cannot separate the dual-homed layout collections, hence the
             // engine-exclusive test rather than a simple family overlap.
@@ -1026,7 +1026,7 @@ internal static class UnifiedDatabaseBackup
             if (!acceptable)
             {
                 throw new InvalidOperationException(
-                    "That LiteDB file is not a Zeus settings database.");
+                    "That LiteDB file is not a SimpleHPSDR settings database.");
             }
         }
         catch (InvalidOperationException)
@@ -1036,7 +1036,7 @@ internal static class UnifiedDatabaseBackup
         catch (Exception ex)
         {
             throw new InvalidOperationException(
-                "That file is not a valid Zeus settings database.", ex);
+                "That file is not a valid SimpleHPSDR settings database.", ex);
         }
     }
 
@@ -1056,18 +1056,18 @@ internal static class UnifiedDatabaseBackup
     private static BackupManifest ReadManifest(byte[] bytes)
     {
         var manifest = JsonSerializer.Deserialize<BackupManifest>(bytes, Json)
-            ?? throw new InvalidOperationException("The Zeus database manifest is empty.");
+            ?? throw new InvalidOperationException("The SimpleHPSDR database manifest is empty.");
         if (!string.Equals(manifest.Format, Format, StringComparison.Ordinal)
             || manifest.Version != CurrentVersion)
         {
             throw new InvalidOperationException(
-                $"Unsupported Zeus database backup format/version '{manifest.Format}/{manifest.Version}'.");
+                $"Unsupported SimpleHPSDR database backup format/version '{manifest.Format}/{manifest.Version}'.");
         }
         if (manifest.Entries.Count > 32)
-            throw new InvalidOperationException("The Zeus database manifest has too many entries.");
+            throw new InvalidOperationException("The SimpleHPSDR database manifest has too many entries.");
         if (manifest.Entries.Select(e => e.Key).Distinct(StringComparer.Ordinal).Count()
             != manifest.Entries.Count)
-            throw new InvalidOperationException("The Zeus database manifest has duplicate entries.");
+            throw new InvalidOperationException("The SimpleHPSDR database manifest has duplicate entries.");
         foreach (var entry in manifest.Entries)
         {
             if (string.IsNullOrWhiteSpace(entry.Key)
@@ -1076,7 +1076,7 @@ internal static class UnifiedDatabaseBackup
                 || Path.IsPathRooted(entry.ArchivePath)
                 || entry.Sha256.Length != 64)
             {
-                throw new InvalidOperationException("The Zeus database manifest contains an invalid entry.");
+                throw new InvalidOperationException("The SimpleHPSDR database manifest contains an invalid entry.");
             }
         }
         return manifest;
@@ -1090,7 +1090,7 @@ internal static class UnifiedDatabaseBackup
             return Path.GetFullPath(configured);
         var activeDirectory = Path.GetDirectoryName(Path.GetFullPath(PrefsDbPath.Get()))
             ?? PrefsDbPath.DataDir;
-        // Leaf-name check on purpose: ZEUS_PREFS_PATH relocates the prefs file
+        // Leaf-name check on purpose: SIMPLEHPSDR_PREFS_PATH relocates the prefs file
         // without moving DataDir, so an exact-path comparison against
         // DataDir/profiles misses relocated (and test) profile layouts. A data
         // root literally named "profiles" would be misclassified, but that is
@@ -1134,7 +1134,7 @@ internal static class UnifiedDatabaseBackup
                 pendingDirectory, RollbackDirectoryName, RollbackManifestName)))
         {
             throw new InvalidOperationException(
-                "Zeus must restart and finish recovering the previous database import before another backup can be imported.");
+                "SimpleHPSDR must restart and finish recovering the previous database import before another backup can be imported.");
         }
     }
 

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>The native analyzer can retain an unread frame across a TX edge.
 /// Only the preview discards that first fresh flag; existing display readers keep it.</summary>

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2026 Douglas J. Cerrato (KB2UKA), Christian Suarez (N9WAR), and contributors.
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 internal readonly record struct MorseDecodedSymbol(string Text, float Confidence);
 /// <summary>Converts thresholded key timing into International Morse text.</summary>
 internal sealed class MorseFsm

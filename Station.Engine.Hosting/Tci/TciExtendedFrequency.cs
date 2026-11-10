@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 using System.Globalization;
-using Zeus.Contracts;
+using SimpleHPSDR.Contracts;
 
-namespace Zeus.Server.Tci;
+namespace SimpleHPSDR.Server.Tci;
 
 internal static class TciExtendedFrequency
 {

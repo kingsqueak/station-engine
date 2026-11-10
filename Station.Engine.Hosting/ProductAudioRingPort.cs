@@ -4,7 +4,7 @@
 using System.Diagnostics;
 using Station.AudioRing;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
 /// Standalone-engine Wave A adapter. It owns a private ring only while a

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 using System.Threading.Channels;
-using Zeus.Contracts;
-using Zeus.Protocol1;
+using SimpleHPSDR.Contracts;
+using SimpleHPSDR.Protocol1;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 public static class Hl2IoBoardServiceCollectionExtensions
 {

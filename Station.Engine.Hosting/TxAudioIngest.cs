@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
@@ -10,11 +10,11 @@
 // option) any later version. See the LICENSE file at the root of this
 // repository for the full text, or https://www.gnu.org/licenses/.
 //
-// Zeus is an independent reimplementation in .NET — not a fork. Its
+// SimpleHPSDR is an independent reimplementation in .NET — not a fork. Its
 // Protocol-1 / Protocol-2 framing, WDSP integration, meter pipelines, and
 // TX behaviour were informed by studying the Thetis project
 // (https://github.com/ramdor/Thetis), the authoritative reference
-// implementation in the OpenHPSDR ecosystem. Zeus gratefully acknowledges
+// implementation in the OpenHPSDR ecosystem. SimpleHPSDR gratefully acknowledges
 // the Thetis contributors whose work made this possible:
 //
 //   Richard Samphire (MW0LGE), Warren Pratt (NR0V),
@@ -39,17 +39,17 @@
 // WDSP — loaded by Zeus via P/Invoke — is Copyright (C) Warren Pratt
 // (NR0V), distributed under GPL v2 or later.
 //
-// Zeus is distributed WITHOUT ANY WARRANTY; see the GNU General Public
+// SimpleHPSDR is distributed WITHOUT ANY WARRANTY; see the GNU General Public
 // License for details.
 
 using System.Buffers.Binary;
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.Logging;
-using Zeus.Contracts;
-using Zeus.Dsp;
-using Zeus.Protocol1;
+using SimpleHPSDR.Contracts;
+using SimpleHPSDR.Dsp;
+using SimpleHPSDR.Protocol1;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
 /// Internal tag identifying which producer fed a TX-audio block into
@@ -691,7 +691,7 @@ public sealed class TxAudioIngest : IDisposable
     internal bool AudioDiagnosticsActive => _isMoxOn() || (_engineProvider()?.IsTxMonitorOn ?? false);
     private long _diagnosticLastInputTicks;
     private long _diagnosticLastWindowTicks;
-    private readonly Zeus.Protocol2.TxIqSilenceRuns _diagnosticIqRuns = new();
+    private readonly SimpleHPSDR.Protocol2.TxIqSilenceRuns _diagnosticIqRuns = new();
     private long _diagnosticIqEpoch;
     private bool? _diagnosticIqMox;
     private MicBlockSource? _diagnosticIqSource;
@@ -1588,7 +1588,7 @@ public sealed class TxAudioIngest : IDisposable
 
     /// <summary>
     /// Source-tagged entry point for TCI TX audio (from
-    /// <see cref="Zeus.Server.Tci.TciTxAudioReceiver"/>). Updates the TCI
+    /// <see cref="SimpleHPSDR.Server.Tci.TciTxAudioReceiver"/>). Updates the TCI
     /// recency timestamp so a concurrent <see cref="OnMicPcmBytesFromMic"/>
     /// call within <see cref="TciHysteresisMs"/> is silently suppressed.
     /// </summary>

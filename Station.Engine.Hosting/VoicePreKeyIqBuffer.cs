@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>Bounded IQ retention while the amplifier's pre-key gate is closed.</summary>
 internal sealed class VoicePreKeyIqBuffer

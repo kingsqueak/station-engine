@@ -1,26 +1,26 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
 // See ATTRIBUTIONS.md at the repository root for the full provenance
 // statement and per-component attribution.
 
-using Zeus.Contracts;
+using SimpleHPSDR.Contracts;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
 /// Single user-facing database backup routes, shared by the product host
-/// (ZeusEndpoints) and the standalone station engine
+/// (SimpleHPSDREndpoints) and the standalone station engine
 /// (StationEngineEndpoints). The live stores retain separate process-owned
-/// files, but export/import presents them as one versioned .zeusdb container.
+/// files, but export/import presents them as one versioned .simplehpsdrdb container.
 /// </summary>
 public static class PrefsDatabaseEndpoints
 {
     // UnifiedDatabaseBackup accepts at most 120 MiB of backup payload. Leave
-    // one MiB for multipart framing so Kestrel does not reject a Zeus-produced
+    // one MiB for multipart framing so Kestrel does not reject a SimpleHPSDR-produced
     // backup before this endpoint can return its own operator-facing error.
     internal const long UploadRequestBodyLimitBytes = 121L * 1024 * 1024;
 
@@ -32,7 +32,7 @@ public static class PrefsDatabaseEndpoints
             app.ServiceProvider.GetService<OperatorDownloadsDirectory>()
             ?? new OperatorDownloadsDirectory();
 
-        // Compatibility inventory: Zeus now exposes one canonical database to
+        // Compatibility inventory: SimpleHPSDR now exposes one canonical database to
         // the operator. Keep the route shape while older frontends roll forward.
         app.MapGet("/api/prefs/databases", () =>
             Results.Ok(CanonicalDatabaseDto()));
@@ -50,7 +50,7 @@ public static class PrefsDatabaseEndpoints
                 {
                     return Results.BadRequest(new
                     {
-                        error = "Zeus uses one database; database switching is no longer available.",
+                        error = "SimpleHPSDR uses one database; database switching is no longer available.",
                     });
                 }
                 return Results.Ok(new { restartRequired = false });
@@ -67,7 +67,7 @@ public static class PrefsDatabaseEndpoints
             {
                 return Results.BadRequest(new
                 {
-                    error = "Zeus uses one database; creating additional databases is no longer available.",
+                    error = "SimpleHPSDR uses one database; creating additional databases is no longer available.",
                 });
             }
             catch (Exception ex)
@@ -79,10 +79,10 @@ public static class PrefsDatabaseEndpoints
         app.MapPost("/api/prefs/databases/import", (HttpContext ctx, ImportDatabaseRequest req) =>
         {
             if (LocalRequestGuard.RejectIfNotLocalAllowedBrowserOrigin(
-                    ctx, "import the Zeus settings database") is { } rejected)
+                    ctx, "import the SimpleHPSDR settings database") is { } rejected)
                 return rejected;
             if (LocalRequestGuard.RejectIfNotLiteralLocalHost(
-                    ctx, "import the Zeus settings database") is { } hostRejected)
+                    ctx, "import the SimpleHPSDR settings database") is { } hostRejected)
                 return hostRejected;
             try
             {
@@ -103,10 +103,10 @@ public static class PrefsDatabaseEndpoints
         app.MapPost("/api/prefs/databases/upload", async (HttpContext ctx) =>
         {
             if (LocalRequestGuard.RejectIfNotLocalAllowedBrowserOrigin(
-                    ctx, "import the Zeus settings database") is { } rejected)
+                    ctx, "import the SimpleHPSDR settings database") is { } rejected)
                 return rejected;
             if (LocalRequestGuard.RejectIfNotLiteralLocalHost(
-                    ctx, "import the Zeus settings database") is { } hostRejected)
+                    ctx, "import the SimpleHPSDR settings database") is { } hostRejected)
                 return hostRejected;
             try
             {
@@ -118,7 +118,7 @@ public static class PrefsDatabaseEndpoints
                 if (file is null || file.Length == 0)
                     return Results.BadRequest(new { error = "No file uploaded." });
                 if (file.Length > UnifiedDatabaseBackup.MaximumBackupBytes)
-                    return Results.BadRequest(new { error = "That Zeus database backup is too large." });
+                    return Results.BadRequest(new { error = "That SimpleHPSDR database backup is too large." });
 
                 await using var stream = file.OpenReadStream();
                 UnifiedDatabaseBackup.StageImport(stream);
@@ -133,12 +133,12 @@ public static class PrefsDatabaseEndpoints
             .WithMetadata(new Microsoft.AspNetCore.Mvc.RequestSizeLimitAttribute(
                 UploadRequestBodyLimitBytes));
 
-        // Download the one operator-facing Zeus backup. This remains the live
+        // Download the one operator-facing SimpleHPSDR backup. This remains the live
         // remote-LAN appliance path: the SPA falls back to it when a local
         // server-side save is forbidden or the engine predates that route.
         // The versioned container captures both authoritative settings stores
         // and deliberately excludes PureSignal's ps_settings collection.
-        // The ".zeusdb" extension (#64) avoids collisions with ham-radio
+        // The ".simplehpsdrdb" extension (#64) avoids collisions with ham-radio
         // logbook apps that register ".db" in the Windows shell.
         //
         // Legacy imports remain supported as raw LiteDB, but new exports are
@@ -147,24 +147,24 @@ public static class PrefsDatabaseEndpoints
         // Historical context: Windows ham-radio logbook apps (N1MM+, Log4OM,
         // HRD, ...) register
         // ".db" as their file type in the shell, so a double-clicked export
-        // used to open the last-viewed logbook instead of anything Zeus. The
-        // ".zeusdb" extension keeps a Zeus-specific identity so no other app
+        // used to open the last-viewed logbook instead of anything SimpleHPSDR. The
+        // ".simplehpsdrdb" extension keeps a SimpleHPSDR-specific identity so no other app
         // silently claims it.
         app.MapGet("/api/prefs/databases/export", (HttpContext ctx, string? relativePath) =>
         {
             if (LocalRequestGuard.RejectIfNotLocalAllowedBrowserOrigin(
-                    ctx, "export the Zeus settings database") is { } rejected)
+                    ctx, "export the SimpleHPSDR settings database") is { } rejected)
                 return rejected;
             if (LocalRequestGuard.RejectIfNotLiteralLocalHost(
-                    ctx, "export the Zeus settings database") is { } hostRejected)
+                    ctx, "export the SimpleHPSDR settings database") is { } hostRejected)
                 return hostRejected;
             try
             {
                 // relativePath is intentionally ignored as a compatibility
                 // alias for older frontends. There is only one export target.
                 var bytes = UnifiedDatabaseBackup.BuildContainer();
-                var downloadName = $"zeus-backup-{DateTime.UtcNow:yyyyMMdd-HHmmss}.zeusdb";
-                return Results.File(bytes, "application/x-zeus-database", downloadName);
+                var downloadName = $"simplehpsdr-backup-{DateTime.UtcNow:yyyyMMdd-HHmmss}.simplehpsdrdb";
+                return Results.File(bytes, "application/x-simplehpsdr-database", downloadName);
             }
             catch (Exception ex)
             {
@@ -183,10 +183,10 @@ public static class PrefsDatabaseEndpoints
         OperatorDownloadsDirectory downloadsDirectory)
     {
         if (LocalRequestGuard.RejectIfNotLocalAllowedBrowserOrigin(
-                ctx, "export the Zeus settings database") is { } rejected)
+                ctx, "export the SimpleHPSDR settings database") is { } rejected)
             return rejected;
         if (LocalRequestGuard.RejectIfNotLiteralLocalHost(
-                ctx, "export the Zeus settings database") is { } hostRejected)
+                ctx, "export the SimpleHPSDR settings database") is { } hostRejected)
             return hostRejected;
         try
         {
@@ -211,7 +211,7 @@ public static class PrefsDatabaseEndpoints
         var path = PrefsDbPath.Get();
         var info = new FileInfo(path);
         var database = new PrefsDatabaseInfo(
-            Name: "Zeus",
+            Name: "SimpleHPSDR",
             RelativePath: PrefsDbPath.LegacyFileName,
             SizeBytes: info.Exists ? info.Length : 0,
             ModifiedUtcMs: info.Exists

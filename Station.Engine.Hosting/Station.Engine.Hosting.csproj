@@ -29,19 +29,19 @@
   <ItemGroup>
     <ProjectReference Include="..\Station.AudioRing\Station.AudioRing.csproj" />
     <ProjectReference Include="..\Station.AudioIpc.Spike\Station.AudioIpc.Spike.csproj" />
-    <ProjectReference Include="..\Zeus.Contracts\Zeus.Contracts.csproj" />
-    <ProjectReference Include="..\Zeus.Protocol1\Zeus.Protocol1.csproj" />
-    <ProjectReference Include="..\Zeus.Protocol2\Zeus.Protocol2.csproj" />
-    <ProjectReference Include="..\Zeus.Dsp\Zeus.Dsp.csproj" />
+    <ProjectReference Include="..\SimpleHPSDR.Contracts\SimpleHPSDR.Contracts.csproj" />
+    <ProjectReference Include="..\SimpleHPSDR.Protocol1\SimpleHPSDR.Protocol1.csproj" />
+    <ProjectReference Include="..\SimpleHPSDR.Protocol2\SimpleHPSDR.Protocol2.csproj" />
+    <ProjectReference Include="..\SimpleHPSDR.Dsp\SimpleHPSDR.Dsp.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <InternalsVisibleTo Include="Zeus.Server.Hosting" />
+    <InternalsVisibleTo Include="SimpleHPSDR.Server.Hosting" />
     <InternalsVisibleTo Include="StationEngine" />
-    <InternalsVisibleTo Include="Zeus.Contracts.Tests" />
-    <InternalsVisibleTo Include="Zeus.Plugins.Host.Tests" />
-    <InternalsVisibleTo Include="Zeus.Server.Tests" />
-    <InternalsVisibleTo Include="Zeus.VirtualRadio" />
+    <InternalsVisibleTo Include="SimpleHPSDR.Contracts.Tests" />
+    <InternalsVisibleTo Include="SimpleHPSDR.Plugins.Host.Tests" />
+    <InternalsVisibleTo Include="SimpleHPSDR.Server.Tests" />
+    <InternalsVisibleTo Include="SimpleHPSDR.VirtualRadio" />
   </ItemGroup>
 
   <!-- WDSP NR2 EMNR fopen()s these by bare relative name (native/wdsp/emnr.c:215,397).

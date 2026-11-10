@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2026 Douglas J. Cerrato (KB2UKA), Christian Suarez (N9WAR), and contributors.
 //
 // Desktop-mode TX mic capture: replaces the browser → WS MicPcm uplink with
@@ -18,9 +18,9 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Hosting;
-using Zeus.Contracts;
+using SimpleHPSDR.Contracts;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
 /// Desktop-mode hosted service that opens the selected OS input device via
@@ -207,7 +207,7 @@ internal sealed class NativeMicCapture : IHostedService, IDisposable
         _deviceSettings = deviceSettings;
         _inputFactory = inputFactory;
         _promoteWorker = promoteWorker ??
-            (() => Zeus.Protocol2.RealtimeThreadPriority.PromoteCallingThreadToProAudio(_log));
+            (() => SimpleHPSDR.Protocol2.RealtimeThreadPriority.PromoteCallingThreadToProAudio(_log));
         _recoveryToken = _recoveryCancellation.Token;
         _inputChannel = deviceSettings?.Get().InputChannel ?? -1;
         _captureBlockValidator = IsCapturedBlockCurrent;
@@ -215,7 +215,7 @@ internal sealed class NativeMicCapture : IHostedService, IDisposable
         _captureWorker = new Thread(CaptureWorkerLoop)
         {
             IsBackground = true,
-            Name = "zeus-mic-ingest",
+            Name = "simplehpsdr-mic-ingest",
         };
         try
         {
@@ -278,7 +278,7 @@ internal sealed class NativeMicCapture : IHostedService, IDisposable
         })
         {
             IsBackground = true,
-            Name = "zeus-mic-start",
+            Name = "simplehpsdr-mic-start",
         };
         thread.Start();
         return Task.CompletedTask;
@@ -470,7 +470,7 @@ internal sealed class NativeMicCapture : IHostedService, IDisposable
             {
                 Volatile.Write(
                     ref _inputError,
-                    "The selected microphone could not be opened. The system default input is active temporarily while Zeus retries the selected device.");
+                    "The selected microphone could not be opened. The system default input is active temporarily while SimpleHPSDR retries the selected device.");
             }
             ScheduleStartupOpenRecovery(requestedDeviceId);
             return InputOpenOutcome.DefaultFallbackOpened;
@@ -1178,7 +1178,7 @@ internal sealed class NativeMicCapture : IHostedService, IDisposable
         // Encode f32le. On x64 / arm64 .NET targets, the host float endianness
         // matches the wire format (little-endian), so MemoryMarshal.AsBytes
         // produces the wanted payload directly. BinaryPrimitives is the safe
-        // alternative if we ever target a big-endian runtime, but Zeus targets
+        // alternative if we ever target a big-endian runtime, but SimpleHPSDR targets
         // none today.
         var srcBytes = MemoryMarshal.AsBytes(block);
         srcBytes.CopyTo(_payload);

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 using System.Text.Json;
 
@@ -177,8 +177,8 @@ public static class RadioCalibrationEndpoints
     }
 
     private static SMeterCalibrationDto SMeterCalibrationSnapshot(
-        Zeus.Contracts.HpsdrBoardKind board,
-        Zeus.Contracts.OrionMkIIVariant variant,
+        SimpleHPSDR.Contracts.HpsdrBoardKind board,
+        SimpleHPSDR.Contracts.OrionMkIIVariant variant,
         double offsetDb)
     {
         return new SMeterCalibrationDto(
@@ -209,8 +209,8 @@ internal sealed record External10MHzReferenceDto(
 
 internal sealed record SMeterCalibrationDto(
     double OffsetDb,
-    Zeus.Contracts.HpsdrBoardKind BoardKind,
-    Zeus.Contracts.OrionMkIIVariant Variant,
+    SimpleHPSDR.Contracts.HpsdrBoardKind BoardKind,
+    SimpleHPSDR.Contracts.OrionMkIIVariant Variant,
     double MinDb,
     double MaxDb,
     double StepDb);

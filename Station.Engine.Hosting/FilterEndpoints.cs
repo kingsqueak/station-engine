@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-using Zeus.Contracts;
+using SimpleHPSDR.Contracts;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>Maps receiver and transmitter filter-control routes.</summary>
 public static class FilterEndpoints
@@ -109,7 +109,7 @@ public static class FilterEndpoints
         });
 
         // Advanced-ribbon pane visibility. Persisted via FilterPresetStore so the
-        // operator's close-the-ribbon choice survives a Zeus.Server restart.
+        // operator's close-the-ribbon choice survives a SimpleHPSDR.Server restart.
         endpoints.MapPost("/api/filter/advanced-pane", (FilterAdvancedPaneRequest req, RadioService r) =>
         {
             log.LogInformation("api.filter.advancedPane open={Open}", req.Open);

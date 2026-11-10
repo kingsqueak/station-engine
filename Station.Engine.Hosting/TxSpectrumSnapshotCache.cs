@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>Digital TX analyzer pixels; this is not a post-amplifier RF measurement.</summary>
 public sealed record TxSpectrumSnapshot(

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
@@ -10,11 +10,11 @@
 // option) any later version. See the LICENSE file at the root of this
 // repository for the full text, or https://www.gnu.org/licenses/.
 //
-// Zeus is an independent reimplementation in .NET — not a fork. Its
+// SimpleHPSDR is an independent reimplementation in .NET — not a fork. Its
 // Protocol-1 / Protocol-2 framing, WDSP integration, meter pipelines, and
 // TX behaviour were informed by studying the Thetis project
 // (https://github.com/ramdor/Thetis), the authoritative reference
-// implementation in the OpenHPSDR ecosystem. Zeus gratefully acknowledges
+// implementation in the OpenHPSDR ecosystem. SimpleHPSDR gratefully acknowledges
 // the Thetis contributors whose work made this possible:
 //
 //   Richard Samphire (MW0LGE), Warren Pratt (NR0V),
@@ -39,13 +39,13 @@
 // WDSP — loaded by Zeus via P/Invoke — is Copyright (C) Warren Pratt
 // (NR0V), distributed under GPL v2 or later.
 //
-// Zeus is distributed WITHOUT ANY WARRANTY; see the GNU General Public
+// SimpleHPSDR is distributed WITHOUT ANY WARRANTY; see the GNU General Public
 // License for details.
 
 using Microsoft.Extensions.Logging.Abstractions;
-using Zeus.Dsp.Wdsp;
+using SimpleHPSDR.Dsp.Wdsp;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
 /// Kicks off WDSPwisdom on a worker thread at app start so first-connect
@@ -54,7 +54,7 @@ namespace Zeus.Server;
 /// on wisdom generation.
 ///
 /// Also the one place that states, on the record, which DSP engine this process
-/// actually loaded. Both hosts (Zeus.Server and the standalone station engine)
+/// actually loaded. Both hosts (SimpleHPSDR.Server and the standalone station engine)
 /// register this as a hosted service exactly once, so the version line is
 /// emitted once per process at DSP start.
 /// </summary>
@@ -98,7 +98,7 @@ public sealed class WisdomBootstrapService : IHostedService
     ///
     /// A version below the required one is a genuine engine mismatch and is
     /// logged at Error, but deliberately does NOT stop the process or block the
-    /// operator: Zeus drives real transmitters, and refusing to start is a worse
+    /// operator: SimpleHPSDR drives real transmitters, and refusing to start is a worse
     /// outcome than running loudly degraded. The condition is additionally
     /// published in diagnostics (<c>wdspVersionMismatch</c>) so the UI can
     /// surface it.
@@ -129,7 +129,7 @@ public sealed class WisdomBootstrapService : IHostedService
             case WdspEngineVersionState.Mismatch:
                 log.LogError(
                     "wdsp.engine.version raw={Raw} version={Version} required={Required} status={Status} "
-                    + "— the loaded libwdsp is OLDER than the engine Zeus targets. Every WDSP-2.0-dependent "
+                    + "— the loaded libwdsp is OLDER than the engine SimpleHPSDR targets. Every WDSP-2.0-dependent "
                     + "behaviour is unreliable until the matching library is installed.",
                     version.Raw, version.Display, WdspEngineVersion.RequiredDisplay, version.StatusToken);
                 break;

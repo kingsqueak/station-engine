@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Deterministic tests for the Zeus FM tone extension (fm_tone.c): DCS
+// Deterministic tests for the SimpleHPSDR FM tone extension (fm_tone.c): DCS
 // codeword construction against published vectors, DCS encode -> decode
 // loopback, CTCSS Goertzel-bank discrimination of the closest tone pairs,
 // false-lock immunity and the tone-squelch gate. Compiled standalone (no
@@ -290,7 +290,7 @@ static void test_ctcss_low_level (void)
 	sig_cfg c = cfg_default ();
 	sig_res r;
 	c.ctcss_hz = 88.5;
-	c.ctcss_amp = 0.02 / 1.02;          /* minimum Zeus CTCSS level, 2 % */
+	c.ctcss_amp = 0.02 / 1.02;          /* minimum SimpleHPSDR CTCSS level, 2 % */
 	c.noise_rms = 0.02;
 	fmtone_det_init (&d, RATE);
 	r = run_signal (&d, &c, 88.5, 0, 0);

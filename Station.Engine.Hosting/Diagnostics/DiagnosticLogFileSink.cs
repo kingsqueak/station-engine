@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 using System.Text;
 
-namespace Zeus.Server.Diagnostics;
+namespace SimpleHPSDR.Server.Diagnostics;
 
 /// <summary>
 /// Rolling on-disk log file. Writes every formatted and redacted line supplied
@@ -101,7 +101,7 @@ public sealed class DiagnosticLogFileSink : IDiagnosticLogFileSink, IDisposable
     // echoes it to stderr. Append stays best-effort-silent toward the caller,
     // but a sink that can never open its file (ACL-denied logs dir, Controlled
     // Folder Access, a stray file named "logs") must leave SOME signal: an
-    // engine that "runs fine yet writes no zeus-app.log" is otherwise
+    // engine that "runs fine yet writes no simplehpsdr-app.log" is otherwise
     // undiagnosable from the operator's machine. Callers hold _sync.
     private void MarkDegraded(Exception ex)
     {
@@ -153,7 +153,7 @@ public sealed class DiagnosticLogFileSink : IDiagnosticLogFileSink, IDisposable
         try
         {
             var ext = Path.GetExtension(_path);                       // ".log"
-            var stem = _path[..(_path.Length - ext.Length)];          // "...\zeus-app"
+            var stem = _path[..(_path.Length - ext.Length)];          // "...\simplehpsdr-app"
 
             if (_maxRolls == 0)
             {

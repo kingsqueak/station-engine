@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
-// Zeus is distributed WITHOUT ANY WARRANTY; see the GNU General Public
+// SimpleHPSDR is distributed WITHOUT ANY WARRANTY; see the GNU General Public
 // License for details.
 //
 // Serial PTT switch input (Thetis "Bit Bang PTT" parity, mechanism only). The
@@ -23,10 +23,10 @@
 // record a status error, back off 5 s, and retry while still enabled.
 
 using System.IO.Ports;
-using Zeus.Contracts;
-using Zeus.Server.Cat;
+using SimpleHPSDR.Contracts;
+using SimpleHPSDR.Server.Cat;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 public sealed class SerialPttService : BackgroundService
 {

@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2026 Douglas J. Cerrato (KB2UKA), Christian Suarez (N9WAR), and contributors.
 //
 // P/Invoke surface for the vendored miniaudio shim
-// (native/miniaudio/zeus_miniaudio.{c,h}). Only used by desktop mode —
-// service-mode Zeus.Server never loads libminiaudio.
+// (native/miniaudio/simplehpsdr_miniaudio.{c,h}). Only used by desktop mode —
+// service-mode SimpleHPSDR.Server never loads libminiaudio.
 //
 // The shim API uses opaque void* handles and primitive types only, so this
 // file is intentionally tiny. Anything fancier (config struct marshalling,
@@ -14,15 +14,15 @@
 using System.Reflection;
 using System.Runtime.InteropServices;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
-/// Raw P/Invoke bindings for `libminiaudio` (Zeus's shim on top of mackron's
+/// Raw P/Invoke bindings for `libminiaudio` (SimpleHPSDR's shim on top of mackron's
 /// miniaudio single-header library). The native side is the only place that
 /// touches miniaudio's internal struct layout; this file only knows about
 /// opaque handles + primitive types.
 ///
-/// Loader resolution mirrors <c>Zeus.Dsp.Wdsp.WdspNativeLoader</c>:
+/// Loader resolution mirrors <c>SimpleHPSDR.Dsp.Wdsp.WdspNativeLoader</c>:
 /// `runtimes/&lt;rid&gt;/native/libminiaudio.{dylib,so}` (or `miniaudio.dll`)
 /// next to the executing assembly, falling back to the standard OS search
 /// path. Service mode never registers the sink that calls this so the
@@ -103,7 +103,7 @@ internal static partial class MiniAudioInterop
 
     // ---- Playback ---------------------------------------------------------
 
-    [LibraryImport(LibraryName, EntryPoint = "zeus_ma_output_create")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_ma_output_create")]
     [UnmanagedCallConv(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
     internal static partial IntPtr OutputCreate(
         uint preferSampleRate,
@@ -114,7 +114,7 @@ internal static partial class MiniAudioInterop
         IntPtr notifyCallback,
         IntPtr user);
 
-    [LibraryImport(LibraryName, EntryPoint = "zeus_ma_output_create_for_device")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_ma_output_create_for_device")]
     [UnmanagedCallConv(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
     internal static partial IntPtr OutputCreateForDevice(
         uint preferSampleRate,
@@ -126,29 +126,29 @@ internal static partial class MiniAudioInterop
         IntPtr notifyCallback,
         IntPtr user);
 
-    [LibraryImport(LibraryName, EntryPoint = "zeus_ma_output_start")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_ma_output_start")]
     [UnmanagedCallConv(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
     internal static partial int OutputStart(IntPtr handle);
 
-    [LibraryImport(LibraryName, EntryPoint = "zeus_ma_output_stop")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_ma_output_stop")]
     [UnmanagedCallConv(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
     internal static partial int OutputStop(IntPtr handle);
 
-    [LibraryImport(LibraryName, EntryPoint = "zeus_ma_output_sample_rate")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_ma_output_sample_rate")]
     [UnmanagedCallConv(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
     internal static partial uint OutputSampleRate(IntPtr handle);
 
-    [LibraryImport(LibraryName, EntryPoint = "zeus_ma_output_channels")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_ma_output_channels")]
     [UnmanagedCallConv(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
     internal static partial uint OutputChannels(IntPtr handle);
 
-    [LibraryImport(LibraryName, EntryPoint = "zeus_ma_output_destroy")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_ma_output_destroy")]
     [UnmanagedCallConv(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
     internal static partial void OutputDestroy(IntPtr handle);
 
     // ---- Capture ----------------------------------------------------------
 
-    [LibraryImport(LibraryName, EntryPoint = "zeus_ma_input_create")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_ma_input_create")]
     [UnmanagedCallConv(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
     internal static partial IntPtr InputCreate(
         uint preferSampleRate,
@@ -159,7 +159,7 @@ internal static partial class MiniAudioInterop
         IntPtr notifyCallback,
         IntPtr user);
 
-    [LibraryImport(LibraryName, EntryPoint = "zeus_ma_input_create_for_device")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_ma_input_create_for_device")]
     [UnmanagedCallConv(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
     internal static partial IntPtr InputCreateForDevice(
         uint preferSampleRate,
@@ -171,71 +171,71 @@ internal static partial class MiniAudioInterop
         IntPtr notifyCallback,
         IntPtr user);
 
-    [LibraryImport(LibraryName, EntryPoint = "zeus_ma_input_start")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_ma_input_start")]
     [UnmanagedCallConv(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
     internal static partial int InputStart(IntPtr handle);
 
-    [LibraryImport(LibraryName, EntryPoint = "zeus_ma_input_stop")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_ma_input_stop")]
     [UnmanagedCallConv(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
     internal static partial int InputStop(IntPtr handle);
 
-    [LibraryImport(LibraryName, EntryPoint = "zeus_ma_input_sample_rate")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_ma_input_sample_rate")]
     [UnmanagedCallConv(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
     internal static partial uint InputSampleRate(IntPtr handle);
 
-    [LibraryImport(LibraryName, EntryPoint = "zeus_ma_input_channels")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_ma_input_channels")]
     [UnmanagedCallConv(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
     internal static partial uint InputChannels(IntPtr handle);
 
-    [LibraryImport(LibraryName, EntryPoint = "zeus_ma_input_destroy")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_ma_input_destroy")]
     [UnmanagedCallConv(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
     internal static partial void InputDestroy(IntPtr handle);
 
     // ---- Device enumeration ---------------------------------------------
 
-    [LibraryImport(LibraryName, EntryPoint = "zeus_ma_devices_create")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_ma_devices_create")]
     [UnmanagedCallConv(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
     internal static partial IntPtr DevicesCreate();
 
-    [LibraryImport(LibraryName, EntryPoint = "zeus_ma_devices_playback_count")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_ma_devices_playback_count")]
     [UnmanagedCallConv(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
     internal static partial uint DevicesPlaybackCount(IntPtr snapshot);
 
-    [LibraryImport(LibraryName, EntryPoint = "zeus_ma_devices_capture_count")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_ma_devices_capture_count")]
     [UnmanagedCallConv(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
     internal static partial uint DevicesCaptureCount(IntPtr snapshot);
 
-    [LibraryImport(LibraryName, EntryPoint = "zeus_ma_devices_playback_id")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_ma_devices_playback_id")]
     [UnmanagedCallConv(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
     internal static partial IntPtr DevicesPlaybackId(IntPtr snapshot, uint index);
 
-    [LibraryImport(LibraryName, EntryPoint = "zeus_ma_devices_capture_id")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_ma_devices_capture_id")]
     [UnmanagedCallConv(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
     internal static partial IntPtr DevicesCaptureId(IntPtr snapshot, uint index);
 
-    [LibraryImport(LibraryName, EntryPoint = "zeus_ma_devices_playback_name")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_ma_devices_playback_name")]
     [UnmanagedCallConv(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
     internal static partial IntPtr DevicesPlaybackName(IntPtr snapshot, uint index);
 
-    [LibraryImport(LibraryName, EntryPoint = "zeus_ma_devices_capture_name")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_ma_devices_capture_name")]
     [UnmanagedCallConv(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
     internal static partial IntPtr DevicesCaptureName(IntPtr snapshot, uint index);
 
-    [LibraryImport(LibraryName, EntryPoint = "zeus_ma_devices_playback_default")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_ma_devices_playback_default")]
     [UnmanagedCallConv(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
     internal static partial int DevicesPlaybackDefault(IntPtr snapshot, uint index);
 
-    [LibraryImport(LibraryName, EntryPoint = "zeus_ma_devices_capture_default")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_ma_devices_capture_default")]
     [UnmanagedCallConv(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
     internal static partial int DevicesCaptureDefault(IntPtr snapshot, uint index);
 
-    [LibraryImport(LibraryName, EntryPoint = "zeus_ma_devices_destroy")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_ma_devices_destroy")]
     [UnmanagedCallConv(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
     internal static partial void DevicesDestroy(IntPtr snapshot);
 
     // ---- Version probe ---------------------------------------------------
 
-    [LibraryImport(LibraryName, EntryPoint = "zeus_ma_version")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_ma_version")]
     [UnmanagedCallConv(CallConvs = [typeof(System.Runtime.CompilerServices.CallConvCdecl)])]
     internal static partial IntPtr VersionPtr();
 
@@ -243,6 +243,6 @@ internal static partial class MiniAudioInterop
     internal static string Version()
     {
         IntPtr p = VersionPtr();
-        return p == IntPtr.Zero ? "zeus-miniaudio (unknown)" : (Marshal.PtrToStringAnsi(p) ?? "");
+        return p == IntPtr.Zero ? "simplehpsdr-miniaudio (unknown)" : (Marshal.PtrToStringAnsi(p) ?? "");
     }
 }

@@ -2,11 +2,11 @@
 // Copyright (C) 2026 Douglas J. Cerrato (KB2UKA) and contributors.
 
 using System.Net;
-using Zeus.Contracts;
-using P1Radio = Zeus.Protocol1.Discovery.DiscoveredRadio;
-using P2Radio = Zeus.Protocol2.Discovery.DiscoveredRadio;
+using SimpleHPSDR.Contracts;
+using P1Radio = SimpleHPSDR.Protocol1.Discovery.DiscoveredRadio;
+using P2Radio = SimpleHPSDR.Protocol2.Discovery.DiscoveredRadio;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>Product-neutral additions to engine-owned P1/P2 discovery.</summary>
 public sealed record RadioDiscoveryExtensionResult(

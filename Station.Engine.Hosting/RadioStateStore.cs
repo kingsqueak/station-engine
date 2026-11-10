@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
@@ -8,9 +8,9 @@
 // statement and per-component attribution.
 
 using LiteDB;
-using Zeus.Contracts;
+using SimpleHPSDR.Contracts;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 // Persists the subset of RadioService state that no dedicated store covers:
 // active mode/VFO, RX/TX filter bounds, master volume, TX mic gain, TX
@@ -38,7 +38,7 @@ namespace Zeus.Server;
 // Both share station-engine.db with the other engine preference stores.
 public sealed class RadioStateStore : IDisposable
 {
-    private readonly Zeus.Data.SharedLiteDatabase.Lease _dbLease;
+    private readonly SimpleHPSDR.Data.SharedLiteDatabase.Lease _dbLease;
     private readonly LiteDatabase _db;
     private readonly ILiteCollection<RadioStateEntry> _state;
     private readonly ILiteCollection<BoardSampleRateEntry> _boardRates;
@@ -53,7 +53,7 @@ public sealed class RadioStateStore : IDisposable
         if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
             Directory.CreateDirectory(dir);
 
-        _dbLease = Zeus.Data.SharedLiteDatabase.Acquire(dbPath);
+        _dbLease = SimpleHPSDR.Data.SharedLiteDatabase.Acquire(dbPath);
         _db = _dbLease.Database;
         _state = _db.GetCollection<RadioStateEntry>("radio_state");
         _boardRates = _db.GetCollection<BoardSampleRateEntry>("board_sample_rates");
@@ -232,11 +232,11 @@ public sealed class RadioStateEntry
     public int FilterLowHzB { get; set; } = 100;
     public int FilterHighHzB { get; set; } = 2850;
     public string? FilterPresetNameB { get; set; } = "VAR1";
-    public Zeus.Contracts.Rx2AudioMode Rx2AudioMode { get; set; } = Zeus.Contracts.Rx2AudioMode.Both;
+    public SimpleHPSDR.Contracts.Rx2AudioMode Rx2AudioMode { get; set; } = SimpleHPSDR.Contracts.Rx2AudioMode.Both;
     public double Rx2AfGainDb { get; set; }
     // RX2's own NR mode (per-receiver NR). Null on rows written before
     // per-receiver NR — hydration then seeds RX2 from the shared NR mode.
-    public Zeus.Contracts.NrMode? Rx2NrMode { get; set; }
+    public SimpleHPSDR.Contracts.NrMode? Rx2NrMode { get; set; }
     public TxVfo TxVfo { get; set; } = TxVfo.A;
     // CTUN (click-tune / centred-tuning) toggle. See StateDto.CtunEnabled.
     // Persisted so the operator's preference survives a restart.

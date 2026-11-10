@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 using System.Threading.Channels;
 using System.Diagnostics;
 
-namespace Zeus.Server.Diagnostics;
+namespace SimpleHPSDR.Server.Diagnostics;
 
 /// <summary>
 /// An <see cref="ILoggerProvider"/> that mirrors signal-bearing formatted log
@@ -26,7 +26,7 @@ namespace Zeus.Server.Diagnostics;
 public sealed class RingBufferLoggerProvider : ILoggerProvider
 {
     // Match full logger category names only. Short names such as "Diagnostics"
-    // are also used by Zeus code and are not sufficient to identify framework
+    // are also used by SimpleHPSDR code and are not sufficient to identify framework
     // infrastructure.
     private static readonly string[] InfrastructureCategoryPrefixes =
     [
@@ -127,7 +127,7 @@ public sealed class RingBufferLoggerProvider : ILoggerProvider
         catch { CountFailure(); }
     }
 
-    /// <summary>Last dotted segment of a logger category (e.g. "Zeus.Server.RadioService" → "RadioService").</summary>
+    /// <summary>Last dotted segment of a logger category (e.g. "SimpleHPSDR.Server.RadioService" → "RadioService").</summary>
     private static string ShortCategory(string category)
     {
         if (string.IsNullOrEmpty(category)) return category ?? string.Empty;

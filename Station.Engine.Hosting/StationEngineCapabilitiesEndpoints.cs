@@ -3,7 +3,7 @@
 
 using System.Runtime.InteropServices;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>Maps the standalone engine's browser-bootstrap capabilities.</summary>
 public static class StationEngineCapabilitiesEndpoints
@@ -59,10 +59,10 @@ internal sealed record StationEngineCapabilitiesSnapshot(
 // Per-family feature availability for the trimmed standalone engine. The
 // engine hosts only the radio/DSP/TX surface — none of the product-side route
 // families below — so every product flag defaults to false. The full
-// Zeus.Server host reports the same families as true (see Zeus.Server.Hosting
+// SimpleHPSDR.Server host reports the same families as true (see SimpleHPSDR.Server.Hosting
 // FeatureMatrix), which lets the SPA distinguish "trimmed engine" from "full
 // server" instead of probing routes into 404s. Field names must stay aligned
-// with the FeatureFamily keys parsed in zeus-web/src/api/capabilities.ts.
+// with the FeatureFamily keys parsed in simplehpsdr-web/src/api/capabilities.ts.
 //
 // UiPersistence is the deliberate exception: the trimmed engine DOES serve the
 // operator-UI persistence surface (/api/ui/* and /api/pan-wf-split — see

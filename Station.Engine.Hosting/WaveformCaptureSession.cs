@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 using System.Buffers.Binary;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 public sealed record WaveformCaptureMetadata(string Id, string Status, int ReceivedFrames,
     int TargetFrames, int SampleRateHz, int Channels, string Kind, string Source,

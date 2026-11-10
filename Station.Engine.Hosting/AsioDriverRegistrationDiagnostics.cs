@@ -2,7 +2,7 @@
 
 using System.Runtime.Versioning;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>Which registry view an ASIO COM registration is read from.</summary>
 internal enum AsioRegistryView
@@ -40,7 +40,7 @@ internal interface IAsioRegistrationReader
 internal static class AsioDriverRegistrationDiagnostics
 {
     /// <summary>Prefix shared by the native probe and session-open instantiation
-    /// errors (native/asio/zeus_asio.cpp); diagnosis runs only for these.</summary>
+    /// errors (native/asio/simplehpsdr_asio.cpp); diagnosis runs only for these.</summary>
     internal const string InstantiationFailureMarker = "Could not instantiate the selected ASIO driver";
 
     /// <summary>Appends a plain-language cause to a native ASIO instantiation
@@ -89,7 +89,7 @@ internal static class AsioDriverRegistrationDiagnostics
         }
         if (NormalizePath(reader.ReadInprocServer32(clsid, AsioRegistryView.Registry32)) is not null)
         {
-            return $"{name} is installed only as a 32-bit driver. Zeus is 64-bit: install the manufacturer's 64-bit ASIO driver.";
+            return $"{name} is installed only as a 32-bit driver. SimpleHPSDR is 64-bit: install the manufacturer's 64-bit ASIO driver.";
         }
         return $"{name} is listed as an ASIO driver but its COM class is not registered. Reinstall the driver.";
     }

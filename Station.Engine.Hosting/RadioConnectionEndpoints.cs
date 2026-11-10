@@ -2,15 +2,15 @@
 // Copyright (C) 2026 Douglas J. Cerrato (KB2UKA) and contributors.
 
 using System.Net;
-using Zeus.Contracts;
-using Zeus.Dsp.Wdsp;
-using Zeus.Protocol1;
-using Zeus.Protocol1.Discovery;
-using P1Radio = Zeus.Protocol1.Discovery.DiscoveredRadio;
-using P2Discovery = Zeus.Protocol2.Discovery.IRadioDiscovery;
-using P2Radio = Zeus.Protocol2.Discovery.DiscoveredRadio;
+using SimpleHPSDR.Contracts;
+using SimpleHPSDR.Dsp.Wdsp;
+using SimpleHPSDR.Protocol1;
+using SimpleHPSDR.Protocol1.Discovery;
+using P1Radio = SimpleHPSDR.Protocol1.Discovery.DiscoveredRadio;
+using P2Discovery = SimpleHPSDR.Protocol2.Discovery.IRadioDiscovery;
+using P2Radio = SimpleHPSDR.Protocol2.Discovery.DiscoveredRadio;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 internal sealed record ReclaimRadioRequest(
     string? Endpoint,
@@ -35,7 +35,7 @@ public static class RadioConnectionEndpoints
         ArgumentNullException.ThrowIfNull(endpoints);
         var log = endpoints.ServiceProvider
             .GetRequiredService<ILoggerFactory>()
-            .CreateLogger("Zeus.Server.RadioConnectionEndpoints");
+            .CreateLogger("SimpleHPSDR.Server.RadioConnectionEndpoints");
 
         endpoints.MapGet("/api/radios", async (
             IRadioDiscovery p1Discovery,
@@ -114,7 +114,7 @@ public static class RadioConnectionEndpoints
                 if (preflight == P2TakeoverPreflight.AlreadyConnected)
                 {
                     // A stale Busy row or a repeated confirmation must never
-                    // send run=0 to Zeus's own active P2 session.
+                    // send run=0 to SimpleHPSDR's own active P2 session.
                     return Results.Ok(new
                     {
                         freed = false,
@@ -131,16 +131,16 @@ public static class RadioConnectionEndpoints
                     // ConnectP2CoreAsync rejects a second local connection. Do
                     // that preflight before run=0 so a queued/stale takeover
                     // cannot interrupt its target and then discover that this
-                    // Zeus instance is already committed to another radio.
+                    // SimpleHPSDR instance is already committed to another radio.
                     return Results.Conflict(new
                     {
                         error =
-                            $"Zeus is already connected via {currentState.ConnectedProtocol ?? "another protocol"}. " +
+                            $"SimpleHPSDR is already connected via {currentState.ConnectedProtocol ?? "another protocol"}. " +
                             "Disconnect it before taking over a different radio.",
                     });
                 }
 
-                // Do not interrupt the incumbent unless this Zeus instance can
+                // Do not interrupt the incumbent unless this SimpleHPSDR instance can
                 // proceed immediately once exclusivity is confirmed.
                 if (preflight == P2TakeoverPreflight.DspNotReady)
                 {
@@ -584,11 +584,11 @@ public static class RadioConnectionEndpoints
         // Before opening the relay-bearing high-priority stream, unicast-probe
         // the radio and refuse to connect if it reports Busy — i.e. another
         // controller (a co-located saturn-go / p2app stack, or another
-        // Zeus/Thetis client) is already driving it. Two masters publishing
+        // SimpleHPSDR/Thetis client) is already driving it. Two masters publishing
         // DIFFERENT band/antenna/ALEX-relay selections make the FPGA flip the
         // BPF/LPF/T-R relay matrix every packet; the relay inrush can brown
         // out a shared PSU and reboot the host (observed 2026-06-23 on a
-        // co-located CM5 Saturn all-in-one). A single Zeus master is fine —
+        // co-located CM5 Saturn all-in-one). A single SimpleHPSDR master is fine —
         // the danger requires a second, disagreeing controller. The operator
         // can reclaim an abandoned stream deliberately. Reclaim sends run=0,
         // requires the radio to remain Idle beyond the normal keepalive
@@ -625,7 +625,7 @@ public static class RadioConnectionEndpoints
                     new
                     {
                         error =
-                            "This radio is already in use by another controller. Connecting Zeus as a " +
+                            "This radio is already in use by another controller. Connecting SimpleHPSDR as a " +
                             "second master would make the band/antenna/T-R relays chatter and can brown " +
                             "out the radio. Stop the other controller (e.g. saturn-go / another client), " +
                             "or use Take over to safely clear an abandoned radio stream.",

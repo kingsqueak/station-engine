@@ -4,7 +4,7 @@
 
 using System.Reflection;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
 /// Engine-only resolver and ABI probe for the RADE native shim. A replacement
@@ -15,20 +15,20 @@ namespace Zeus.Server;
 internal static class RadeNativeLoader
 {
     internal const string OverrideDirectoryEnvironmentVariable =
-        "ZEUS_RADE_NATIVE_OVERRIDE_DIR";
+        "SIMPLEHPSDR_RADE_NATIVE_OVERRIDE_DIR";
 
     private static readonly EngineNativeLibraryProbe Probe = new(
         RadeNativeMethods.LibraryName,
         OverrideDirectoryEnvironmentVariable,
         "rade",
         [
-            "zeus_rade_global_init", "zeus_rade_global_shutdown",
-            "zeus_rade_open", "zeus_rade_close", "zeus_rade_nin",
-            "zeus_rade_nin_max", "zeus_rade_max_pcm_per_rx", "zeus_rade_rx",
-            "zeus_rade_sync", "zeus_rade_freq_offset", "zeus_rade_snr_db",
-            "zeus_rade_get_eoo_callsign", "zeus_rade_n_speech_samples",
-            "zeus_rade_n_tx_out", "zeus_rade_n_tx_eoo_out", "zeus_rade_tx",
-            "zeus_rade_tx_eoo", "zeus_rade_set_tx_callsign",
+            "simplehpsdr_rade_global_init", "simplehpsdr_rade_global_shutdown",
+            "simplehpsdr_rade_open", "simplehpsdr_rade_close", "simplehpsdr_rade_nin",
+            "simplehpsdr_rade_nin_max", "simplehpsdr_rade_max_pcm_per_rx", "simplehpsdr_rade_rx",
+            "simplehpsdr_rade_sync", "simplehpsdr_rade_freq_offset", "simplehpsdr_rade_snr_db",
+            "simplehpsdr_rade_get_eoo_callsign", "simplehpsdr_rade_n_speech_samples",
+            "simplehpsdr_rade_n_tx_out", "simplehpsdr_rade_n_tx_eoo_out", "simplehpsdr_rade_tx",
+            "simplehpsdr_rade_tx_eoo", "simplehpsdr_rade_set_tx_callsign",
         ]);
 
     internal static bool TryProbeRade()

@@ -358,8 +358,8 @@ void create_rxa (int channel)
 		ch[channel].dsp_rate,							// samplerate
 		1.0);                                           // gain
 
-	// Zeus: NR3 (RNNoise) and NR4 (libspecbleach) — Thetis-lineage blocks
-	// re-spliced onto the upstream chain; see ZEUS-PATCHES.md.
+	// SimpleHPSDR: NR3 (RNNoise) and NR4 (libspecbleach) — Thetis-lineage blocks
+	// re-spliced onto the upstream chain; see SIMPLEHPSDR-PATCHES.md.
 	rxa[channel].rnnr.p = create_rnnr (
 		0,												// run
 		0,												// position
@@ -599,8 +599,8 @@ void destroy_rxa (int channel)
 	destroy_meter (rxa[channel].agcmeter.p);
 	destroy_wcpagc (rxa[channel].agc.p);
 	destroy_nnrbypass (rxa[channel].nnrbypass.p);
-	destroy_sbnr (rxa[channel].sbnr.p);		// Zeus NR4
-	destroy_rnnr (rxa[channel].rnnr.p);		// Zeus NR3
+	destroy_sbnr (rxa[channel].sbnr.p);		// SimpleHPSDR NR4
+	destroy_rnnr (rxa[channel].rnnr.p);		// SimpleHPSDR NR3
 	destroy_nnr (rxa[channel].nnr.p);
 	destroy_emnr (rxa[channel].emnr.p);
 	destroy_anr (rxa[channel].anr.p);
@@ -651,7 +651,7 @@ void flush_rxa (int channel)
 	flush_emnr (rxa[channel].emnr.p);
 	flush_nnr (rxa[channel].nnr.p);
 	flush_nnrbypass (rxa[channel].nnrbypass.p);
-	// Zeus NR3 / NR4 have no flush entry point (Thetis lineage).
+	// SimpleHPSDR NR3 / NR4 have no flush entry point (Thetis lineage).
 	flush_wcpagc (rxa[channel].agc.p);
 	flush_meter (rxa[channel].agcmeter.p);
 	flush_bandpass (rxa[channel].bp1.p);
@@ -701,8 +701,8 @@ void xrxa (int channel)
 	xnnr (rxa[channel].nnr.p, 0);
 	if (!getRun_nnrbypass (rxa[channel].nnrbypass.p))
 	{
-		xrnnr (rxa[channel].rnnr.p, 0);		// Zeus NR3
-		xsbnr (rxa[channel].sbnr.p, 0);		// Zeus NR4
+		xrnnr (rxa[channel].rnnr.p, 0);		// SimpleHPSDR NR3
+		xsbnr (rxa[channel].sbnr.p, 0);		// SimpleHPSDR NR4
 	}
 	xbandpass (rxa[channel].bp1.p, 0);
 	xwcpagc (rxa[channel].agc.p);
@@ -710,8 +710,8 @@ void xrxa (int channel)
 	xanr (rxa[channel].anr.p, 1);
 	xemnr (rxa[channel].emnr.p, 1);
 	xnnr(rxa[channel].nnr.p, 1);
-	xrnnr (rxa[channel].rnnr.p, 1);		// Zeus NR3
-	xsbnr (rxa[channel].sbnr.p, 1);		// Zeus NR4
+	xrnnr (rxa[channel].rnnr.p, 1);		// SimpleHPSDR NR3
+	xsbnr (rxa[channel].sbnr.p, 1);		// SimpleHPSDR NR4
 	xbandpass (rxa[channel].bp1.p, 1);
 	xmeter (rxa[channel].agcmeter.p);
 	xsiphon (rxa[channel].sip1.p, 0);
@@ -789,8 +789,8 @@ void setDSPSamplerate_rxa (int channel)
 	setSamplerate_anr (rxa[channel].anr.p, ch[channel].dsp_rate);
 	setSamplerate_emnr (rxa[channel].emnr.p, ch[channel].dsp_rate);
 	setSamplerate_nnr (rxa[channel].nnr.p, ch[channel].dsp_rate);
-	setSamplerate_rnnr (rxa[channel].rnnr.p, ch[channel].dsp_rate);	// Zeus NR3
-	setSamplerate_sbnr (rxa[channel].sbnr.p, ch[channel].dsp_rate);	// Zeus NR4
+	setSamplerate_rnnr (rxa[channel].rnnr.p, ch[channel].dsp_rate);	// SimpleHPSDR NR3
+	setSamplerate_sbnr (rxa[channel].sbnr.p, ch[channel].dsp_rate);	// SimpleHPSDR NR4
 	setSamplerate_nnrbypass (rxa[channel].nnrbypass.p, ch[channel].dsp_rate);
 	setSamplerate_bandpass (rxa[channel].bp1.p, ch[channel].dsp_rate);
 	setSamplerate_wcpagc (rxa[channel].agc.p, ch[channel].dsp_rate);
@@ -864,9 +864,9 @@ void setDSPBuffsize_rxa (int channel)
 	setSize_nnr(rxa[channel].nnr.p, ch[channel].dsp_size);
 	setBuffers_nnrbypass (rxa[channel].nnrbypass.p, rxa[channel].midbuff, rxa[channel].midbuff);
 	setSize_nnrbypass (rxa[channel].nnrbypass.p, ch[channel].dsp_size);
-	setSize_rnnr (rxa[channel].rnnr.p, ch[channel].dsp_size);								// Zeus NR3
+	setSize_rnnr (rxa[channel].rnnr.p, ch[channel].dsp_size);								// SimpleHPSDR NR3
 	setBuffers_rnnr (rxa[channel].rnnr.p, rxa[channel].midbuff, rxa[channel].midbuff);
-	setSize_sbnr (rxa[channel].sbnr.p, ch[channel].dsp_size);								// Zeus NR4
+	setSize_sbnr (rxa[channel].sbnr.p, ch[channel].dsp_size);								// SimpleHPSDR NR4
 	setBuffers_sbnr (rxa[channel].sbnr.p, rxa[channel].midbuff, rxa[channel].midbuff);
 	setBuffers_bandpass (rxa[channel].bp1.p, rxa[channel].midbuff, rxa[channel].midbuff);
 	setSize_bandpass (rxa[channel].bp1.p, ch[channel].dsp_size);
@@ -975,8 +975,8 @@ void RXAbp1CheckEx (int channel, int amd_run, int snba_run,
 		nnrbypass_run  ||
 		anf_run        ||
 		anr_run        ||
-		rnnr_run       ||		// Zeus NR3
-		sbnr_run)			// Zeus NR4
+		rnnr_run       ||		// SimpleHPSDR NR3
+		sbnr_run)			// SimpleHPSDR NR4
 					gain = 2.0;
 	else			gain = 1.0;
 	if (a->gain != gain)
@@ -986,13 +986,13 @@ void RXAbp1CheckEx (int channel, int amd_run, int snba_run,
 void RXAbp1Check (int channel, int amd_run, int snba_run,
 	int emnr_run, int nnrbypass_run, int anf_run, int anr_run)
 {
-	// Zeus: upstream signature preserved; NR3 / NR4 flags read from the channel.
+	// SimpleHPSDR: upstream signature preserved; NR3 / NR4 flags read from the channel.
 	RXAbp1CheckEx (channel, amd_run, snba_run, emnr_run, nnrbypass_run, anf_run, anr_run,
 		rxa[channel].rnnr.p->run, rxa[channel].sbnr.p->run);
 }
 
 // bp1 runs ahead of the AGC unless every running pre/post-selectable noise
-// reduction (ANF, ANR, EMNR and Zeus NR3 / NR4) is after the AGC; with the NNR
+// reduction (ANF, ANR, EMNR and SimpleHPSDR NR3 / NR4) is after the AGC; with the NNR
 // training-band bypass it is always ahead of the AGC (WDSP 2.11).
 int RXAbp1Position (int channel)
 {
@@ -1026,8 +1026,8 @@ void RXAbp1Set (int channel)
 		rxa[channel].snba.p->run ||
 		rxa[channel].emnr.p->run ||
 		getRun_nnrbypass (rxa[channel].nnrbypass.p) ||
-		rxa[channel].rnnr.p->run ||	// Zeus NR3
-		rxa[channel].sbnr.p->run ||	// Zeus NR4
+		rxa[channel].rnnr.p->run ||	// SimpleHPSDR NR3
+		rxa[channel].sbnr.p->run ||	// SimpleHPSDR NR4
 		rxa[channel].anf.p->run  ||
 		rxa[channel].anr.p->run)	a->run = 1;
 	else								a->run = 0;

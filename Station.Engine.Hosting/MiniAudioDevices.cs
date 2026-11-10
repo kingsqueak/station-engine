@@ -2,7 +2,7 @@
 
 using System.Runtime.InteropServices;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 internal sealed record MiniAudioDeviceInfo(string Id, string Name, bool IsDefault);
 

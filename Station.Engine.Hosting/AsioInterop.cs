@@ -3,11 +3,11 @@
 using System.Reflection;
 using System.Runtime.InteropServices;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 internal static partial class AsioInterop
 {
-    internal const string LibraryName = "zeus_asio";
+    internal const string LibraryName = "simplehpsdr_asio";
 
     internal static void EnsureResolverRegistered()
         => EngineNativeLibraryResolver.EnsureRegistered();
@@ -21,7 +21,7 @@ internal static partial class AsioInterop
             Architecture.X86 => "x86",
             _ => "x64",
         };
-        string fileName = "zeus_asio.dll";
+        string fileName = "simplehpsdr_asio.dll";
         foreach (string root in new[]
                  {
                      Path.GetDirectoryName(assembly.Location) ?? string.Empty,
@@ -41,47 +41,47 @@ internal static partial class AsioInterop
             : IntPtr.Zero;
     }
 
-    [LibraryImport(LibraryName, EntryPoint = "zeus_asio_version")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_asio_version")]
     internal static partial IntPtr Version();
-    [LibraryImport(LibraryName, EntryPoint = "zeus_asio_drivers_create")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_asio_drivers_create")]
     internal static partial IntPtr DriversCreate();
-    [LibraryImport(LibraryName, EntryPoint = "zeus_asio_drivers_count")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_asio_drivers_count")]
     internal static partial uint DriversCount(IntPtr snapshot);
-    [LibraryImport(LibraryName, EntryPoint = "zeus_asio_drivers_id")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_asio_drivers_id")]
     internal static partial IntPtr DriversId(IntPtr snapshot, uint index);
-    [LibraryImport(LibraryName, EntryPoint = "zeus_asio_drivers_name")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_asio_drivers_name")]
     internal static partial IntPtr DriversName(IntPtr snapshot, uint index);
-    [LibraryImport(LibraryName, EntryPoint = "zeus_asio_drivers_destroy")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_asio_drivers_destroy")]
     internal static partial void DriversDestroy(IntPtr snapshot);
 
-    [LibraryImport(LibraryName, EntryPoint = "zeus_asio_probe_create", StringMarshalling = StringMarshalling.Utf8)]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_asio_probe_create", StringMarshalling = StringMarshalling.Utf8)]
     internal static partial IntPtr ProbeCreate(string driverId);
-    [LibraryImport(LibraryName, EntryPoint = "zeus_asio_probe_destroy")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_asio_probe_destroy")]
     internal static partial void ProbeDestroy(IntPtr probe);
-    [LibraryImport(LibraryName, EntryPoint = "zeus_asio_probe_input_count")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_asio_probe_input_count")]
     internal static partial uint ProbeInputCount(IntPtr probe);
-    [LibraryImport(LibraryName, EntryPoint = "zeus_asio_probe_output_count")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_asio_probe_output_count")]
     internal static partial uint ProbeOutputCount(IntPtr probe);
-    [LibraryImport(LibraryName, EntryPoint = "zeus_asio_probe_input_name")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_asio_probe_input_name")]
     internal static partial IntPtr ProbeInputName(IntPtr probe, uint index);
-    [LibraryImport(LibraryName, EntryPoint = "zeus_asio_probe_output_name")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_asio_probe_output_name")]
     internal static partial IntPtr ProbeOutputName(IntPtr probe, uint index);
-    [LibraryImport(LibraryName, EntryPoint = "zeus_asio_probe_input_supported")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_asio_probe_input_supported")]
     internal static partial int ProbeInputSupported(IntPtr probe, uint index);
-    [LibraryImport(LibraryName, EntryPoint = "zeus_asio_probe_output_supported")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_asio_probe_output_supported")]
     internal static partial int ProbeOutputSupported(IntPtr probe, uint index);
-    [LibraryImport(LibraryName, EntryPoint = "zeus_asio_probe_supports_48000")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_asio_probe_supports_48000")]
     internal static partial int ProbeSupports48000(IntPtr probe);
-    [LibraryImport(LibraryName, EntryPoint = "zeus_asio_probe_buffer_min")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_asio_probe_buffer_min")]
     internal static partial uint ProbeBufferMin(IntPtr probe);
-    [LibraryImport(LibraryName, EntryPoint = "zeus_asio_probe_buffer_max")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_asio_probe_buffer_max")]
     internal static partial uint ProbeBufferMax(IntPtr probe);
-    [LibraryImport(LibraryName, EntryPoint = "zeus_asio_probe_buffer_preferred")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_asio_probe_buffer_preferred")]
     internal static partial uint ProbeBufferPreferred(IntPtr probe);
-    [LibraryImport(LibraryName, EntryPoint = "zeus_asio_probe_buffer_granularity")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_asio_probe_buffer_granularity")]
     internal static partial int ProbeBufferGranularity(IntPtr probe);
 
-    [LibraryImport(LibraryName, EntryPoint = "zeus_asio_session_create_with_input_width", StringMarshalling = StringMarshalling.Utf8)]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_asio_session_create_with_input_width", StringMarshalling = StringMarshalling.Utf8)]
     internal static partial IntPtr SessionCreateWithInputWidth(
         string driverId,
         int inputChannel,
@@ -90,44 +90,44 @@ internal static partial class AsioInterop
         uint bufferFrames,
         uint captureRingFrames,
         uint playbackRingFrames);
-    [LibraryImport(LibraryName, EntryPoint = "zeus_asio_session_start")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_asio_session_start")]
     internal static partial int SessionStart(IntPtr session);
-    [LibraryImport(LibraryName, EntryPoint = "zeus_asio_session_stop")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_asio_session_stop")]
     internal static partial int SessionStop(IntPtr session);
-    [LibraryImport(LibraryName, EntryPoint = "zeus_asio_session_control_panel")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_asio_session_control_panel")]
     internal static partial int SessionControlPanel(IntPtr session);
-    [LibraryImport(LibraryName, EntryPoint = "zeus_asio_session_destroy")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_asio_session_destroy")]
     internal static partial void SessionDestroy(IntPtr session);
-    [LibraryImport(LibraryName, EntryPoint = "zeus_asio_session_playback_free")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_asio_session_playback_free")]
     internal static partial uint PlaybackFree(IntPtr session);
-    [LibraryImport(LibraryName, EntryPoint = "zeus_asio_session_playback_write")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_asio_session_playback_write")]
     internal static unsafe partial uint PlaybackWrite(IntPtr session, float* stereo, uint frames);
-    [LibraryImport(LibraryName, EntryPoint = "zeus_asio_session_capture_available")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_asio_session_capture_available")]
     internal static partial uint CaptureAvailable(IntPtr session);
-    [LibraryImport(LibraryName, EntryPoint = "zeus_asio_session_capture_read")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_asio_session_capture_read")]
     internal static unsafe partial uint CaptureRead(IntPtr session, float* mono, uint frames);
-    [LibraryImport(LibraryName, EntryPoint = "zeus_asio_session_wait")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_asio_session_wait")]
     internal static unsafe partial int SessionWait(IntPtr session, uint timeoutMs, uint* events);
 
-    [LibraryImport(LibraryName, EntryPoint = "zeus_asio_session_sample_rate")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_asio_session_sample_rate")]
     internal static partial uint SampleRate(IntPtr session);
-    [LibraryImport(LibraryName, EntryPoint = "zeus_asio_session_buffer_frames")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_asio_session_buffer_frames")]
     internal static partial uint BufferFrames(IntPtr session);
-    [LibraryImport(LibraryName, EntryPoint = "zeus_asio_session_input_latency_frames")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_asio_session_input_latency_frames")]
     internal static partial uint InputLatencyFrames(IntPtr session);
-    [LibraryImport(LibraryName, EntryPoint = "zeus_asio_session_output_latency_frames")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_asio_session_output_latency_frames")]
     internal static partial uint OutputLatencyFrames(IntPtr session);
-    [LibraryImport(LibraryName, EntryPoint = "zeus_asio_session_input_channel_count")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_asio_session_input_channel_count")]
     internal static partial uint InputChannelCount(IntPtr session);
-    [LibraryImport(LibraryName, EntryPoint = "zeus_asio_session_output_channel_count")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_asio_session_output_channel_count")]
     internal static partial uint OutputChannelCount(IntPtr session);
-    [LibraryImport(LibraryName, EntryPoint = "zeus_asio_session_input_channel_name")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_asio_session_input_channel_name")]
     internal static partial IntPtr InputChannelName(IntPtr session, uint index);
-    [LibraryImport(LibraryName, EntryPoint = "zeus_asio_session_output_channel_name")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_asio_session_output_channel_name")]
     internal static partial IntPtr OutputChannelName(IntPtr session, uint index);
-    [LibraryImport(LibraryName, EntryPoint = "zeus_asio_session_get_status")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_asio_session_get_status")]
     internal static partial int GetStatus(IntPtr session, ref AsioNativeStatus status);
-    [LibraryImport(LibraryName, EntryPoint = "zeus_asio_last_error")]
+    [LibraryImport(LibraryName, EntryPoint = "simplehpsdr_asio_last_error")]
     internal static unsafe partial uint LastError(IntPtr session, byte* utf8, uint capacity);
 }
 

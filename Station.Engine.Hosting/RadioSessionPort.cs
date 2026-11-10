@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Copyright (C) 2026 Douglas J. Cerrato (KB2UKA) and contributors.
 
-using Zeus.Contracts;
+using SimpleHPSDR.Contracts;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
-/// <summary>The radio architectures that can own a live Zeus session.</summary>
+/// <summary>The radio architectures that can own a live SimpleHPSDR session.</summary>
 public enum RadioFamily
 {
     Hpsdr,
@@ -110,7 +110,7 @@ public sealed record OperatingContextDelta(
     int? FilterHighHz = null,
     AgcConfig? Agc = null) : IRadioSessionDelta
 {
-    /// <summary>A vendor mode name Zeus cannot represent with <see cref="RxMode"/>.</summary>
+    /// <summary>A vendor mode name SimpleHPSDR cannot represent with <see cref="RxMode"/>.</summary>
     public string? ModeRaw { get; init; }
 }
 

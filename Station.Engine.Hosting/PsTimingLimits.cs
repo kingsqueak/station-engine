@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
@@ -10,12 +10,12 @@
 // option) any later version. See the LICENSE file at the root of this
 // repository for the full text, or https://www.gnu.org/licenses/.
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 internal static class PsTimingLimits
 {
     // WDSP delay.c allocates enough whole-sample delay positions for the
-    // Thetis AMP-delay option range at the highest Zeus PS feedback rate.
+    // Thetis AMP-delay option range at the highest SimpleHPSDR PS feedback rate.
     internal const int WdspDelayWholeSamplePositions = 9601;
 
     internal const double DefaultMoxDelaySec = 0.2;

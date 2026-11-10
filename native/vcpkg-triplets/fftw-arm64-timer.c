@@ -4,7 +4,7 @@
 #define NOMINMAX
 #include <windows.h>
 
-unsigned long long zeus_fftw_counter(void)
+unsigned long long simplehpsdr_fftw_counter(void)
 {
     LARGE_INTEGER value;
     QueryPerformanceCounter(&value);

@@ -2,7 +2,7 @@
 
 using LiteDB;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 public enum AudioHostApi
 {
@@ -24,7 +24,7 @@ public sealed record AudioDeviceSettings(
 
 public sealed class AudioDeviceSettingsStore : IDisposable
 {
-    private readonly Zeus.Data.SharedLiteDatabase.Lease _dbLease;
+    private readonly SimpleHPSDR.Data.SharedLiteDatabase.Lease _dbLease;
     private readonly LiteDatabase _db;
     private readonly ILiteCollection<AudioDeviceSettingsEntry> _docs;
     private readonly ILogger<AudioDeviceSettingsStore> _log;
@@ -42,7 +42,7 @@ public sealed class AudioDeviceSettingsStore : IDisposable
             Directory.CreateDirectory(dir);
         }
 
-        _dbLease = Zeus.Data.SharedLiteDatabase.Acquire(dbPath);
+        _dbLease = SimpleHPSDR.Data.SharedLiteDatabase.Acquire(dbPath);
         _db = _dbLease.Database;
         _docs = _db.GetCollection<AudioDeviceSettingsEntry>("audio_device_settings");
 

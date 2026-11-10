@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 using System.Text.Json;
 using LiteDB;
-using Zeus.Contracts;
+using SimpleHPSDR.Contracts;
 
 using JsonSerializer = System.Text.Json.JsonSerializer;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
 /// Persists named Audio Tools CFC presets. The live CFC state still lives in
@@ -16,7 +16,7 @@ public sealed class CfcPresetStore : IDisposable
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
-    private readonly Zeus.Data.SharedLiteDatabase.Lease _dbLease;
+    private readonly SimpleHPSDR.Data.SharedLiteDatabase.Lease _dbLease;
     private readonly LiteDatabase _db;
     private readonly ILiteCollection<CfcPresetEntry> _presets;
     private readonly ILogger<CfcPresetStore> _log;
@@ -30,7 +30,7 @@ public sealed class CfcPresetStore : IDisposable
         if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
             Directory.CreateDirectory(dir);
 
-        _dbLease = Zeus.Data.SharedLiteDatabase.Acquire(dbPath);
+        _dbLease = SimpleHPSDR.Data.SharedLiteDatabase.Acquire(dbPath);
         _db = _dbLease.Database;
         _presets = _db.GetCollection<CfcPresetEntry>("cfc_presets");
         _presets.EnsureIndex(x => x.NormalizedName, unique: true);

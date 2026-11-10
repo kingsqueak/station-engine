@@ -4,8 +4,8 @@
 
 The corresponding-source export includes the tracked native source and build
 control files used for the libraries conveyed under
-`Zeus.Dsp/runtimes/<rid>/native/`. Commands below are the release build recipes
-from the Zeus native workflows and the vendoring notes shipped beside each
+`SimpleHPSDR.Dsp/runtimes/<rid>/native/`. Commands below are the release build recipes
+from the SimpleHPSDR native workflows and the vendoring notes shipped beside each
 source tree.
 
 ## Artifact to source map
@@ -15,9 +15,9 @@ source tree.
 | `wdsp.dll`, `libwdsp.so`, `libwdsp.dylib` | `native/wdsp/`, with `native/libspecbleach/` and `native/rnnoise/` statically embedded by the default build |
 | `fftw3.dll`, `fftw3f.dll`, `libfftw3-3.dll`, `libfftw3f-3.dll`, `libfftw3.so.3`, `libfftw3f.so.3`, `libfftw3.3.dylib`, `libfftw3f.3.dylib` | Unmodified upstream FFTW; provenance and exact per-RID acquisition are below |
 | `miniaudio.dll`, `libminiaudio.so`, `libminiaudio.dylib` | `native/miniaudio/` |
-| `zeus_asio.dll` | `native/asio/`; Windows-only ASIO 2.3.4 host bridge, including the SDK interface source used to build it |
+| `simplehpsdr_asio.dll` | `native/asio/`; Windows-only ASIO 2.3.4 host bridge, including the SDK interface source used to build it |
 | `codec2.dll`, `libcodec2.so`, `libcodec2.dylib` | `native/codec2/`; its CMake recipe fetches codec2 1.2.0 and applies the included build-system patch |
-| `zeus_rade.dll`, `libzeus_rade.so`, `libzeus_rade.dylib` | `native/radae/`; exact pinned upstream slices are materialized under `native/radae/vendor/` and bound to the binaries in `native/radae/vendor/BINARY-SOURCE-BINDING.json` |
+| `simplehpsdr_rade.dll`, `libsimplehpsdr_rade.so`, `libsimplehpsdr_rade.dylib` | `native/radae/`; exact pinned upstream slices are materialized under `native/radae/vendor/` and bound to the binaries in `native/radae/vendor/BINARY-SOURCE-BINDING.json` |
 
 The `.gitkeep` files in otherwise-empty RID directories are packaging
 placeholders, not native artifacts.
@@ -31,30 +31,30 @@ brew install fftw cmake
 cmake -S native/wdsp -B native/build -DCMAKE_BUILD_TYPE=Release \
   -DWDSP_WITH_NR3=ON -DWDSP_WITH_NR4=ON
 cmake --build native/build --config Release --parallel
-cp native/build/libwdsp.dylib Zeus.Dsp/runtimes/osx-arm64/native/libwdsp.dylib
+cp native/build/libwdsp.dylib SimpleHPSDR.Dsp/runtimes/osx-arm64/native/libwdsp.dylib
 
 cmake -S native/miniaudio -B native/build-miniaudio -DCMAKE_BUILD_TYPE=Release
 cmake --build native/build-miniaudio --config Release --parallel
 cp native/build-miniaudio/libminiaudio.dylib \
-  Zeus.Dsp/runtimes/osx-arm64/native/libminiaudio.dylib
+  SimpleHPSDR.Dsp/runtimes/osx-arm64/native/libminiaudio.dylib
 
 cmake -S native/codec2 -B native/build-codec2 -DCMAKE_BUILD_TYPE=Release
 cmake --build native/build-codec2 --config Release --target codec2 --parallel
 dylib=$(find native/build-codec2 -name 'libcodec2*.dylib' ! -type l | head -n1)
 test -n "$dylib"
-cp "$dylib" Zeus.Dsp/runtimes/osx-arm64/native/libcodec2.dylib
+cp "$dylib" SimpleHPSDR.Dsp/runtimes/osx-arm64/native/libcodec2.dylib
 ```
 
 Bundle the Homebrew FFTW libraries and make the WDSP references relocatable:
 
 ```sh
 fftw_lib="$(brew --prefix fftw)/lib"
-cp "${fftw_lib}/libfftw3.3.dylib" Zeus.Dsp/runtimes/osx-arm64/native/
-cp "${fftw_lib}/libfftw3f.3.dylib" Zeus.Dsp/runtimes/osx-arm64/native/
+cp "${fftw_lib}/libfftw3.3.dylib" SimpleHPSDR.Dsp/runtimes/osx-arm64/native/
+cp "${fftw_lib}/libfftw3f.3.dylib" SimpleHPSDR.Dsp/runtimes/osx-arm64/native/
 install_name_tool \
   -change "${fftw_lib}/libfftw3.3.dylib" @loader_path/libfftw3.3.dylib \
   -change "${fftw_lib}/libfftw3f.3.dylib" @loader_path/libfftw3f.3.dylib \
-  Zeus.Dsp/runtimes/osx-arm64/native/libwdsp.dylib
+  SimpleHPSDR.Dsp/runtimes/osx-arm64/native/libwdsp.dylib
 ```
 
 ## Linux x64
@@ -67,18 +67,18 @@ sudo apt-get install -y libfftw3-dev cmake build-essential pkg-config
 cmake -S native/wdsp -B native/build -DCMAKE_BUILD_TYPE=Release \
   -DWDSP_WITH_NR3=ON -DWDSP_WITH_NR4=ON
 cmake --build native/build --config Release --parallel
-cp native/build/libwdsp.so Zeus.Dsp/runtimes/linux-x64/native/libwdsp.so
+cp native/build/libwdsp.so SimpleHPSDR.Dsp/runtimes/linux-x64/native/libwdsp.so
 
 cmake -S native/miniaudio -B native/build-miniaudio -DCMAKE_BUILD_TYPE=Release
 cmake --build native/build-miniaudio --config Release --parallel
 cp native/build-miniaudio/libminiaudio.so \
-  Zeus.Dsp/runtimes/linux-x64/native/libminiaudio.so
+  SimpleHPSDR.Dsp/runtimes/linux-x64/native/libminiaudio.so
 
 cmake -S native/codec2 -B native/build-codec2 -DCMAKE_BUILD_TYPE=Release
 cmake --build native/build-codec2 --config Release --target codec2 --parallel
 so=$(find native/build-codec2 -name 'libcodec2.so*' ! -type l | head -n1)
 test -n "$so"
-cp "$so" Zeus.Dsp/runtimes/linux-x64/native/libcodec2.so
+cp "$so" SimpleHPSDR.Dsp/runtimes/linux-x64/native/libcodec2.so
 ```
 
 Copy the system `libfftw3.so.3` and `libfftw3f.so.3` resolved by `ldconfig`
@@ -134,7 +134,7 @@ cmake --build native/build-codec2 --config Release --target codec2 --parallel
 ```
 
 Stage the resulting libraries and both `$HOME/fftw-arm64/lib/libfftw3*.so.3`
-files under `Zeus.Dsp/runtimes/linux-arm64/native/`.
+files under `SimpleHPSDR.Dsp/runtimes/linux-arm64/native/`.
 
 ## Windows x64 and arm64
 
@@ -147,7 +147,7 @@ cmake -S native\wdsp -B native\build -G "Visual Studio 17 2022" -A x64 -T ClangC
   -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT\scripts\buildsystems\vcpkg.cmake" `
   -DVCPKG_TARGET_TRIPLET=x64-windows-static-md -DWDSP_WITH_NR3=ON -DWDSP_WITH_NR4=ON
 cmake --build native\build --config Release --parallel
-copy native\build\Release\wdsp.dll Zeus.Dsp\runtimes\win-x64\native\wdsp.dll
+copy native\build\Release\wdsp.dll SimpleHPSDR.Dsp\runtimes\win-x64\native\wdsp.dll
 
 vcpkg install fftw3:arm64-windows-static
 cmake -S native\wdsp -B native\build-arm64 -G "Visual Studio 17 2022" -A ARM64 -T ClangCL `
@@ -155,7 +155,7 @@ cmake -S native\wdsp -B native\build-arm64 -G "Visual Studio 17 2022" -A ARM64 -
   -DVCPKG_TARGET_TRIPLET=arm64-windows-static `
   -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded -DWDSP_WITH_NR3=ON -DWDSP_WITH_NR4=ON
 cmake --build native\build-arm64 --config Release --parallel
-copy native\build-arm64\Release\wdsp.dll Zeus.Dsp\runtimes\win-arm64\native\wdsp.dll
+copy native\build-arm64\Release\wdsp.dll SimpleHPSDR.Dsp\runtimes\win-arm64\native\wdsp.dll
 ```
 
 Build miniaudio with the same Visual Studio generator and selected `-A x64` or
@@ -169,7 +169,7 @@ cmake -S native/codec2 -B native/build-codec2 -G Ninja \
 cmake --build native/build-codec2 --config Release --target codec2 --parallel
 dll=$(find native/build-codec2 -name 'codec2.dll' | head -n1)
 test -n "$dll"
-cp "$dll" Zeus.Dsp/runtimes/win-x64/native/codec2.dll
+cp "$dll" SimpleHPSDR.Dsp/runtimes/win-x64/native/codec2.dll
 ```
 
 codec2 is not currently built for win-arm64.
@@ -181,11 +181,11 @@ recorded in `ASIO-SOURCE.json`; no proprietary ASIO SDK license is used.
 ```powershell
 cmake -S native\asio -B native\build-asio-x64 -G "Visual Studio 17 2022" -A x64
 cmake --build native\build-asio-x64 --config Release --parallel
-copy native\build-asio-x64\Release\zeus_asio.dll Zeus.Dsp\runtimes\win-x64\native\zeus_asio.dll
+copy native\build-asio-x64\Release\simplehpsdr_asio.dll SimpleHPSDR.Dsp\runtimes\win-x64\native\simplehpsdr_asio.dll
 
 cmake -S native\asio -B native\build-asio-arm64 -G "Visual Studio 17 2022" -A ARM64
 cmake --build native\build-asio-arm64 --config Release --parallel
-copy native\build-asio-arm64\Release\zeus_asio.dll Zeus.Dsp\runtimes\win-arm64\native\zeus_asio.dll
+copy native\build-asio-arm64\Release\simplehpsdr_asio.dll SimpleHPSDR.Dsp\runtimes\win-arm64\native\simplehpsdr_asio.dll
 ```
 
 Only build and stage a RID for which the bridge implementation declares
@@ -211,8 +211,8 @@ configure with Ninja:
 ```sh
 cmake -S native/radae -B native/build-rade -G Ninja \
   -DCMAKE_BUILD_TYPE=Release -DOPUS_DISABLE_INTRINSICS=ON \
-  -DZEUS_RADE_VENDOR="$PWD/native/radae/vendor" \
-  -DZEUS_RADE_BUILD_TEST=OFF
+  -DSIMPLEHPSDR_RADE_VENDOR="$PWD/native/radae/vendor" \
+  -DSIMPLEHPSDR_RADE_BUILD_TEST=OFF
 cmake --build native/build-rade --config Release --parallel
 ```
 

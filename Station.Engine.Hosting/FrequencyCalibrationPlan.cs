@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
 /// Pure geometry + arithmetic behind the WWV auto-calibration procedure
@@ -12,7 +12,7 @@ namespace Zeus.Server;
 /// parts that decide *where to look* and *what the measurement means* are unit
 /// testable without a radio, a DSP pipeline, or a 3-second settle.
 ///
-/// Everything here scales with the reference frequency, because Zeus now
+/// Everything here scales with the reference frequency, because SimpleHPSDR now
 /// calibrates against WWV 15 MHz as well as 10 MHz and the two are not
 /// interchangeable: a ±100 ppm crystal error is ±1000 Hz at 10 MHz but
 /// ±1500 Hz at 15 MHz, so a search window hard-coded for 10 MHz would miss a

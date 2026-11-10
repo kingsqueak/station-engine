@@ -1,8 +1,8 @@
 /*  sip_cursor.c
 
-Zeus extension (contiguous siphon reads) -- not part of upstream WDSP.
+SimpleHPSDR extension (contiguous siphon reads) -- not part of upstream WDSP.
 
-This file is part of Zeus's vendored copy of WDSP, a program that implements
+This file is part of SimpleHPSDR's vendored copy of WDSP, a program that implements
 a Software-Defined Radio. WDSP is Copyright (C) Warren Pratt, NR0V.
 
 This program is free software; you can redistribute it and/or

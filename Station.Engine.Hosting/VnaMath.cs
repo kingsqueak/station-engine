@@ -2,7 +2,7 @@
 
 using System.Numerics;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 public static class VnaMath
 {

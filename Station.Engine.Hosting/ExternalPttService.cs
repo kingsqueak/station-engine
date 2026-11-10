@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
@@ -14,10 +14,10 @@
 // statement and per-component attribution.
 
 using Microsoft.Extensions.Hosting;
-using Zeus.Contracts;
-using Zeus.Protocol1;
+using SimpleHPSDR.Contracts;
+using SimpleHPSDR.Protocol1;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
 /// Promotes the radio's hardware-PTT echo (C0[0] of every inbound EP6 frame)
@@ -84,7 +84,7 @@ public sealed class ExternalPttService : IHostedService, IDisposable
 
     private readonly object _sync = new();
     private IProtocol1Client? _client;
-    private Zeus.Protocol2.Protocol2Client? _p2Client;
+    private SimpleHPSDR.Protocol2.Protocol2Client? _p2Client;
     // True iff the most recent MOX-on we caused has not been released yet.
     // Cleared by the hang-release path, by TxActiveChanged(false) from any
     // other source, and by disconnect.
@@ -198,7 +198,7 @@ public sealed class ExternalPttService : IHostedService, IDisposable
         _radio.P2Disconnected -= OnP2Disconnected;
         _tx.TxActiveChanged -= OnTxActiveChanged;
         IProtocol1Client? client;
-        Zeus.Protocol2.Protocol2Client? p2;
+        SimpleHPSDR.Protocol2.Protocol2Client? p2;
         lock (_sync)
         {
             client = _client; _client = null; p2 = _p2Client; _p2Client = null; _owned = false;
@@ -225,7 +225,7 @@ public sealed class ExternalPttService : IHostedService, IDisposable
     public ExternalPttStatusDto Snapshot()
     {
         IProtocol1Client? client;
-        Zeus.Protocol2.Protocol2Client? p2;
+        SimpleHPSDR.Protocol2.Protocol2Client? p2;
         bool owned;
         lock (_sync)
         {
@@ -389,7 +389,7 @@ public sealed class ExternalPttService : IHostedService, IDisposable
 
     // ---- Protocol 2 wiring (P2 PTT-in → MOX, §4) -------------------------
 
-    private void OnP2Connected(Zeus.Protocol2.Protocol2Client client)
+    private void OnP2Connected(SimpleHPSDR.Protocol2.Protocol2Client client)
     {
         bool legacyPaddleSidetone = UsesLegacyP2PaddleSidetone(
             _radio.ConnectedBoardKind,
@@ -410,7 +410,7 @@ public sealed class ExternalPttService : IHostedService, IDisposable
 
     private void OnP2Disconnected()
     {
-        Zeus.Protocol2.Protocol2Client? client;
+        SimpleHPSDR.Protocol2.Protocol2Client? client;
         lock (_sync)
         {
             client = _p2Client;
@@ -437,7 +437,7 @@ public sealed class ExternalPttService : IHostedService, IDisposable
     // UDP-1025 hi-priority status is LEVEL-sampled at the P2 status cadence, not
     // an edge event — derive rising/falling by comparing against the previous
     // PttIn level. Runs on the Protocol2Client RX thread.
-    private void OnP2Telemetry(Zeus.Protocol2.P2TelemetryReading reading)
+    private void OnP2Telemetry(SimpleHPSDR.Protocol2.P2TelemetryReading reading)
     {
         // Modern P2 gateware reports its shaped key-down envelope in byte 0
         // bit 7 (FPGA keyer `keyout`, added to Orion P2 in 2.2.10). Pre-2.2.10
@@ -825,12 +825,12 @@ public sealed class ExternalPttService : IHostedService, IDisposable
     /// <summary>Test seam: simulate a P2 client connect, exactly as the
     /// RadioService.P2Connected event would (so Snapshot reports the P2
     /// client + protocol). Mirrors <see cref="OnP2Connected"/>.</summary>
-    internal void TestP2Connect(Zeus.Protocol2.Protocol2Client client) => OnP2Connected(client);
+    internal void TestP2Connect(SimpleHPSDR.Protocol2.Protocol2Client client) => OnP2Connected(client);
 
     /// <summary>Test seam: feed a P2 hi-priority telemetry sample through the
     /// level→edge derivation and the shared engine, exactly as a live
     /// Protocol2Client TelemetryReceived would.</summary>
-    internal void TestP2Telemetry(Zeus.Protocol2.P2TelemetryReading reading) => OnP2Telemetry(reading);
+    internal void TestP2Telemetry(SimpleHPSDR.Protocol2.P2TelemetryReading reading) => OnP2Telemetry(reading);
 
     internal void TestCwKeyDown(bool down) => OnCwKeyDownChanged(down);
 

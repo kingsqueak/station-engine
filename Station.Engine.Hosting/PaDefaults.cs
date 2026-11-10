@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
@@ -19,10 +19,10 @@
 // (https://github.com/dl1bz/deskhpsdr), maintained by Heiko (DL1BZ).
 // Both are GPL-2.0-or-later.
 
-using Zeus.Contracts;
-using Zeus.Protocol1.Discovery;
+using SimpleHPSDR.Contracts;
+using SimpleHPSDR.Protocol1.Discovery;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 // Per-board PA gain defaults (dB), lifted from Thetis
 // `clsHardwareSpecific.cs:470-767` and piHPSDR `band.c:498-500`. These are
@@ -194,7 +194,7 @@ internal static class PaDefaults
         // 100 W output target — Thetis's drive slider is 0..100 *watts*, so
         // slider=100 → 100 W target → byte=255 regardless of whether the
         // physical radio is a 10 W ANAN-10 / Brick2 or a 100 W build (the
-        // radio just self-clamps to its rated max). Zeus's slider is a
+        // radio just self-clamps to its rated max). SimpleHPSDR's slider is a
         // percent of MaxWatts, so MaxWatts must match the gain-bracket
         // assumption (100) — not the radio's rated output — or 100 % drive
         // asks the DAC for 10× too little and a 10 W radio puts out ~1 W

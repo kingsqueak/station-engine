@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>Shares the destructive native TX pan freshness flag between display
 /// consumers. Pixels stay in full-width native order without display calibration.</summary>

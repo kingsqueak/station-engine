@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
 // See ATTRIBUTIONS.md at the repository root for the full provenance
 // statement and per-component attribution.
 
-using Zeus.Contracts;
-using Zeus.Protocol1.Discovery;
+using SimpleHPSDR.Contracts;
+using SimpleHPSDR.Protocol1.Discovery;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
 /// Dispatch from <see cref="HpsdrBoardKind"/> to the per-board static
@@ -114,7 +114,7 @@ internal static class BoardCapabilitiesTable
         // clsHardwareSpecific.cs:136-142 — first 50 mV / high-power board.
         HpsdrBoardKind.Orion      => Orion,
         // --- HermesLite2 (mi0bot) ---
-        // Thetis MW0LGE leaves HL2 unconfigured; Zeus has its own HL2 path
+        // Thetis MW0LGE leaves HL2 unconfigured; SimpleHPSDR has its own HL2 path
         // (docs/lessons/wdsp-init-gotchas.md, hl2-drive-model.md). Single
         // RX, no Alex, no telemetry, no path illustrator.
         HpsdrBoardKind.HermesLite2 => HermesLite2,
@@ -155,7 +155,7 @@ internal static class BoardCapabilitiesTable
     // Brick2 SDR (Sergey EU1SW) announces as wire byte 0x01 → HpsdrBoardKind.Hermes
     // and inherits this fingerprint. Brick2's hardware reality (1 ADC, no Alex
     // BPF, no Apollo LPF, no on-board telemetry, internal step attenuator
-    // 0-31 dB on RX1 only) matches the row exactly; see Zeus issue #171.
+    // 0-31 dB on RX1 only) matches the row exactly; see SimpleHPSDR issue #171.
     // MaxPowerWatts=10 is conservative for Brick2 (rated 15 W); operator
     // overrides per-rig in the PA panel.
     private static readonly BoardCapabilities HermesClass = new(
@@ -299,7 +299,7 @@ internal static class BoardCapabilitiesTable
     // randomizer bits (CmdRx bytes 5/6) and the RX2 (ADC1) stepped attenuator
     // control. Thetis composes CmdRx bytes 5/6 from the per-ADC dither /
     // random settings for every Protocol-2 board (ChannelMaster network.c,
-    // CmdRx), and Zeus already sends ADC1's attenuator in CmdHighPriority
+    // CmdRx), and SimpleHPSDR already sends ADC1's attenuator in CmdHighPriority
     // byte 1442 for dual-ADC boards. Saturn-class audio (line-in + mic bias),
     // NO balanced XLR (G2 / G2-1K only).
     private static readonly BoardCapabilities Saturn7000DLE = Saturn with

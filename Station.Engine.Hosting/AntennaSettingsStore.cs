@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
@@ -12,7 +12,7 @@
 //
 // Reuses the band-keyed LiteDB pattern of PaSettingsStore (per-band entry in
 // the shared, unencrypted station-engine.db) but keeps antenna out of the PA wire
-// DTO so the red-light Zeus.Contracts PA contract is untouched. The store is
+// DTO so the red-light SimpleHPSDR.Contracts PA contract is untouched. The store is
 // deliberately band-only keyed — NO board/variant column. That is safe ONLY
 // because the wire layer gates emission: a per-band ANT3 persisted on a G2
 // rides into the same row an HL2 later reads, and HL2 is protected because its
@@ -27,9 +27,9 @@
 // avoid the Linux LiteDB shared-mode crash (GH #682).
 
 using LiteDB;
-using Zeus.Protocol1;
+using SimpleHPSDR.Protocol1;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 public sealed class AntennaSettingsStore : IDisposable
 {
@@ -40,7 +40,7 @@ public sealed class AntennaSettingsStore : IDisposable
     /// </summary>
     public const string XvtrBand = "Xvtr";
 
-    private readonly Zeus.Data.SharedLiteDatabase.Lease _dbLease;
+    private readonly SimpleHPSDR.Data.SharedLiteDatabase.Lease _dbLease;
     private readonly LiteDatabase _db;
     private readonly ILiteCollection<AntennaBandEntry> _bands;
     private readonly ILogger<AntennaSettingsStore> _log;
@@ -58,7 +58,7 @@ public sealed class AntennaSettingsStore : IDisposable
         if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
             Directory.CreateDirectory(dir);
 
-        _dbLease = Zeus.Data.SharedLiteDatabase.Acquire(dbPath);
+        _dbLease = SimpleHPSDR.Data.SharedLiteDatabase.Acquire(dbPath);
         _db = _dbLease.Database;
         _bands = _db.GetCollection<AntennaBandEntry>("antenna_bands");
         _bands.EnsureIndex(x => x.Band, unique: true);
@@ -157,7 +157,7 @@ public sealed class AntennaSettingsStore : IDisposable
 /// <summary>
 /// Per-band RX auxiliary input selection (external-ports plan — antenna slice,
 /// #804). A SINGLE-choice enum (the radio routes ONE RX source at a time) —
-/// distinct from the <c>[Flags]</c> <see cref="Zeus.Contracts.RxAuxInputs"/>
+/// distinct from the <c>[Flags]</c> <see cref="SimpleHPSDR.Contracts.RxAuxInputs"/>
 /// capability set. Persisted as a byte; <see cref="None"/> means "use the base
 /// RX-antenna relay" (today's behaviour). Maps 1:1 to the Protocol2Client aux
 /// selector (1=EXT1, 2=EXT2, 3=XVTR, 4=BYPASS), with 0 = no aux.

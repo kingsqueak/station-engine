@@ -2,7 +2,7 @@
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 public sealed record RadeStatusResponse(
     bool Available,
@@ -270,7 +270,7 @@ public sealed class CompositeAudioModemPort : IAudioModemPort, IDisposable
             if (active)
             {
                 // Keep the classic lease's RADIO-mode lifecycle intact. A
-                // synthetic leave-mode here would race back to ZeusProduct as
+                // synthetic leave-mode here would race back to SimpleHPSDRProduct as
                 // if the operator had left FreeDV and immediately deselect
                 // RADE. Routing priority below prevents any classic audio call
                 // while RADE is selected; the dormant lease remains attached.

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
@@ -10,11 +10,11 @@
 // option) any later version. See the LICENSE file at the root of this
 // repository for the full text, or https://www.gnu.org/licenses/.
 //
-// Zeus is an independent reimplementation in .NET — not a fork. Its
+// SimpleHPSDR is an independent reimplementation in .NET — not a fork. Its
 // Protocol-1 / Protocol-2 framing, WDSP integration, meter pipelines, and
 // TX behaviour were informed by studying the Thetis project
 // (https://github.com/ramdor/Thetis), the authoritative reference
-// implementation in the OpenHPSDR ecosystem. Zeus gratefully acknowledges
+// implementation in the OpenHPSDR ecosystem. SimpleHPSDR gratefully acknowledges
 // the Thetis contributors whose work made this possible:
 //
 //   Richard Samphire (MW0LGE), Warren Pratt (NR0V),
@@ -39,16 +39,16 @@
 // WDSP — loaded by Zeus via P/Invoke — is Copyright (C) Warren Pratt
 // (NR0V), distributed under GPL v2 or later.
 //
-// Zeus is distributed WITHOUT ANY WARRANTY; see the GNU General Public
+// SimpleHPSDR is distributed WITHOUT ANY WARRANTY; see the GNU General Public
 // License for details.
 
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net.WebSockets;
 using Microsoft.Extensions.Options;
-using Zeus.Contracts;
+using SimpleHPSDR.Contracts;
 
-namespace Zeus.Server.Tci;
+namespace SimpleHPSDR.Server.Tci;
 
 /// <summary>
 /// TCI (Transceiver Control Interface) server. Accepts ExpertSDR3-compatible
@@ -290,7 +290,7 @@ public sealed class TciServer : IHostedService, IDisposable
     // external VFO set that lands on the frequency the radio is already on —
     // and every raise previously re-emitted the full vfo/dds/tx_frequency
     // block. A logger that echoes the frequency back (Log4OM, N1MM+ in TCI
-    // control mode) then sees Zeus resend it, resends its own copy, and the two
+    // control mode) then sees SimpleHPSDR resend it, resends its own copy, and the two
     // ping-pong: the client's frequency field flickers and the session floods.
     // Suppress unchanged frequency frames on the ordinary StateChanged path so
     // an unchanged frequency never leaves the server. Transverter / layout
@@ -579,7 +579,7 @@ public sealed class TciServer : IHostedService, IDisposable
     // with TX source = TCI; otherwise the timer is parked. Frame body is
     // empty; each session's header asks for one block in its negotiated format
     // (TciSession.SendTxChronoIfTxSource). The receiver field carries 0 since
-    // Zeus is single-transceiver.
+    // SimpleHPSDR is single-transceiver.
 
     private void OnMoxChanged(bool moxOn)
     {

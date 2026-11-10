@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
@@ -10,11 +10,11 @@
 // option) any later version. See the LICENSE file at the root of this
 // repository for the full text, or https://www.gnu.org/licenses/.
 //
-// Zeus is an independent reimplementation in .NET — not a fork. Its
+// SimpleHPSDR is an independent reimplementation in .NET — not a fork. Its
 // Protocol-1 / Protocol-2 framing, WDSP integration, meter pipelines, and
 // TX behaviour were informed by studying the Thetis project
 // (https://github.com/ramdor/Thetis), the authoritative reference
-// implementation in the OpenHPSDR ecosystem. Zeus gratefully acknowledges
+// implementation in the OpenHPSDR ecosystem. SimpleHPSDR gratefully acknowledges
 // the Thetis contributors whose work made this possible:
 //
 //   Richard Samphire (MW0LGE), Warren Pratt (NR0V),
@@ -39,7 +39,7 @@
 // WDSP — loaded by Zeus via P/Invoke — is Copyright (C) Warren Pratt
 // (NR0V), distributed under GPL v2 or later.
 //
-// Zeus is distributed WITHOUT ANY WARRANTY; see the GNU General Public
+// SimpleHPSDR is distributed WITHOUT ANY WARRANTY; see the GNU General Public
 // License for details.
 
 using System.Collections.Concurrent;
@@ -48,16 +48,16 @@ using System.Net;
 using System.Threading.Channels;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using Zeus.Contracts;
-using Zeus.Dsp;
-using Zeus.Dsp.Wdsp;
-using Zeus.Protocol1;
+using SimpleHPSDR.Contracts;
+using SimpleHPSDR.Dsp;
+using SimpleHPSDR.Dsp.Wdsp;
+using SimpleHPSDR.Protocol1;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 public partial class DspPipelineService : BackgroundService,
-    Zeus.Protocol1.IRxPacketSink,
-    Zeus.Protocol2.IRxPacketSink
+    SimpleHPSDR.Protocol1.IRxPacketSink,
+    SimpleHPSDR.Protocol2.IRxPacketSink
 {
     private const int SyntheticSampleRateHz = 192_000;
     private const int OfflinePreviewTxOutputRateHz = 192_000;
@@ -739,7 +739,7 @@ public partial class DspPipelineService : BackgroundService,
     internal static SquelchConfig ResolveManagedSquelchForMode(SquelchConfig? cfg, RxMode mode)
     {
         var resolved = (cfg ?? new SquelchConfig()).ForMode(mode);
-        return IsDigitalRxZeusMode(mode) ? resolved with { Enabled = false } : resolved;
+        return IsDigitalRxSimpleHPSDRMode(mode) ? resolved with { Enabled = false } : resolved;
     }
 
     private static double AdaptiveSquelchCloseHysteresisDb(double marginDb) =>
@@ -891,7 +891,7 @@ public partial class DspPipelineService : BackgroundService,
     /// Returns <c>false</c> (writing nothing) when the ring can't fit the block
     /// — the caller should retry rather than drop, so the consumer (RX tick
     /// clock) paces the producer and the playback stays glitch-free. Used by
-    /// <see cref="Zeus.Plugins.Contracts.Audio.IAudioPlaybackSink.PlayLocal"/>.
+    /// <see cref="SimpleHPSDR.Plugins.Contracts.Audio.IAudioPlaybackSink.PlayLocal"/>.
     /// </summary>
     public bool EnqueueMonitorAudio(ReadOnlySpan<float> samples)
     {
@@ -997,7 +997,7 @@ public partial class DspPipelineService : BackgroundService,
     // path exactly as the old _rx2ChannelId was. Size to the shared hardware
     // receiver contract (10) rather than the P2 wire ceiling (8) so Protocol 3
     // can expose every G2 receiver without another DSP array refactor.
-    internal const int MaxReceivers = Zeus.Contracts.WireContract.MaxReceivers;
+    internal const int MaxReceivers = SimpleHPSDR.Contracts.WireContract.MaxReceivers;
     private sealed class SecondaryRx
     {
         public SecondaryRx(int width)
@@ -1115,7 +1115,7 @@ public partial class DspPipelineService : BackgroundService,
     // directly here because RadioService is Protocol1Client-shaped and
     // growing a P2 variant there would require a larger refactor; for now
     // keeping it isolated avoids touching any P1 behavior.
-    private Zeus.Protocol2.Protocol2Client? _p2Client;
+    private SimpleHPSDR.Protocol2.Protocol2Client? _p2Client;
     // Serialises the complete P2 ownership transition.  _engineLock protects
     // only the DSP-engine pointer swap; it deliberately does not cover awaits,
     // so it cannot prevent two HTTP connect/disconnect requests from opening
@@ -1123,7 +1123,7 @@ public partial class DspPipelineService : BackgroundService,
     // Visible only while the lifecycle gate is held.  Keeping the not-yet-
     // published client here lets the wrapper reliably stop/dispose it when any
     // connect stage throws or is cancelled before _p2Client is committed.
-    private Zeus.Protocol2.Protocol2Client? _p2ConnectingClient;
+    private SimpleHPSDR.Protocol2.Protocol2Client? _p2ConnectingClient;
     private Action? _p2DisconnectedHandler;
     private long _p2ConnectionGeneration;
     private readonly IExternalRadioSidecar _externalRadioSidecar;
@@ -1170,16 +1170,16 @@ public partial class DspPipelineService : BackgroundService,
     private readonly object _widebandFrameLock = new();
     private readonly SemaphoreSlim _widebandFrameSignal = new(0, int.MaxValue);
     private readonly short[] _widebandPendingSamples =
-        new short[Zeus.Protocol2.Protocol2Client.WidebandMaxFrameSamples];
+        new short[SimpleHPSDR.Protocol2.Protocol2Client.WidebandMaxFrameSamples];
     private readonly short[] _widebandAnalysisSamples =
-        new short[Zeus.Protocol2.Protocol2Client.WidebandMaxFrameSamples];
+        new short[SimpleHPSDR.Protocol2.Protocol2Client.WidebandMaxFrameSamples];
     private readonly float[] _widebandPanBuf = new float[WidebandSpectrumAnalyzer.DisplayWidth];
     private readonly float[] _widebandWfBuf = new float[WidebandSpectrumAnalyzer.DisplayWidth];
     private readonly float[] _widebandPanDecimatedBuf = new float[WidebandSpectrumAnalyzer.DisplayWidth];
     private readonly float[] _widebandWfDecimatedBuf = new float[WidebandSpectrumAnalyzer.DisplayWidth];
     private bool _widebandFramePending;
     private int _widebandPendingSampleCount;
-    private int _widebandPendingSampleRateHz = Zeus.Protocol2.Protocol2Client.WidebandAdcSampleRateHz;
+    private int _widebandPendingSampleRateHz = SimpleHPSDR.Protocol2.Protocol2Client.WidebandAdcSampleRateHz;
     private long _p3WidebandDisplayMissingLogMs;
     private long _p3WidebandDisplayErrorLogMs;
     // Public Listening Phase 2 (docs/designs/public-listening.md): the listener
@@ -1308,14 +1308,14 @@ public partial class DspPipelineService : BackgroundService,
         return (effective.FilterLowHz, effective.FilterHighHz);
     }
 
-    internal static bool IsDigitalTxZeusMode(RxMode mode) =>
+    internal static bool IsDigitalTxSimpleHPSDRMode(RxMode mode) =>
         mode is RxMode.DIGU or RxMode.DIGL or RxMode.FreeDv;
 
     // Data modes whose received audio feeds a decoder. Every managed RX audio
     // insert (product RX suite, RX plugin, adaptive squelch, RX leveler) stands
     // aside for them, matching the WDSP-side gate in WdspDspEngine. FreeDV is
     // not listed: its managed inserts run on the already-decoded speech.
-    internal static bool IsDigitalRxZeusMode(RxMode mode) =>
+    internal static bool IsDigitalRxSimpleHPSDRMode(RxMode mode) =>
         mode is RxMode.DIGU or RxMode.DIGL;
 
     internal static (RxMode engineMode, int low, int high) SecondaryEngineFilterFor(
@@ -1691,7 +1691,7 @@ public partial class DspPipelineService : BackgroundService,
     // data where it actually belongs, killing the mislabeled-frame
     // snap-back at the root (no wire change: same CenterHz field).
     // D = ½·FFT-fill + display-EMA lag + per-protocol transport. Override
-    // the transport+EMA constant with ZEUS_CENTER_STAMP_LAG_MS for bench
+    // the transport+EMA constant with SIMPLEHPSDR_CENTER_STAMP_LAG_MS for bench
     // tuning at 48/96/192/384 kHz on P1 (HL2) and P2 (G2). When the LO is
     // stable longer than D the stamp equals live RadioLoHz — WWV cal
     // (#325) and every stable-LO consumer is byte-identical (see
@@ -1704,7 +1704,7 @@ public partial class DspPipelineService : BackgroundService,
 
     private static double? ReadCenterStampLagOverrideMs()
     {
-        var raw = Environment.GetEnvironmentVariable("ZEUS_CENTER_STAMP_LAG_MS");
+        var raw = Environment.GetEnvironmentVariable("SIMPLEHPSDR_CENTER_STAMP_LAG_MS");
         return double.TryParse(raw, System.Globalization.NumberStyles.Float,
             System.Globalization.CultureInfo.InvariantCulture, out var ms) && ms >= 0
             ? ms
@@ -1802,7 +1802,7 @@ public partial class DspPipelineService : BackgroundService,
     // RadioService nulls its ActiveClient before raising Disconnected, so the
     // event handler can't pull the client off that surface.
     private IProtocol1Client? _attachedSinkP1;
-    private Zeus.Protocol2.Protocol2Client? _attachedSinkP2;
+    private SimpleHPSDR.Protocol2.Protocol2Client? _attachedSinkP2;
     private long _lastTickStopwatchTicks;
     private long _lastInlineTickStopwatchTicks;
     private long _inlineTickDeadlineStopwatchTicks;
@@ -2047,7 +2047,7 @@ public partial class DspPipelineService : BackgroundService,
         _radio = radio;
         _vrxPool = new(maximumFrequencyHz: radio.ReceiveOnly
             ? StationReceiveOnlyPolicy.MaximumFrequencyHz
-            : Zeus.Server.PublicListen.GuestReceiverSettings.MaxHz);
+            : SimpleHPSDR.Server.PublicListen.GuestReceiverSettings.MaxHz);
         _txMonitorSettingsStore = txMonitorSettingsStore;
         _txMonitorVolumeDb = txMonitorSettingsStore?.VolumeDb
             ?? TxMonitorSettingsStore.DefaultVolumeDb;
@@ -2223,13 +2223,13 @@ public partial class DspPipelineService : BackgroundService,
     private void LoadNr3ModelInto(IDspEngine engine)
     {
         var path = _nr3ModelStore?.GetActiveModelPath();
-        Zeus.Dsp.Nr3ModelLoadResult result;
+        SimpleHPSDR.Dsp.Nr3ModelLoadResult result;
         lock (_engineLock) { result = engine.LoadNr3Model(path); }
         // Record the outcome so RadioService.InstallNr3Model — which triggers this
         // synchronously via the store's Changed event — can reject a model the
         // native loader couldn't parse.
         _nr3ModelStore?.ReportLoadStatus(result);
-        if (result == Zeus.Dsp.Nr3ModelLoadResult.LoadFailed)
+        if (result == SimpleHPSDR.Dsp.Nr3ModelLoadResult.LoadFailed)
             _log.LogWarning(
                 "dsp.nr3.loadFailed path=\"{Path}\" — not a compatible RNNoise weights file", path);
     }
@@ -2627,7 +2627,7 @@ public partial class DspPipelineService : BackgroundService,
     }
 
     // Every wideband transport toggle sends the radio a CmdGeneral.
-    private void SetP2WidebandTransport(Zeus.Protocol2.Protocol2Client? client, bool enabled)
+    private void SetP2WidebandTransport(SimpleHPSDR.Protocol2.Protocol2Client? client, bool enabled)
     {
         if (client is null) return;
         Interlocked.Increment(ref _p2WidebandTransportToggles);
@@ -3016,7 +3016,7 @@ public partial class DspPipelineService : BackgroundService,
     {
         int rate = Volatile.Read(ref _sampleRateHz);
         if (rate <= 0) rate = state.SampleRate;
-        int baseDdc = Zeus.Protocol2.Protocol2Client.RxBaseDdc(_radio.EffectiveBoardKind);
+        int baseDdc = SimpleHPSDR.Protocol2.Protocol2Client.RxBaseDdc(_radio.EffectiveBoardKind);
         bool diversitySource = state.Diversity is { Enabled: true, SourceRx: 1 };
 
         // Same extras count OnRadioStateChanged pushes to the radio (not gated
@@ -3030,7 +3030,7 @@ public partial class DspPipelineService : BackgroundService,
             WidebandViewportTargetCenterHz(state),
             zoomPlan.RequestedSpanHz,
             guestDdcCount: _p2Client?.ActiveGuestDdcCount ?? 0,
-            ddcCapacity: _p2Client?.RxDdcCapacity ?? Zeus.Protocol2.Protocol2Client.StandardRxDdcCapacity);
+            ddcCapacity: _p2Client?.RxDdcCapacity ?? SimpleHPSDR.Protocol2.Protocol2Client.StandardRxDdcCapacity);
     }
 
     // RX3+ (full multi-DDC): the contiguous enabled receivers beyond RX2 in
@@ -3301,7 +3301,7 @@ public partial class DspPipelineService : BackgroundService,
         var state = _radio.Snapshot();
         double frameIntervalMs =
             _p2Client?.CurrentWidebandGeometry.UpdateRateMs
-            ?? Zeus.Protocol2.Protocol2Client.ClassicWidebandUpdateRateMs;
+            ?? SimpleHPSDR.Protocol2.Protocol2Client.ClassicWidebandUpdateRateMs;
         WidebandSpectrumViewport viewport;
         try
         {
@@ -3687,8 +3687,8 @@ public partial class DspPipelineService : BackgroundService,
         bool diversityEnabled) =>
         protocol2Active
         && !diversityEnabled
-        && Zeus.Protocol2.Protocol2Client.ReservesPsFeedbackDdcs(board)
-        && !Zeus.Protocol2.Protocol2Client.TimeMuxesPsFeedbackOnDdc0(board);
+        && SimpleHPSDR.Protocol2.Protocol2Client.ReservesPsFeedbackDdcs(board)
+        && !SimpleHPSDR.Protocol2.Protocol2Client.TimeMuxesPsFeedbackOnDdc0(board);
 
     internal static bool ShouldPublishNormalRxAudio(
         bool txMonitorOn,
@@ -4177,7 +4177,7 @@ public partial class DspPipelineService : BackgroundService,
             wdspWisdomStatus = wisdom.Status,
             // Identity of the libwdsp actually loaded, alongside the FFTW wisdom
             // status it shares a home with. Additive only. wdspVersionMismatch is
-            // the machine-readable "the loaded engine is older than Zeus targets"
+            // the machine-readable "the loaded engine is older than SimpleHPSDR targets"
             // flag the UI surfaces; a missing symbol or an unloadable library
             // leaves it false and shows up in wdspVersionStatus instead.
             wdspVersion = engineVersion.Display,
@@ -4299,7 +4299,7 @@ public partial class DspPipelineService : BackgroundService,
         object[] filterWindows =
         [
             new { id = 0, label = "BH-4", notes = "Thetis default in DSP Options; sharper transition." },
-            new { id = 1, label = "BH-7", notes = "Deeper cutoff; this is the current Zeus WDSP call." },
+            new { id = 1, label = "BH-7", notes = "Deeper cutoff; this is the current SimpleHPSDR WDSP call." },
         ];
         var receiverBandwidth = BuildReceiverBandwidthDiagnostics(
             state,
@@ -4342,7 +4342,7 @@ public partial class DspPipelineService : BackgroundService,
                 filterTypes,
                 filterWindows,
                 slowModeChangeWarning = "Tap or phase changes rebuild FIR partitions while the affected channel is quiescent. Extreme cold minimum-phase changes can take longer than cached repeats.",
-                source = "Thetis DSP Options mode defaults + Zeus WDSPwisdom 64..262144 startup planning ladder",
+                source = "Thetis DSP Options mode defaults + SimpleHPSDR WDSPwisdom 64..262144 startup planning ladder",
             },
             activeRx = new
             {
@@ -4450,10 +4450,10 @@ public partial class DspPipelineService : BackgroundService,
             {
                 enabled = false,
                 status = "not-exposed-as-filter-display-setting",
-                notes = "Zeus exposes live filter edges, presets, panadapter scale, and mini-pan visuals, but not Thetis's separate high-resolution filter-characteristics display toggle yet.",
+                notes = "SimpleHPSDR exposes live filter edges, presets, panadapter scale, and mini-pan visuals, but not Thetis's separate high-resolution filter-characteristics display toggle yet.",
             },
             diagnosticRecommendation = "The live DDC rate, exact RX/TX tap counts, and independent FIR phase are operator-writable. RXA/TXA use fixed low-latency 512-sample DSP partitions; linear FIR delay and the scheduling quantum are reported separately.",
-            source = "Thetis DSP Options filter matrix + Zeus WdspDspEngine OpenChannel/SetRXABandpassWindow/SetTXABandpassWindow profile",
+            source = "Thetis DSP Options filter matrix + SimpleHPSDR WdspDspEngine OpenChannel/SetRXABandpassWindow/SetTXABandpassWindow profile",
         };
     }
 
@@ -4554,9 +4554,9 @@ public partial class DspPipelineService : BackgroundService,
         bool widebandActive = connected && activeRate > 384_000;
         int activeSoftwareReceivers = connected ? 1 : 0;
         HpsdrBoardKind capacityBoard = connectedBoard != HpsdrBoardKind.Unknown ? connectedBoard : effectiveBoard;
-        int physicalDdcCapacity = protocol2Active ? Zeus.Protocol2.Protocol2Client.RxDdcCapacityFor(capacityBoard, variant) : 0;
+        int physicalDdcCapacity = protocol2Active ? SimpleHPSDR.Protocol2.Protocol2Client.RxDdcCapacityFor(capacityBoard, variant) : 0;
         int manualReceiverCapacity = protocol2Active
-            ? physicalDdcCapacity - Zeus.Protocol2.Protocol2Client.RxBaseDdc(capacityBoard)
+            ? physicalDdcCapacity - SimpleHPSDR.Protocol2.Protocol2Client.RxBaseDdc(capacityBoard)
             : Math.Max(1, caps.RxAdcCount);
         activeSoftwareReceivers = connected ? Math.Max(1, state.Receivers?.Count(r => r.Enabled && r.Index < state.MaxReceivers) ?? (state.Rx2Enabled ? 2 : 1)) : 0;
         int unexposedReceivers = Math.Max(0, manualReceiverCapacity - activeSoftwareReceivers);
@@ -4564,7 +4564,7 @@ public partial class DspPipelineService : BackgroundService,
             ? connectedBoard
             : effectiveBoard;
         int? activeUserDdcIndex = connected && protocol2Active
-            ? Zeus.Protocol2.Protocol2Client.RxBaseDdc(wireBoard)
+            ? SimpleHPSDR.Protocol2.Protocol2Client.RxBaseDdc(wireBoard)
             : null;
         object[] activeSlots = activeUserDdcIndex.HasValue
             ? [DdcSlot(activeUserDdcIndex.Value, "RX1", "active", "Primary operator receive DDC feeding WDSP RXA and the panadapter/waterfall.")]
@@ -4707,8 +4707,8 @@ public partial class DspPipelineService : BackgroundService,
         var connectedBoard = _radio.ConnectedBoardKind;
         var effectiveBoard = _radio.EffectiveBoardKind;
         var wireBoard = connectedBoard != HpsdrBoardKind.Unknown ? connectedBoard : effectiveBoard;
-        int rx1Ddc = Zeus.Protocol2.Protocol2Client.RxBaseDdc(wireBoard);
-        int rx2Ddc = Zeus.Protocol2.Protocol2Client.Rx2Ddc(wireBoard);
+        int rx1Ddc = SimpleHPSDR.Protocol2.Protocol2Client.RxBaseDdc(wireBoard);
+        int rx2Ddc = SimpleHPSDR.Protocol2.Protocol2Client.Rx2Ddc(wireBoard);
         long[] rates = _attachedSinkP2?.SnapshotRxPortPacketRates() ?? [];
 
         long PacketRate(int ddc) =>
@@ -5641,7 +5641,7 @@ public partial class DspPipelineService : BackgroundService,
         {
             "fresh" => $"Display analyzer frames are fresh; panadapter={panSource} valid={panValid}, waterfall={wfSource} valid={wfValid}.",
             "aging" => "Display analyzer frames are aging; watch for UI disconnects, analyzer starvation, or a paused frontend display path.",
-            "stale" => "Display analyzer frames are stale; verify a Zeus client is connected and that the DSP pipeline is receiving IQ frames.",
+            "stale" => "Display analyzer frames are stale; verify a SimpleHPSDR client is connected and that the DSP pipeline is receiving IQ frames.",
             "idle-no-clients" => "No realtime clients are attached to the streaming hub, so the server is skipping panadapter/waterfall frame generation to save DSP work.",
             "synthetic-idle" => "The DSP engine is synthetic; connect a radio before judging panadapter or waterfall fidelity.",
             "no-engine" => "No DSP engine is active; connect or restart the DSP pipeline before judging display telemetry.",
@@ -5831,7 +5831,7 @@ public partial class DspPipelineService : BackgroundService,
             }
             : configured;
 
-    private static void SetP2Attenuator(Zeus.Protocol2.Protocol2Client client, int adc, int db)
+    private static void SetP2Attenuator(SimpleHPSDR.Protocol2.Protocol2Client client, int adc, int db)
     {
         if (adc == 1)
             client.SetRx1Attenuator(db);
@@ -6003,7 +6003,7 @@ public partial class DspPipelineService : BackgroundService,
     /// call <c>SetTxAttenuationDb</c> on the same client this pipeline is
     /// driving. Non-virtual — auto-attenuate is hard-gated on a P2 connection
     /// and tests don't exercise it.</summary>
-    public Zeus.Protocol2.Protocol2Client? CurrentP2Client => _p2Client;
+    public SimpleHPSDR.Protocol2.Protocol2Client? CurrentP2Client => _p2Client;
     internal HostMicRadioClock HostMicClock { get; } = new();
     private void ObserveHostMicClock(uint sequence, int samples) => HostMicClock.Accept(sequence, samples);
 
@@ -6011,7 +6011,7 @@ public partial class DspPipelineService : BackgroundService,
     /// so service-level tests can exercise the normal P2 command fan-out and
     /// capture its wire packets without opening a network socket. Production
     /// composition never calls this method.</summary>
-    internal void SetP2ClientForTest(Zeus.Protocol2.Protocol2Client? client) =>
+    internal void SetP2ClientForTest(SimpleHPSDR.Protocol2.Protocol2Client? client) =>
         _p2Client = client;
 
     /// <summary>
@@ -6265,7 +6265,7 @@ public partial class DspPipelineService : BackgroundService,
         bool txFreeDvMode = txReceiver.Mode == RxMode.FreeDv;
         _txReceiverIsFreeDv = txFreeDvMode;
         var effectiveTxAudio = ResolveEffectiveTxAudioProfile(s, txEngineMode);
-        bool txDigitalBypass = IsDigitalTxZeusMode(txReceiver.Mode);
+        bool txDigitalBypass = IsDigitalTxSimpleHPSDRMode(txReceiver.Mode);
         // Forward VFO changes to the P2 client when it's active. RadioService
         // does this for P1 via ActiveClient?.SetVfoAHz() inside SetVfo, but
         // ActiveClient is null for P2 connections, so the radio never learns
@@ -7195,7 +7195,7 @@ public partial class DspPipelineService : BackgroundService,
         // key-down lands with the correct sideband (no-op on Synthetic / pre-
         // OpenTxChannel).
         engine.SetTxMode(openTxEngineMode);
-        engine.SetTxDigitalBypass(IsDigitalTxZeusMode(openTxReceiver.Mode));
+        engine.SetTxDigitalBypass(IsDigitalTxSimpleHPSDRMode(openTxReceiver.Mode));
         // FM config ahead of the TX filter (see OnRadioStateChanged). The
         // engine also caches it for TXA/RXA channels it opens later.
         var openFm = (s.Fm ?? FmConfig.Default).Normalized();
@@ -7828,8 +7828,8 @@ public partial class DspPipelineService : BackgroundService,
             throw new InvalidOperationException("Already connected (P1). Disconnect first.");
 
         boardKind = RadioService.ResolveProtocol2BoardKind(boardKind);
-        var client = new Zeus.Protocol2.Protocol2Client(
-            _loggerFactory.CreateLogger<Zeus.Protocol2.Protocol2Client>());
+        var client = new SimpleHPSDR.Protocol2.Protocol2Client(
+            _loggerFactory.CreateLogger<SimpleHPSDR.Protocol2.Protocol2Client>());
         _p2ConnectingClient = client;
         client.SetNumAdc(numAdc);
         // Tell the P2 client which board it's talking to so RX-decode quirks
@@ -8023,7 +8023,7 @@ public partial class DspPipelineService : BackgroundService,
         return sampleRateKhz;
     }
 
-    private async Task DisposeUnpublishedP2ClientAsync(Zeus.Protocol2.Protocol2Client client)
+    private async Task DisposeUnpublishedP2ClientAsync(SimpleHPSDR.Protocol2.Protocol2Client client)
     {
         try { client.SetDisplayDdc(-1, 0, 0); } catch { }
         try { client.SetWidebandDisplayEnabled(false); } catch { }
@@ -8039,7 +8039,7 @@ public partial class DspPipelineService : BackgroundService,
         Interlocked.Increment(ref _widebandSourceGeneration);
     }
 
-    private void OnP2ClientDisconnected(Zeus.Protocol2.Protocol2Client client, long generation)
+    private void OnP2ClientDisconnected(SimpleHPSDR.Protocol2.Protocol2Client client, long generation)
     {
         // The protocol event is raised on its RX thread.  Never join that
         // thread inline, and never let a delayed event from an older session
@@ -8052,7 +8052,7 @@ public partial class DspPipelineService : BackgroundService,
     }
 
     private async Task DisconnectP2IfCurrentAsync(
-        Zeus.Protocol2.Protocol2Client client,
+        SimpleHPSDR.Protocol2.Protocol2Client client,
         long generation)
     {
         await _radio.RadioLifecycleGate.WaitAsync(CancellationToken.None).ConfigureAwait(false);
@@ -8247,7 +8247,7 @@ public partial class DspPipelineService : BackgroundService,
         // unsynced. WDSP RX is drained every tick regardless of MOX, so without
         // this the modem keeps decoding the operator's own transmission during
         // the over and the resuming RX dumps that self-decoded backlog at
-        // un-key — an end-of-over garble in Zeus's own audio, on both RADE and
+        // un-key — an end-of-over garble in SimpleHPSDR's own audio, on both RADE and
         // codec2. Key-down drops any pre-TX residual; key-up clears anything
         // decoded from TX bleed. No-op when FreeDV isn't engaged.
         _audioModem.FlushRx();
@@ -8333,7 +8333,7 @@ public partial class DspPipelineService : BackgroundService,
         ReconcileCwNoiseReductionAfterRerate(engine);
     }
 
-    private void RerateRxChannelForP2Locked(Zeus.Protocol2.Protocol2Client p2, IDspEngine engine, int rateHz)
+    private void RerateRxChannelForP2Locked(SimpleHPSDR.Protocol2.Protocol2Client p2, IDspEngine engine, int rateHz)
     {
         int oldChannel = Volatile.Read(ref _channelId);
         try
@@ -8549,7 +8549,7 @@ public partial class DspPipelineService : BackgroundService,
         _log.LogInformation("dsp.pipeline p2 disconnected, engine={Engine}", disconnectedEngine.GetType().Name);
     }
 
-    public Zeus.Protocol2.Protocol2Client? ActiveP2Client => _p2Client;
+    public SimpleHPSDR.Protocol2.Protocol2Client? ActiveP2Client => _p2Client;
 
     /// <summary>
     /// Live per-DDC / per-receiver RX ingest health for the diagnostics surface
@@ -8567,7 +8567,7 @@ public partial class DspPipelineService : BackgroundService,
         var channels = (CurrentEngine as WdspDspEngine)?.SnapshotRxChannels()
                        ?? (IReadOnlyList<WdspDspEngine.RxChannelHealth>)System.Array.Empty<WdspDspEngine.RxChannelHealth>();
         var protocol2 = ActiveP2Client;
-        int ddcCapacity = protocol2?.RxDdcCapacity ?? Zeus.Protocol2.Protocol2Client.StandardRxDdcCapacity;
+        int ddcCapacity = protocol2?.RxDdcCapacity ?? SimpleHPSDR.Protocol2.Protocol2Client.StandardRxDdcCapacity;
         long[] portRates = protocol2?.SnapshotRxPortPacketRates().Take(ddcCapacity).ToArray() ?? System.Array.Empty<long>();
 
         var channelDtos = new object[channels.Count];
@@ -8768,7 +8768,7 @@ public partial class DspPipelineService : BackgroundService,
         _autoAgcLastPreampOn = state.PreampOn;
         _autoAgcLastAttenDb = state.AttenDb;
 
-        // Thetis processes no noise floor while transmitting. Zeus's
+        // Thetis processes no noise floor while transmitting. SimpleHPSDR's
         // configured post-TX mute is part of that transition too: output is
         // hidden specifically because the receiver is not settled yet, so its
         // spectrum and S-meter must not move the Auto AGC servo either. The
@@ -8924,7 +8924,7 @@ public partial class DspPipelineService : BackgroundService,
     // p1.rx.sink_threw, then continues. Sink-thrown exceptions still leak the
     // ArrayPool buffer (the client returns it on our behalf when we throw),
     // so we do our own try/finally inside the body to keep ownership tight.
-    void Zeus.Protocol1.IRxPacketSink.OnIqFrame(in Zeus.Protocol1.IqFrame frame)
+    void SimpleHPSDR.Protocol1.IRxPacketSink.OnIqFrame(in SimpleHPSDR.Protocol1.IqFrame frame)
     {
         try
         {
@@ -8969,7 +8969,7 @@ public partial class DspPipelineService : BackgroundService,
         }
     }
 
-    void Zeus.Protocol1.IRxPacketSink.OnPsFeedbackFrame(in Zeus.Protocol1.PsFeedbackFrame frame)
+    void SimpleHPSDR.Protocol1.IRxPacketSink.OnPsFeedbackFrame(in SimpleHPSDR.Protocol1.PsFeedbackFrame frame)
     {
         DrainDspCommands();
         var engine = Volatile.Read(ref _engine);
@@ -8992,13 +8992,13 @@ public partial class DspPipelineService : BackgroundService,
     // (safe because everything below consumes the span synchronously). So this
     // sink must NOT retain frame.InterleavedSamples past the call and does not
     // return any buffer itself.
-    void Zeus.Protocol2.IRxPacketSink.OnIqFrame(in Zeus.Protocol2.IqFrame frame)
+    void SimpleHPSDR.Protocol2.IRxPacketSink.OnIqFrame(in SimpleHPSDR.Protocol2.IqFrame frame)
     {
         DrainDspCommands();
         var engine = Volatile.Read(ref _engine);
         if (engine is not null)
         {
-            if (frame.ReceiverIndex == Zeus.Protocol2.Protocol2Client.DisplayReceiverIndex)
+            if (frame.ReceiverIndex == SimpleHPSDR.Protocol2.Protocol2Client.DisplayReceiverIndex)
             {
                 int displayChannel = Volatile.Read(ref _widebandDetailChannelId);
                 if (displayChannel >= 0)
@@ -9008,7 +9008,7 @@ public partial class DspPipelineService : BackgroundService,
                 }
                 return;
             }
-            if (frame.ReceiverIndex <= Zeus.Protocol2.Protocol2Client.FirstGuestReceiverIndex)
+            if (frame.ReceiverIndex <= SimpleHPSDR.Protocol2.Protocol2Client.FirstGuestReceiverIndex)
             {
                 // Public Listening guest DDC (-2 - slot). Feeds ONLY that
                 // guest's own WDSP channel and returns: guest IQ must never
@@ -9049,7 +9049,7 @@ public partial class DspPipelineService : BackgroundService,
         MaybeTickInline();
     }
 
-    void Zeus.Protocol2.IRxPacketSink.OnPsFeedbackFrame(in Zeus.Protocol2.PsFeedbackFrame frame)
+    void SimpleHPSDR.Protocol2.IRxPacketSink.OnPsFeedbackFrame(in SimpleHPSDR.Protocol2.PsFeedbackFrame frame)
     {
         DrainDspCommands();
         var engine = Volatile.Read(ref _engine);
@@ -9261,7 +9261,7 @@ public partial class DspPipelineService : BackgroundService,
         double msPerTick = 1000.0 / Stopwatch.Frequency;
         double mean = _tickDiagCount > 0 ? _tickDiagSumTicks * msPerTick / _tickDiagCount : 0;
         double max = _tickDiagMaxTicks * msPerTick;
-        double p99 = Zeus.Protocol2.DiagStats.Percentile(
+        double p99 = SimpleHPSDR.Protocol2.DiagStats.Percentile(
             _tickDiagRing, _tickDiagSortScratch, _tickDiagRingFill, 0.99) * msPerTick;
 
         _log.LogInformation(
@@ -9312,7 +9312,7 @@ public partial class DspPipelineService : BackgroundService,
         _log.LogInformation("dsp.pipeline rx-sink detached protocol=p1");
     }
 
-    private void AttachRxSinkP2(Zeus.Protocol2.Protocol2Client client)
+    private void AttachRxSinkP2(SimpleHPSDR.Protocol2.Protocol2Client client)
     {
         Volatile.Write(ref _lastTickStopwatchTicks, 0);
         Volatile.Write(ref _lastInlineTickStopwatchTicks, 0);
@@ -10179,7 +10179,7 @@ public partial class DspPipelineService : BackgroundService,
         // source"): listener audio is independent of the operator's RX1 mute —
         // the tap sits before the mute clear, so muting the operator's speaker
         // does not mute listeners. Only Protocol 3 differs, because the sidecar
-        // applies the mute (-120 dB) before Zeus ever sees the samples.
+        // applies the mute (-120 dB) before SimpleHPSDR ever sees the samples.
         if (audioSampleCount > 0
             && _hub.ListenerTap is { WantsListenAlong: true } listenerTap
             && !(_hasExternalRadioSidecar && _radio.IsProtocol3Active))
@@ -10478,7 +10478,7 @@ public partial class DspPipelineService : BackgroundService,
                 // Digital-mode DSP bypass: DIGU/DIGL audio reaches the
                 // listener exactly as WDSP demodulated it (no RX suite, RX
                 // plugin, or RX leveler; the squelch resolves disabled above).
-                bool rxDigitalBypass = IsDigitalRxZeusMode(state.Mode);
+                bool rxDigitalBypass = IsDigitalRxSimpleHPSDRMode(state.Mode);
                 if (!rxDigitalBypass && _productAudio.Active && audioSampleCount > 0)
                     _productAudio.ProcessRx(audioBuf.AsSpan(0, audioSampleCount));
 

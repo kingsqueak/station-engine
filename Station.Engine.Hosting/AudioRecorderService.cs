@@ -9,7 +9,7 @@
 // feeds the clip into the TX audio path in place of the live mic, so the TX
 // filter shapes it. A receiver recording skips mic gain and the speech
 // processing (it was processed once already); a microphone recording goes
-// through them like live speech. Zeus did this with its recorder plugin; the
+// through them like live speech. SimpleHPSDR did this with its recorder plugin; the
 // plugin host is gone from this fork, and its TX hooks (MicBlockSource.Wav,
 // MoxSource.Wav) are what this uses.
 
@@ -18,9 +18,9 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
-using Zeus.Contracts;
+using SimpleHPSDR.Contracts;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 public sealed record RecorderStatus(
     string Folder,

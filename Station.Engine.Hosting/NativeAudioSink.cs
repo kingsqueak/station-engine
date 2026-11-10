@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2026 Douglas J. Cerrato (KB2UKA), Christian Suarez (N9WAR), and contributors.
 //
 // Desktop-mode RX audio sink: drains demodulated audio (mono float32 48 kHz,
@@ -15,14 +15,14 @@
 using System.Threading;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Zeus.Contracts;
+using SimpleHPSDR.Contracts;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
 /// <see cref="IRxAudioSink"/> implementation that pushes RX audio straight
 /// to the selected OS playback device via miniaudio. Used in desktop mode
-/// (<see cref="ZeusHostMode.Desktop"/>) in place of
+/// (<see cref="SimpleHPSDRHostMode.Desktop"/>) in place of
 /// <see cref="WebSocketAudioSink"/>.
 ///
 /// <para>Data flow:</para>
@@ -411,7 +411,7 @@ internal sealed class NativeAudioSink : IRxAudioSink, IPreviewAudioSink, IHosted
             })
             {
                 IsBackground = true,
-                Name = "zeus-output-start",
+                Name = "simplehpsdr-output-start",
             };
             thread.Start();
         }

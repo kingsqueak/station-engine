@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-using Zeus.Dsp.Wdsp;
-namespace Zeus.Server;
+using SimpleHPSDR.Dsp.Wdsp;
+namespace SimpleHPSDR.Server;
 
 internal interface IHostMicRateMatcher : IDisposable
 {

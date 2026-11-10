@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
@@ -9,10 +9,10 @@
 
 using LiteDB;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
-/// Typed startup read of the three zeus-prefs.db collections the engine opens
+/// Typed startup read of the three simplehpsdr-prefs.db collections the engine opens
 /// before it accepts work. <see cref="PrefsDbPath.EnsureUsable"/> only reads
 /// raw documents, so a file whose pages are intact but whose rows have the
 /// wrong shape still passes. A typed-mapping failure that reproduces on every

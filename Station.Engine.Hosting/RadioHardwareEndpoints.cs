@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-using Zeus.Contracts;
-using Zeus.Protocol1;
+using SimpleHPSDR.Contracts;
+using SimpleHPSDR.Protocol1;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>Maps board-specific radio hardware and external-port routes.</summary>
 public static class RadioHardwareEndpoints
@@ -129,7 +129,7 @@ public static class RadioHardwareEndpoints
         // HPF and TX LPF windows plus a live active-filter readout. PUT replaces
         // the matrix atomically; RadioService persists, normalizes, and replays
         // the P2 Alex snapshot server-authoritatively. POST /reset restores the
-        // stock Zeus/pihpsdr thresholds and disables custom mode.
+        // stock SimpleHPSDR/pihpsdr thresholds and disables custom mode.
         endpoints.MapGet("/api/radio/rf-filters", (RadioService radio) =>
             Results.Ok(radio.GetRfFilterSettings()));
 

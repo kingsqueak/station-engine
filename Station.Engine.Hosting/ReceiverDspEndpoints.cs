@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-using Zeus.Contracts;
+using SimpleHPSDR.Contracts;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>Maps receiver noise-reduction and manual-notch engine routes.</summary>
 public static class ReceiverDspEndpoints
@@ -69,7 +69,7 @@ public static class ReceiverDspEndpoints
         });
 
         // ---- NR3 (RNNoise) model management (issue #79 follow-up) ----
-        // Zeus ships no model; NR3 stays hidden in the UI until the operator
+        // SimpleHPSDR ships no model; NR3 stays hidden in the UI until the operator
         // installs an RNNoise weights file here — either a multipart upload or a
         // server-side fetch from a URL. Native availability + the installed
         // model name also ride StateDto, so the GET is a convenience for the

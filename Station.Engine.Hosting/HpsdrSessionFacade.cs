@@ -2,9 +2,9 @@
 // Copyright (C) 2026 Douglas J. Cerrato (KB2UKA) and contributors.
 
 using System.Diagnostics;
-using Zeus.Contracts;
+using SimpleHPSDR.Contracts;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
 /// Family-neutral adapter over the existing Protocol-1, Protocol-2 and

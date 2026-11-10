@@ -2,9 +2,9 @@
 // Copyright (C) 2026 Douglas J. Cerrato (KB2UKA) and contributors.
 
 using System.Globalization;
-using Zeus.Contracts;
+using SimpleHPSDR.Contracts;
 
-namespace Zeus.Server.Diagnostics;
+namespace SimpleHPSDR.Server.Diagnostics;
 
 /// <summary>
 /// GET /api/diagnostics/operator — read-only snapshot of the operator settings

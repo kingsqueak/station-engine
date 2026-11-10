@@ -4,9 +4,9 @@ using System.Globalization;
 using System.IO.Ports;
 using System.Text;
 using System.Text.RegularExpressions;
-using Zeus.Server.Cat;
+using SimpleHPSDR.Server.Cat;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 internal interface INanoVnaTransport : IAsyncDisposable
 {
@@ -147,7 +147,7 @@ internal sealed record NanoVnaConnectionStatus(
 /// Vector S11 adapter for NanoVNA-family devices. Newer firmware uses the
 /// scan-mask commands introduced in NanoVNA-Saver; older firmware falls back
 /// to sweep/frequencies/data 0. The NanoVNA's active onboard calibration is
-/// retained, and Zeus may optionally layer its own OSL capture over the data.
+/// retained, and SimpleHPSDR may optionally layer its own OSL capture over the data.
 /// </summary>
 public sealed partial class NanoVnaSweepHardware : IVnaSweepHardware, IDisposable
 {

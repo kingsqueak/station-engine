@@ -4,9 +4,9 @@
 using System.Buffers.Binary;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Zeus.Contracts;
+using SimpleHPSDR.Contracts;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
 /// Publishes the pre-MOX microphone peak from the engine's common TX ingest.

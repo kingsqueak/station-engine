@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
@@ -12,7 +12,7 @@
 // (LineIn/MicBoost/MicBias/BalancedInput/LineInGain) — that model only set codec
 // mic-gain wire bits and never switched the TX pipeline, and it allowed illegal
 // combinations. The model is now a single mutually-exclusive
-// <see cref="Zeus.Contracts.TxAudioSource"/> selector PLUS the parameters that
+// <see cref="SimpleHPSDR.Contracts.TxAudioSource"/> selector PLUS the parameters that
 // apply to whichever radio jack is chosen (MicBoost, MicBias, LineInGain).
 //
 // Mirrors AntennaSettingsStore's LiteDB pattern but holds ONE global row instead
@@ -29,13 +29,13 @@
 // requires (§8). The dropped `LineIn`/`BalancedInput` columns are simply ignored.
 
 using LiteDB;
-using Zeus.Contracts;
+using SimpleHPSDR.Contracts;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 public sealed class AudioSettingsStore : IDisposable
 {
-    private readonly Zeus.Data.SharedLiteDatabase.Lease _dbLease;
+    private readonly SimpleHPSDR.Data.SharedLiteDatabase.Lease _dbLease;
     private readonly LiteDatabase _db;
     private readonly ILiteCollection<AudioFrontEndEntry> _rows;
     private readonly ILogger<AudioSettingsStore> _log;
@@ -54,7 +54,7 @@ public sealed class AudioSettingsStore : IDisposable
         if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
             Directory.CreateDirectory(dir);
 
-        _dbLease = Zeus.Data.SharedLiteDatabase.Acquire(dbPath);
+        _dbLease = SimpleHPSDR.Data.SharedLiteDatabase.Acquire(dbPath);
         _db = _dbLease.Database;
         _rows = _db.GetCollection<AudioFrontEndEntry>("audio_frontend");
         _hl2PlusCodecEnabled = _rows.FindAll().FirstOrDefault()?.Hl2PlusCodecEnabled ?? false;

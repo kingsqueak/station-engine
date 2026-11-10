@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
@@ -10,11 +10,11 @@
 // option) any later version. See the LICENSE file at the root of this
 // repository for the full text, or https://www.gnu.org/licenses/.
 //
-// Zeus is an independent reimplementation in .NET — not a fork. Its
+// SimpleHPSDR is an independent reimplementation in .NET — not a fork. Its
 // Protocol-1 / Protocol-2 framing, WDSP integration, meter pipelines, and
 // TX behaviour were informed by studying the Thetis project
 // (https://github.com/ramdor/Thetis), the authoritative reference
-// implementation in the OpenHPSDR ecosystem. Zeus gratefully acknowledges
+// implementation in the OpenHPSDR ecosystem. SimpleHPSDR gratefully acknowledges
 // the Thetis contributors whose work made this possible:
 //
 //   Richard Samphire (MW0LGE), Warren Pratt (NR0V),
@@ -39,12 +39,12 @@
 // WDSP — loaded by Zeus via P/Invoke — is Copyright (C) Warren Pratt
 // (NR0V), distributed under GPL v2 or later.
 //
-// Zeus is distributed WITHOUT ANY WARRANTY; see the GNU General Public
+// SimpleHPSDR is distributed WITHOUT ANY WARRANTY; see the GNU General Public
 // License for details.
 
-using Zeus.Contracts;
+using SimpleHPSDR.Contracts;
 
-namespace Zeus.Server.Tci;
+namespace SimpleHPSDR.Server.Tci;
 
 /// <summary>
 /// Builds the TCI handshake command sequence sent immediately after WebSocket
@@ -102,7 +102,7 @@ public static class TciHandshake
         // Master volume tracks RxAfGainDb so TCI clients see the live value
         // immediately on connect. Local speaker mute does not affect the TCI
         // audio streams, so advertise them as unmuted. mon_volume is the TX sidetone bus (TCI spec §5.5) —
-        // independent of RX audio gain. Zeus has TX monitor enable, but no
+        // independent of RX audio gain. SimpleHPSDR has TX monitor enable, but no
         // monitor-volume backend yet, so the TCI monitor fields remain
         // placeholders for now.
         cmds.Add(TciProtocol.Command("volume", (int)Math.Round(state.RxAfGainDb)));
@@ -161,7 +161,7 @@ public static class TciHandshake
         cmds.Add(TciProtocol.Command("xit_offset", 0, (int)state.XitHz));
 
         // AGC mode + squelch — live snapshot so the client sees the same
-        // configuration the operator set through the Zeus UI.
+        // configuration the operator set through the SimpleHPSDR UI.
         var agcMode = state.Agc?.Mode ?? AgcMode.Med;
         cmds.Add(TciProtocol.Command("agc_mode", 0, TciProtocol.AgcModeToTci(agcMode)));
         var squelch = state.Squelch ?? new SquelchConfig();

@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
 // See ATTRIBUTIONS.md at the repository root for the full provenance
 // statement and per-component attribution.
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 internal enum OperatorPlatform
 {
@@ -115,7 +115,7 @@ internal sealed class OperatorDownloadsDirectory
                 _probe.CreateDirectory(directory);
                 var writtenTemporaryPath = Path.Combine(
                     directory,
-                    $".zeus-backup-{Guid.NewGuid():N}.tmp");
+                    $".simplehpsdr-backup-{Guid.NewGuid():N}.tmp");
                 temporaryPath = writtenTemporaryPath;
                 // This is the writability proof and the real payload write.
                 // The stream is closed by the probe before any move is tried.
@@ -146,7 +146,7 @@ internal sealed class OperatorDownloadsDirectory
                 }
 
                 throw new InvalidOperationException(
-                    $"Zeus could not choose a unique backup name after " +
+                    $"SimpleHPSDR could not choose a unique backup name after " +
                     $"{MaximumFileNameAttempts} attempts.");
             }
             catch (IOException ex)
@@ -165,8 +165,8 @@ internal sealed class OperatorDownloadsDirectory
         }
 
         throw new IOException(
-            "Zeus could not save the database backup because the Downloads folder, " +
-            "user profile, and Zeus data directory are not writable.",
+            "SimpleHPSDR could not save the database backup because the Downloads folder, " +
+            "user profile, and SimpleHPSDR data directory are not writable.",
             lastFailure);
     }
 
@@ -289,9 +289,9 @@ internal sealed class OperatorDownloadsDirectory
 
     private static string BackupFileName(DateTime timestamp, int attempt)
     {
-        var stem = $"zeus-backup-{timestamp:yyyyMMdd-HHmmss}";
+        var stem = $"simplehpsdr-backup-{timestamp:yyyyMMdd-HHmmss}";
         var suffix = attempt == 1 ? string.Empty : $" ({attempt})";
-        return $"{stem}{suffix}.zeusdb";
+        return $"{stem}{suffix}.simplehpsdrdb";
     }
 
     private void TryDelete(string path)

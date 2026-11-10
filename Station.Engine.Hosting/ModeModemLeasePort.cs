@@ -8,9 +8,9 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Serialization;
 using Station.AudioRing;
-using Zeus.Contracts;
+using SimpleHPSDR.Contracts;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
 /// Engine-owned, modem-neutral mode-modem lease. One out-of-process modem at a

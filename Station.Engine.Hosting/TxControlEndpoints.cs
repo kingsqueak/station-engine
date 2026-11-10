@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 using System.Text.Json;
-using Zeus.Contracts;
-using Zeus.Dsp;
-namespace Zeus.Server;
+using SimpleHPSDR.Contracts;
+using SimpleHPSDR.Dsp;
+namespace SimpleHPSDR.Server;
 
 /// <summary>Maps core CW and TX-control routes.</summary>
 public static class TxControlEndpoints

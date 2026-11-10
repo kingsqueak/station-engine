@@ -6,7 +6,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
 /// Locates, ABI-checks and selects one engine-owned GPL native library (RADE,
@@ -27,7 +27,7 @@ internal sealed class EngineNativeLibraryProbe
     private string? _selectedSha256;
     private string? _failure;
 
-    /// <param name="baseName">Library name without prefix or extension, e.g. "zeus_wspr".</param>
+    /// <param name="baseName">Library name without prefix or extension, e.g. "simplehpsdr_wspr".</param>
     /// <param name="overrideEnvironmentVariable">Variable naming an explicit replacement directory.</param>
     /// <param name="overrideSubdirectory">Folder under <c>DataDir/native-overrides</c>.</param>
     /// <param name="requiredExports">Every export the managed binding calls.</param>

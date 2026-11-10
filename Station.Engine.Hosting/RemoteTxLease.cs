@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 internal static class RemoteTxLease
 {
-    internal const string HeaderName = "X-Zeus-Remote-Tx-Lease";
+    internal const string HeaderName = "X-SimpleHPSDR-Remote-Tx-Lease";
 
     internal static bool TryGet(HttpContext context, out string leaseId)
     {

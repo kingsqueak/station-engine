@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
@@ -10,11 +10,11 @@
 // option) any later version. See the LICENSE file at the root of this
 // repository for the full text, or https://www.gnu.org/licenses/.
 //
-// Zeus is an independent reimplementation in .NET — not a fork. Its
+// SimpleHPSDR is an independent reimplementation in .NET — not a fork. Its
 // Protocol-1 / Protocol-2 framing, WDSP integration, meter pipelines, and
 // TX behaviour were informed by studying the Thetis project
 // (https://github.com/ramdor/Thetis), the authoritative reference
-// implementation in the OpenHPSDR ecosystem. Zeus gratefully acknowledges
+// implementation in the OpenHPSDR ecosystem. SimpleHPSDR gratefully acknowledges
 // the Thetis contributors whose work made this possible:
 //
 //   Richard Samphire (MW0LGE), Warren Pratt (NR0V),
@@ -39,16 +39,16 @@
 // WDSP — loaded by Zeus via P/Invoke — is Copyright (C) Warren Pratt
 // (NR0V), distributed under GPL v2 or later.
 //
-// Zeus is distributed WITHOUT ANY WARRANTY; see the GNU General Public
+// SimpleHPSDR is distributed WITHOUT ANY WARRANTY; see the GNU General Public
 // License for details.
 
 using System.Buffers;
 using System.Net.WebSockets;
 using System.Text;
-using Zeus.Contracts;
-using Zeus.Protocol1;
+using SimpleHPSDR.Contracts;
+using SimpleHPSDR.Protocol1;
 
-namespace Zeus.Server.Tci;
+namespace SimpleHPSDR.Server.Tci;
 
 /// <summary>
 /// Per-client TCI session. Manages WebSocket send/receive loops, command
@@ -97,7 +97,7 @@ public sealed class TciSession : IDisposable
     // Guarded by _streamLock.
     private byte[]? _txChronoFrame;
     // Per-session digital-mode pitch offsets (DIGL_OFFSET / DIGU_OFFSET).
-    // Stored only — Zeus has no backend for these yet, but we acknowledge
+    // Stored only — SimpleHPSDR has no backend for these yet, but we acknowledge
     // and echo so digital-mode clients (WSJT-X / JTDX) don't see "unknown
     // command" log spam.
     private int _diglOffsetHz;
@@ -782,7 +782,7 @@ public sealed class TciSession : IDisposable
                 // --- Noise reduction / blanking ---
                 // Spec-conformant `rx_*` names (TCI 2.0 §4.2) route to the same
                 // backends as the legacy non-prefixed forms (`nr_enable`,
-                // `nb_enable`, …) accepted by older Zeus clients. The two
+                // `nb_enable`, …) accepted by older SimpleHPSDR clients. The two
                 // forms are interchangeable on the wire.
                 case "nr_enable":
                 case "rx_nr_enable":
@@ -895,7 +895,7 @@ public sealed class TciSession : IDisposable
                     break;
 
                 // --- Digital-mode pitch offsets (TCI 1.9 §4.2) ---
-                // No backend wiring — Zeus uses the rx_filter_band passband
+                // No backend wiring — SimpleHPSDR uses the rx_filter_band passband
                 // directly. Stored per-session and echoed so JTDX / WSJT-X
                 // don't see "unknown command" log spam.
                 case "digl_offset":
@@ -1303,7 +1303,7 @@ public sealed class TciSession : IDisposable
     private void HandleMute(string[] args)
     {
         // mute:<bool>  (SET master mute)  or  mute  (GET)
-        // Local speaker mute is independent of TCI audio. Zeus has no TCI
+        // Local speaker mute is independent of TCI audio. SimpleHPSDR has no TCI
         // stream-mute control, so report the stream as available.
         if (args.Length == 0)
         {
@@ -1350,7 +1350,7 @@ public sealed class TciSession : IDisposable
     private void HandleMonEnable(string[] args)
     {
         // mon_enable:<bool> or mon_enable (query)
-        // TCI monitor controls stay placeholders until Zeus has a monitor
+        // TCI monitor controls stay placeholders until SimpleHPSDR has a monitor
         // volume backend to pair with its TX monitor enable path.
         if (args.Length == 0)
         {
@@ -1362,7 +1362,7 @@ public sealed class TciSession : IDisposable
     private void HandleMonVolume(string[] args)
     {
         // mon_volume:<db> or mon_volume (query)
-        // TCI monitor controls stay placeholders until Zeus has a monitor
+        // TCI monitor controls stay placeholders until SimpleHPSDR has a monitor
         // volume backend to pair with its TX monitor enable path.
         if (args.Length == 0)
         {
@@ -1374,7 +1374,7 @@ public sealed class TciSession : IDisposable
     private void HandleAgcMode(string[] args)
     {
         // agc_mode:<rx>,<mode>  (SET)  or  agc_mode:<rx>  (GET)
-        // Wire strings map through TciProtocol.TciToAgcMode. Zeus has no
+        // Wire strings map through TciProtocol.TciToAgcMode. SimpleHPSDR has no
         // "OFF" AGC — TCI OFF maps to Fixed (per Thetis convention).
         if (args.Length < 1) return;
         if (!TciProtocol.TryParseInt(args[0], out int rx)) return;
@@ -1399,7 +1399,7 @@ public sealed class TciSession : IDisposable
     private void HandleSqlEnable(string[] args)
     {
         // sql_enable:<rx>,<bool>  (SET)  or  sql_enable:<rx>  (GET)
-        // Squelch is a single global config in Zeus (Adaptive-by-default).
+        // Squelch is a single global config in SimpleHPSDR (Adaptive-by-default).
         // rx is echoed but the underlying config is shared across receivers.
         if (args.Length < 1) return;
         if (!TciProtocol.TryParseInt(args[0], out int rx)) return;
@@ -1637,7 +1637,7 @@ public sealed class TciSession : IDisposable
     private void HandleLock(string[] args)
     {
         // lock:<rx>,<bool> or lock:<rx> (query)
-        // TCI exposes this per receiver, but Zeus has one global VFO lock.
+        // TCI exposes this per receiver, but SimpleHPSDR has one global VFO lock.
         if (args.Length < 1) return;
         if (!TciProtocol.TryParseInt(args[0], out int rx)) return;
 
@@ -1722,7 +1722,7 @@ public sealed class TciSession : IDisposable
     private void HandleIqSampleRate(string[] args)
     {
         // iq_samplerate:<rate>  or  iq_samplerate (query)
-        // Range follows the Zeus/ANAN G2 Protocol-2 ladder: [48000, 1536000].
+        // Range follows the SimpleHPSDR/ANAN G2 Protocol-2 ladder: [48000, 1536000].
         //
         // Always echo the hardware delivery rate, NOT the requested rate.
         // IQ frames are published at the radio's native sample rate regardless
@@ -1818,7 +1818,7 @@ public sealed class TciSession : IDisposable
     {
         // audio_stream_sample_type, audio_stream_channels, audio_stream_samples,
         // tx_stream_audio_buffering — server echoes whatever the client sets
-        // (TCI spec §5.8 subscription burst). Zeus honours audio_stream_channels
+        // (TCI spec §5.8 subscription burst). SimpleHPSDR honours audio_stream_channels
         // for inbound TX audio decode and outbound RX audio payload shape; the
         // others are echo-only so the client sees its requested config reflected.
         if (args.Length == 0)
@@ -1927,7 +1927,7 @@ public sealed class TciSession : IDisposable
     private void HandleTxProfilesEx(string[] args)
     {
         // tx_profiles_ex             — GET list of all configured profiles
-        // Zeus doesn't have a profile system; return a single-entry list.
+        // SimpleHPSDR doesn't have a profile system; return a single-entry list.
         Send(TciProtocol.Command("tx_profiles_ex", "Default"));
     }
 
@@ -1945,7 +1945,7 @@ public sealed class TciSession : IDisposable
     private void HandleRunCatEx(string[] args)
     {
         // run_cat_ex:<KENWOOD_CMD>  — Kenwood CAT pass-through (spec §5.9).
-        // Zeus has no general CAT engine, but the three commands clients
+        // SimpleHPSDR has no general CAT engine, but the three commands clients
         // actually rely on are wired here:
         //   PS1   — power on  → ConnectAsync (no-op if no last-known endpoint)
         //   PS0   — power off → DisconnectAsync
@@ -1959,11 +1959,11 @@ public sealed class TciSession : IDisposable
                 _ = _radio.DisconnectAsync();
                 break;
             case "PS1":
-                // Re-connect requires an endpoint and sample rate. Zeus's
+                // Re-connect requires an endpoint and sample rate. SimpleHPSDR's
                 // power-up flow runs through discovery + the web UI; without
                 // a stored last-known endpoint, log and skip rather than
                 // guess.
-                _log.LogInformation("tci.run_cat_ex PS1 → ignored (no auto-connect path; use Zeus discovery)");
+                _log.LogInformation("tci.run_cat_ex PS1 → ignored (no auto-connect path; use SimpleHPSDR discovery)");
                 break;
             case "ZZTX0":
                 _log.LogInformation("tci.run_cat_ex ZZTX0 → force-unkey");
@@ -1983,7 +1983,7 @@ public sealed class TciSession : IDisposable
     {
         // vfo_lock:<trx>,<vfo>          GET → echo
         // vfo_lock:<trx>,<vfo>,<bool>   SET
-        // Zeus lock is global; both TCI VFO indices map to the one lock.
+        // SimpleHPSDR lock is global; both TCI VFO indices map to the one lock.
         if (args.Length < 2) return;
         if (!TciProtocol.TryParseInt(args[0], out int trx)) return;
         if (!TciProtocol.TryParseInt(args[1], out int vfo)) return;
@@ -1999,14 +1999,14 @@ public sealed class TciSession : IDisposable
     private void HandleVfoSwapEx(string[] args)
     {
         // vfo_swap_ex:<trx>  — swap VFO A/B contents (C→S only).
-        // Zeus has no split / dual-VFO state to swap yet; log and ack.
+        // SimpleHPSDR has no split / dual-VFO state to swap yet; log and ack.
         _log.LogDebug("tci.vfo_swap_ex received (split not implemented)");
     }
 
     private void HandleRxEnable(string[] args)
     {
         // rx_enable:<trx>,<bool>  — toggle secondary receiver (RX2).
-        // Zeus is single-RX; echo whatever the client sent so its UI doesn't
+        // SimpleHPSDR is single-RX; echo whatever the client sent so its UI doesn't
         // assume the SET silently succeeded.
         if (args.Length < 2) return;
         if (!TciProtocol.TryParseInt(args[0], out int trx)) return;
@@ -2018,7 +2018,7 @@ public sealed class TciSession : IDisposable
     {
         // rx_channel_enable:<rx>,<chan>,<bool>  — TCI 2.0 §4.2 spec form for
         // toggling channel B (VFO B) on a receiver. 2-arg form is a GET.
-        // Zeus has no second VFO yet; echo so the client UI stays consistent.
+        // SimpleHPSDR has no second VFO yet; echo so the client UI stays consistent.
         if (args.Length < 2) return;
         if (!TciProtocol.TryParseInt(args[0], out int rx)) return;
         if (!TciProtocol.TryParseInt(args[1], out int chan)) return;
@@ -2038,7 +2038,7 @@ public sealed class TciSession : IDisposable
         // digl_offset / digu_offset       (GET)
         // Range 0..4000 Hz per spec §4.2. Stored per session — backend
         // application would treat this as the digital-mode passband centre
-        // shift, which Zeus today bakes into rx_filter_band directly.
+        // shift, which SimpleHPSDR today bakes into rx_filter_band directly.
         string name = isUpper ? "digu_offset" : "digl_offset";
         if (args.Length == 0)
         {
@@ -2056,7 +2056,7 @@ public sealed class TciSession : IDisposable
     private void HandleTxFilterBandEx(string[] args)
     {
         // tx_filter_band_ex:<lo_hz>,<hi_hz>  — TX bandpass filter (spec §5.3).
-        // Note: NO rx index, unlike rx_filter_band. Zeus tracks
+        // Note: NO rx index, unlike rx_filter_band. SimpleHPSDR tracks
         // TxFilterLowHz / TxFilterHighHz on StateDto but doesn't yet expose
         // a setter; ack with the client-supplied values so the client UI
         // updates and treat as informational.
@@ -2112,7 +2112,7 @@ public sealed class TciSession : IDisposable
     {
         // rx_antenna:<rx>,<n>  — n=0..2 for ANT1..3, n=3 for "default" (spec §5.4).
         // RadioService has no antenna-selection API yet (HL2 has no
-        // switchable antenna; ANAN-class boards do, but Zeus hasn't wired
+        // switchable antenna; ANAN-class boards do, but SimpleHPSDR hasn't wired
         // it). Log and ack so clients don't see "unknown command".
         if (args.Length < 2) return;
         if (!TciProtocol.TryParseInt(args[0], out int rx)) return;
@@ -2134,7 +2134,7 @@ public sealed class TciSession : IDisposable
 
     /// <summary>Per-session desired sensor-push interval in ms (clamped 30..1000
     /// per spec §4.4). 0 = use server default cadence. Currently informational —
-    /// Zeus pushes at the rx_smeter / TxMeters event rate regardless.</summary>
+    /// SimpleHPSDR pushes at the rx_smeter / TxMeters event rate regardless.</summary>
     public int RxSensorsIntervalMs { get { lock (_streamLock) return _rxSensorsIntervalMs; } }
     public int TxSensorsIntervalMs { get { lock (_streamLock) return _txSensorsIntervalMs; } }
     private int _rxSensorsIntervalMs;
@@ -2207,7 +2207,7 @@ public sealed class TciSession : IDisposable
         // nb_enable / rx_nb_enable:<rx>,<bool>  — enable/disable noise blanker (NB1).
         // Maps bool true → NbMode.Nb1, false → NbMode.Off. GET form is 1 arg
         // and replies with the live state. The two command names are aliases
-        // (TCI 2.0 spec uses the rx_-prefixed form; older Zeus accepted the
+        // (TCI 2.0 spec uses the rx_-prefixed form; older SimpleHPSDR accepted the
         // bare form).
         if (args.Length < 1) return;
         if (!TciProtocol.TryParseInt(args[0], out int rx)) return;

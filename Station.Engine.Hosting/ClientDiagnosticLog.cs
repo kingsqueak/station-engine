@@ -4,11 +4,11 @@
 using System.Text;
 using System.Text.Json;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 // Frontend client-error ingest, shared by every host that serves the SPA.
 //
-// The desktop webview has no console an operator can open, and in the Zeus
+// The desktop webview has no console an operator can open, and in the SimpleHPSDR
 // Link topology the standalone engine is the SPA's API origin — so a frontend
 // crash is invisible unless the failing line lands in the host's own log
 // stream. The SPA's clientErrorBeacon reports uncaught errors over two
@@ -16,7 +16,7 @@ namespace Zeus.Server;
 // first) and POST /api/diagnostics/client-log (sendBeacon / keepalive-fetch
 // fallback). Both funnel through the sanitize + rate-limit primitives below.
 //
-// These types moved here from Zeus.Server.Hosting so the standalone engine
+// These types moved here from SimpleHPSDR.Server.Hosting so the standalone engine
 // can ingest beacons itself instead of dropping them (the field defect where
 // uncaught webview errors vanished in attach mode). The product host keeps
 // using the same primitives — one sanitizer, one budget shape, two hosts.

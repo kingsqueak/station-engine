@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 using System.Diagnostics;
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 // Packet-clock credits only: neither DSP nor allocation runs on the UDP thread.
 internal sealed class HostMicRadioClock

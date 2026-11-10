@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-using Zeus.Contracts;
-using Zeus.Protocol1;
+using SimpleHPSDR.Contracts;
+using SimpleHPSDR.Protocol1;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 public sealed record Hl2IoBoardStatus(
     bool Supported = false,

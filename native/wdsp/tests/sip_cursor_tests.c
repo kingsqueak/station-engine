@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Deterministic tests for the Zeus contiguous siphon reader (sip_cursor.c).
+// Deterministic tests for the SimpleHPSDR contiguous siphon reader (sip_cursor.c).
 // The writer below mirrors xsiphon's mode-0 ring copy in siphon.c. Every
 // sample carries its absolute index, so a repeated, skipped or reordered
 // sample fails loudly. Compiled standalone (no FFTW, no WDSP channel state).

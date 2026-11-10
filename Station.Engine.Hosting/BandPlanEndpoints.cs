@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-using Zeus.Contracts;
-namespace Zeus.Server;
+using SimpleHPSDR.Contracts;
+namespace SimpleHPSDR.Server;
 
 /// <summary>Maps band memory, band stack, and regional band-plan routes.</summary>
 public static class BandPlanEndpoints

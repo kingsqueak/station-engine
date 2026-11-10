@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Douglas J. Cerrato (KB2UKA),
 //                    Christian Suarez (N9WAR), and contributors.
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 public static class HfAutoEndpoints
 {

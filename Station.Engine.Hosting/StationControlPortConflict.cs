@@ -3,11 +3,11 @@
 //                    Christian Suarez (N9WAR), and contributors.
 
 using System.Net;
-using Zeus.Contracts;
-using Zeus.Server.Cat;
-using Zeus.Server.Tci;
+using SimpleHPSDR.Contracts;
+using SimpleHPSDR.Server.Cat;
+using SimpleHPSDR.Server.Tci;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
 /// Detects the network CAT and TCI servers configured onto the same TCP port.
@@ -85,7 +85,7 @@ internal static class StationControlPortConflict
         + "or TCI will stay off.";
 
     internal static string CollisionClearedMessage(int port) =>
-        $"TCI and CAT no longer share port {port}. Restart Zeus to apply.";
+        $"TCI and CAT no longer share port {port}. Restart SimpleHPSDR to apply.";
 
     // Kestrel: ListenAnyIP and Listen(IPv6Any) open dual-mode sockets, and
     // ListenLocalhost binds both loopbacks (TciHostingExtensions).

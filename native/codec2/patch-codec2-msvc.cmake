@@ -18,15 +18,15 @@
 
 cmake_minimum_required(VERSION 3.20)
 
-set(_sentinel "# ZEUS-CODEC2-MSVC-PATCH")
+set(_sentinel "# SIMPLEHPSDR-CODEC2-MSVC-PATCH")
 
 # --- top-level CMakeLists.txt: global C flags --------------------------------
 set(_top "${CODEC2_SRC}/CMakeLists.txt")
 file(READ "${_top}" _c)
-if(NOT _c MATCHES "ZEUS-CODEC2-MSVC-PATCH")
+if(NOT _c MATCHES "SIMPLEHPSDR-CODEC2-MSVC-PATCH")
     string(REPLACE
 [==[set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wno-strict-overflow")]==]
-[==[# ZEUS-CODEC2-MSVC-PATCH
+[==[# SIMPLEHPSDR-CODEC2-MSVC-PATCH
 if(NOT MSVC)
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wno-strict-overflow")
 endif()]==]
@@ -48,11 +48,11 @@ endif()
 # --- src/CMakeLists.txt: generate_codebook libm link -------------------------
 set(_src "${CODEC2_SRC}/src/CMakeLists.txt")
 file(READ "${_src}" _s)
-if(NOT _s MATCHES "ZEUS-CODEC2-MSVC-PATCH")
+if(NOT _s MATCHES "SIMPLEHPSDR-CODEC2-MSVC-PATCH")
     string(REPLACE
 [==[    add_executable(generate_codebook generate_codebook.c)
     target_link_libraries(generate_codebook m)]==]
-[==[    # ZEUS-CODEC2-MSVC-PATCH
+[==[    # SIMPLEHPSDR-CODEC2-MSVC-PATCH
     add_executable(generate_codebook generate_codebook.c)
     if(NOT MSVC)
         target_link_libraries(generate_codebook m)

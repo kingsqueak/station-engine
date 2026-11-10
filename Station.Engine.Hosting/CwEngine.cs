@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA), Christian Suarez (N9WAR), and contributors.
 //
 // Host-side CW keyer. WDSP's CWX module is not exported by the libwdsp
@@ -18,10 +18,10 @@
 using System.Threading.Channels;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Zeus.Contracts;
-using Zeus.Protocol1;
+using SimpleHPSDR.Contracts;
+using SimpleHPSDR.Protocol1;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
 /// Queues text-to-CW jobs and drives them out as host-generated IQ. One
@@ -39,7 +39,7 @@ namespace Zeus.Server;
 public sealed class CwEngine : BackgroundService
 {
     // P1 TX sample rate: the EP2 packer drains TxIqRing at 48 kHz (see
-    // Zeus.Protocol1.TxIqRing class doc). P2 does NOT read the ring — its
+    // SimpleHPSDR.Protocol1.TxIqRing class doc). P2 does NOT read the ring — its
     // 1029-port DUC stream runs at the TXA output rate (192 kHz on the G2)
     // and is fed via DspPipelineService.ForwardTxIqToP2, the same seam
     // TxTuneDriver and TxAudioIngest use. The live rate is resolved per job
@@ -923,7 +923,7 @@ public sealed class CwEngine : BackgroundService
         return rate;
     }
 
-    internal static int ResolveTxOutputRateHz(Zeus.Dsp.IDspEngine? engine)
+    internal static int ResolveTxOutputRateHz(SimpleHPSDR.Dsp.IDspEngine? engine)
     {
         if (engine is null) return SampleRateHz;
         return ResolveTxOutputRateHz(engine.TxBlockSamples, engine.TxOutputSamples);

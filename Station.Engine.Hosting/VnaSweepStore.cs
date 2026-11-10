@@ -2,11 +2,11 @@
 
 using LiteDB;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 public sealed class VnaSweepStore : IDisposable
 {
-    private readonly Zeus.Data.SharedLiteDatabase.Lease _dbLease;
+    private readonly SimpleHPSDR.Data.SharedLiteDatabase.Lease _dbLease;
     private readonly ILiteCollection<VnaSweepEntry> _sweeps;
     private readonly ILiteCollection<VnaCalibrationEntry> _calibrations;
     private readonly object _sync = new();
@@ -16,7 +16,7 @@ public sealed class VnaSweepStore : IDisposable
         string dbPath = dbPathOverride ?? PrefsDbPath.EngineGet();
         string? directory = Path.GetDirectoryName(dbPath);
         if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
-        _dbLease = Zeus.Data.SharedLiteDatabase.Acquire(dbPath);
+        _dbLease = SimpleHPSDR.Data.SharedLiteDatabase.Acquire(dbPath);
         _sweeps = _dbLease.Database.GetCollection<VnaSweepEntry>("vna_sweeps");
         _calibrations = _dbLease.Database.GetCollection<VnaCalibrationEntry>("vna_calibrations");
         _sweeps.EnsureIndex(x => x.CapturedUtc);

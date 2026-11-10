@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
@@ -20,13 +20,13 @@
 // Both are GPL-2.0-or-later.
 
 using LiteDB;
-using Zeus.Contracts;
+using SimpleHPSDR.Contracts;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 // PureSignal settings persistence. Both production hosts supply
 // PrefsDbPath.EngineGet(), so this store's ps_settings collection lives in
-// station-engine.db alongside DspSettingsStore rather than in zeus-prefs.db.
+// station-engine.db alongside DspSettingsStore rather than in simplehpsdr-prefs.db.
 // Stores the operator's arm intent and calibration tuning (timing delays,
 // auto-attenuate, per-board HW peak) so they survive server restarts.
 //
@@ -46,7 +46,7 @@ namespace Zeus.Server;
 // owns its own calibrated value.
 public sealed class PsSettingsStore : IDisposable
 {
-    private readonly Zeus.Data.SharedLiteDatabase.Lease _dbLease;
+    private readonly SimpleHPSDR.Data.SharedLiteDatabase.Lease _dbLease;
     private readonly LiteDatabase _db;
     private readonly ILiteCollection<PsSettingsEntry> _entries;
     private readonly ILogger<PsSettingsStore> _log;
@@ -60,7 +60,7 @@ public sealed class PsSettingsStore : IDisposable
         if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
             Directory.CreateDirectory(dir);
 
-        _dbLease = Zeus.Data.SharedLiteDatabase.Acquire(dbPath);
+        _dbLease = SimpleHPSDR.Data.SharedLiteDatabase.Acquire(dbPath);
         _db = _dbLease.Database;
         _entries = _db.GetCollection<PsSettingsEntry>("ps_settings");
         _entries.EnsureIndex(x => x.ProfileId, unique: true);

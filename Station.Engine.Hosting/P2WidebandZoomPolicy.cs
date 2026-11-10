@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA), Christian Suarez (N9WAR), and contributors.
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
 /// Selects the Protocol-2 display source for the shared wideband zoom value.
@@ -120,7 +120,7 @@ internal static class P2WidebandZoomPolicy
         long targetCenterHz,
         double requestedSpanHz,
         int guestDdcCount = 0,
-        int ddcCapacity = Zeus.Protocol2.Protocol2Client.StandardRxDdcCapacity)
+        int ddcCapacity = SimpleHPSDR.Protocol2.Protocol2Client.StandardRxDdcCapacity)
     {
         // The hidden stream must extend the already-contiguous user run, which
         // is exactly the run the protocol client composes
@@ -133,19 +133,19 @@ internal static class P2WidebandZoomPolicy
         // of them are counted (the client never places more), so guest
         // presence can never make the detail source unavailable.
         _ = diversitySourceEnabled;
-        int firstFree = Zeus.Protocol2.Protocol2Client.FirstFreeOperatorDdc(
+        int firstFree = SimpleHPSDR.Protocol2.Protocol2Client.FirstFreeOperatorDdc(
             baseDdc, rx2Enabled, Math.Max(0, extraReceiverCount));
         int guests = Math.Clamp(
             guestDdcCount,
             0,
-            Zeus.Protocol2.Protocol2Client.GuestDdcCapacityBehind(firstFree, displayDdcWanted: true, ddcCapacity));
+            SimpleHPSDR.Protocol2.Protocol2Client.GuestDdcCapacityBehind(firstFree, displayDdcWanted: true, ddcCapacity));
         int candidate = firstFree + guests;
         if (candidate >= 2 && candidate < ddcCapacity)
         {
             return new P2WidebandDetailSource(
                 P2WidebandDetailSourceKind.HiddenDdc,
                 candidate,
-                ReceiverIndex: Zeus.Protocol2.Protocol2Client.DisplayReceiverIndex,
+                ReceiverIndex: SimpleHPSDR.Protocol2.Protocol2Client.DisplayReceiverIndex,
                 SourceCenterHz: targetCenterHz);
         }
 

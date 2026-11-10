@@ -4,11 +4,11 @@
 using System.Net;
 using System.Net.Sockets;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Zeus.Contracts;
-using Zeus.Dsp.Wdsp;
-using P2Discovery = Zeus.Protocol2.Discovery.IRadioDiscovery;
+using SimpleHPSDR.Contracts;
+using SimpleHPSDR.Dsp.Wdsp;
+using P2Discovery = SimpleHPSDR.Protocol2.Discovery.IRadioDiscovery;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 internal sealed record Protocol2ConnectionProbe(
     bool Busy,
@@ -154,7 +154,7 @@ internal sealed class P2AutoConnectOptions(string endpoint)
 
 internal class P2AutoConnectService : BackgroundService
 {
-    internal const string EndpointEnvironmentVariable = "ZEUS_P2_AUTOCONNECT_ENDPOINT";
+    internal const string EndpointEnvironmentVariable = "SIMPLEHPSDR_P2_AUTOCONNECT_ENDPOINT";
     private const int SampleRateKhz = 48;
 
     private readonly P2AutoConnectOptions _options;

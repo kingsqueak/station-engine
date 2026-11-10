@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
 // Per-radio quirks in how the drive-level byte actually makes it from
-// Zeus to RF. Every HPSDR radio ostensibly speaks the same protocol 1 /
+// SimpleHPSDR to RF. Every HPSDR radio ostensibly speaks the same protocol 1 /
 // protocol 2 wire format, but what each one DOES with the byte we put
 // in C0=0x12, C1=drive_level varies:
 //
@@ -37,13 +37,13 @@
 //     reached, which is why their "it works" setups work).
 //   - Thetis console.cs:46801-46841 (8-bit, no HL2-specific branch).
 //   - mi0bot/openhpsdr-thetis — HL2-specific fork; look there for
-//     further HL2 quirks Zeus may need to mirror.
+//     further HL2 quirks SimpleHPSDR may need to mirror.
 
-using Zeus.Contracts;
-using Zeus.Protocol1;
-using Zeus.Protocol1.Discovery;
+using SimpleHPSDR.Contracts;
+using SimpleHPSDR.Protocol1;
+using SimpleHPSDR.Protocol1.Discovery;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
 /// Encapsulates per-board drive-byte encoding. Implementations convert a

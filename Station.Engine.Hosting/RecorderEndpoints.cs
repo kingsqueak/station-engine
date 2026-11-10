@@ -8,7 +8,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 public static class RecorderEndpoints
 {

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2026 Douglas J. Cerrato (KB2UKA), Christian Suarez (N9WAR), and contributors.
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
 /// Decides which native audio device side(s) to (re)open in response to a
@@ -17,7 +17,7 @@ namespace Zeus.Server;
 /// request if either was missing. So when an operator's previously-saved mic
 /// was unplugged (or the prefs DB was copied from another machine), every
 /// attempt to change the OUTPUT device was rejected with an input-device error
-/// and the dropdown snapped back — "Zeus will not allow me to use any of the
+/// and the dropdown snapped back — "SimpleHPSDR will not allow me to use any of the
 /// windows sound devices for RX audio".</para>
 ///
 /// <para>The fix: only validate and apply a side that is actually CHANGING

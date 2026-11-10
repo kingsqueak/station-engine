@@ -1,20 +1,20 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
-/// Grants Zeus its Windows Firewall rule automatically at engine startup, at most
+/// Grants SimpleHPSDR its Windows Firewall rule automatically at engine startup, at most
 /// once per engine executable.
 ///
 /// Why this lives in the ENGINE and not the product host: StationEngine is the
 /// process that opens the HPSDR UDP sockets, so it is the executable the rule has
 /// to name. Before this, the only automatic grant was
-/// <c>WindowsFirewallAutoApplyService</c> in Zeus.Server.Hosting, which is
-/// referenced solely by Zeus.Host — the retired Photino dev bench. Operators
+/// <c>WindowsFirewallAutoApplyService</c> in SimpleHPSDR.Server.Hosting, which is
+/// referenced solely by SimpleHPSDR.Host — the retired Photino dev bench. Operators
 /// running Zeus Link therefore never got a rule from anything at all, and the
 /// symptom is silent: discovery finds nothing and the panadapter stays flat,
 /// because Protocol 1 receives on an ephemeral UDP port that Windows drops
@@ -39,9 +39,9 @@ namespace Zeus.Server;
 /// </summary>
 public sealed class WindowsFirewallStartupGrant : BackgroundService
 {
-    // Registered by the Zeus Link / Zeus installer, elevated, at install time.
+    // Registered by the Zeus Link / SimpleHPSDR installer, elevated, at install time.
     // Running it needs no elevation of our own and raises no UAC prompt.
-    internal const string HelperTaskName = @"\ZeusSDR\GrantNetworkAccess";
+    internal const string HelperTaskName = @"\SimpleHPSDRSDR\GrantNetworkAccess";
 
     private readonly IWindowsFirewallService _firewall;
     private readonly WindowsFirewallGrantStore _store;

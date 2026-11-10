@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 
@@ -8,9 +8,9 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using LiteDB;
 using JsonSerializer = System.Text.Json.JsonSerializer;
-using Zeus.Contracts;
+using SimpleHPSDR.Contracts;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
 /// Loads shipped band plan JSON files from the BandPlans/ folder alongside the
@@ -23,7 +23,7 @@ namespace Zeus.Server;
 public sealed class BandPlanStore : IDisposable
 {
     private readonly ILogger<BandPlanStore> _log;
-    private readonly Zeus.Data.SharedLiteDatabase.Lease _dbLease;
+    private readonly SimpleHPSDR.Data.SharedLiteDatabase.Lease _dbLease;
     private readonly LiteDatabase _db;
     private readonly ILiteCollection<BandPlanOverrideRecord> _overrides;
 
@@ -46,7 +46,7 @@ public sealed class BandPlanStore : IDisposable
         if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
             Directory.CreateDirectory(dir);
 
-        _dbLease = Zeus.Data.SharedLiteDatabase.Acquire(dbPath);
+        _dbLease = SimpleHPSDR.Data.SharedLiteDatabase.Acquire(dbPath);
         _db = _dbLease.Database;
         _overrides = _db.GetCollection<BandPlanOverrideRecord>("band_plan_overrides");
         _overrides.EnsureIndex(x => x.RegionId, unique: true);
@@ -118,10 +118,10 @@ public sealed class BandPlanStore : IDisposable
         // relocates it to Contents/Resources/ so the .app bundle can be
         // codesigned without --deep (data subdirectories under Contents/MacOS/
         // break inside-out signing — see installers/create-macos-app.sh and
-        // issue gh-389) and exports ZEUS_BANDPLANS_DIR from the launcher. Fall
+        // issue gh-389) and exports SIMPLEHPSDR_BANDPLANS_DIR from the launcher. Fall
         // back to the binary dir when it's unset so dev runs and Linux/Windows
         // packages are unaffected.
-        var envDir = Environment.GetEnvironmentVariable("ZEUS_BANDPLANS_DIR");
+        var envDir = Environment.GetEnvironmentVariable("SIMPLEHPSDR_BANDPLANS_DIR");
         var plansDir = string.IsNullOrWhiteSpace(envDir)
             ? Path.Combine(AppContext.BaseDirectory, "BandPlans")
             : envDir;

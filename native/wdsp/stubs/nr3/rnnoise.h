@@ -1,7 +1,7 @@
 /*
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
- * Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+ * SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
  * Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
  *                         Christian Suarez (N9WAR), and contributors.
  *
@@ -11,11 +11,11 @@
  * option) any later version. See the LICENSE file at the root of this
  * repository for the full text, or https://www.gnu.org/licenses/.
  *
- * Zeus is an independent reimplementation in .NET — not a fork. Its
+ * SimpleHPSDR is an independent reimplementation in .NET — not a fork. Its
  * Protocol-1 / Protocol-2 framing, WDSP integration, meter pipelines, and
  * TX behaviour were informed by studying the Thetis project
  * (https://github.com/ramdor/Thetis), the authoritative reference
- * implementation in the OpenHPSDR ecosystem. Zeus gratefully acknowledges
+ * implementation in the OpenHPSDR ecosystem. SimpleHPSDR gratefully acknowledges
  * the Thetis contributors whose work made this possible:
  *
  *   Richard Samphire (MW0LGE), Warren Pratt (NR0V),
@@ -33,19 +33,19 @@
  * WDSP — loaded by Zeus via P/Invoke — is Copyright (C) Warren Pratt
  * (NR0V), distributed under GPL v2 or later.
  *
- * Zeus is distributed WITHOUT ANY WARRANTY; see the GNU General Public
+ * SimpleHPSDR is distributed WITHOUT ANY WARRANTY; see the GNU General Public
  * License for details.
  */
 
-/* rnnoise.h — Zeus stub
+/* rnnoise.h — SimpleHPSDR stub
  *
  * Minimal stand-in for <rnnoise.h> used when building WDSP without the
  * RNNoise (NR3) backend. Only the opaque DenoiseState type is needed by
  * rnnr.h's struct definition; all runtime calls live in rnnr_stub.c.
  */
 
-#ifndef ZEUS_RNNOISE_STUB_H
-#define ZEUS_RNNOISE_STUB_H
+#ifndef SIMPLEHPSDR_RNNOISE_STUB_H
+#define SIMPLEHPSDR_RNNOISE_STUB_H
 
 typedef struct DenoiseState DenoiseState;
 

@@ -1,7 +1,7 @@
-# native/miniaudio/ — vendored audio I/O for Zeus desktop mode
+# native/miniaudio/ — vendored audio I/O for SimpleHPSDR desktop mode
 
 Single-header audio I/O library by David Reid (mackron), dual-licensed
-public-domain / MIT-0. Used by Zeus desktop mode to:
+public-domain / MIT-0. Used by SimpleHPSDR desktop mode to:
 
 - play the demodulated RX audio frames out of the default OS output device
   (`NativeAudioSink : IRxAudioSink`), bypassing the WebSocket fan-out
@@ -10,7 +10,7 @@ public-domain / MIT-0. Used by Zeus desktop mode to:
   TX uplink (`NativeMicCapture`), bypassing the browser's `getUserMedia`
   path.
 
-Server mode (the browser-served Zeus.Server build) does not use this library
+Server mode (the browser-served SimpleHPSDR.Server build) does not use this library
 at all — the WS sink and the browser mic path are unchanged.
 
 ## Vendor info
@@ -19,12 +19,12 @@ at all — the WS sink and the browser mic path are unchanged.
 |---|---|
 | Upstream    | https://github.com/mackron/miniaudio |
 | Version     | v0.11.25 (commit/tag `master` 2026-03-04) |
-| License     | MIT-0 / public-domain (compatible with Zeus's GPL-2-or-later) |
+| License     | MIT-0 / public-domain (compatible with SimpleHPSDR's GPL-2-or-later) |
 | Fetched via | `curl https://raw.githubusercontent.com/mackron/miniaudio/master/miniaudio.h` |
 
-The single `miniaudio.h` is compiled by `zeus_miniaudio.c` (this directory),
-which `#define`s `MINIAUDIO_IMPLEMENTATION` once and adds a thin Zeus C ABI on
-top of miniaudio's struct-heavy native API. The Zeus C ABI is what C#
+The single `miniaudio.h` is compiled by `simplehpsdr_miniaudio.c` (this directory),
+which `#define`s `MINIAUDIO_IMPLEMENTATION` once and adds a thin SimpleHPSDR C ABI on
+top of miniaudio's struct-heavy native API. The SimpleHPSDR C ABI is what C#
 P/Invoke binds to; nothing in the .NET side touches a `ma_device`/`ma_device_config`
 struct directly.
 
@@ -34,8 +34,8 @@ struct directly.
 native/miniaudio/
   miniaudio.h          # vendored single-header (do not edit)
   LICENSE              # MIT-0 / public-domain
-  zeus_miniaudio.c     # Zeus C ABI on top of miniaudio (the only .c file)
-  zeus_miniaudio.h     # function prototypes shared with the C# P/Invoke
+  simplehpsdr_miniaudio.c     # SimpleHPSDR C ABI on top of miniaudio (the only .c file)
+  simplehpsdr_miniaudio.h     # function prototypes shared with the C# P/Invoke
   CMakeLists.txt       # builds libminiaudio.{dylib,so,dll} per RID
   README.md            # this file
 ```
@@ -43,7 +43,7 @@ native/miniaudio/
 ## Build
 
 `native/build.sh` runs miniaudio's build right after WDSP and stages
-`libminiaudio.{dylib,so}` into `Zeus.Dsp/runtimes/<rid>/native/` alongside
+`libminiaudio.{dylib,so}` into `SimpleHPSDR.Dsp/runtimes/<rid>/native/` alongside
 `libwdsp` — same convention, same loader, no extra runtime config.
 
 ```sh
@@ -54,21 +54,21 @@ native/miniaudio/
 On macOS miniaudio targets CoreAudio (default backend); Linux uses ALSA +
 PulseAudio, with JACK disabled because pipewire-jack's thread loop can outlive
 libjack after `dlclose`; Windows uses WASAPI. Backend selection is
-runtime-fallback within miniaudio — Zeus does not pin a backend.
+runtime-fallback within miniaudio — SimpleHPSDR does not pin a backend.
 
 ## Why a wrapper C file rather than direct P/Invoke on miniaudio.h
 
 miniaudio's public API takes `ma_device_config` and `ma_device` structs whose
 fields and layout differ across versions. Marshalling those to C# would
 require pinning a struct layout that we can't promise will survive a future
-re-vendoring. The Zeus C ABI in `zeus_miniaudio.h` is small, stable, and
+re-vendoring. The SimpleHPSDR C ABI in `simplehpsdr_miniaudio.h` is small, stable, and
 hides every miniaudio-internal struct behind an opaque `void*`, so swapping
 the vendored upstream is a recompile, not a coordinated C#-side change.
 
 ## Trimmed features
 
-`zeus_miniaudio.c` sets its `MA_NO_*` trims — decoding, encoding, generation,
+`simplehpsdr_miniaudio.c` sets its `MA_NO_*` trims — decoding, encoding, generation,
 resource manager, engine, node graph, and (on Linux) JACK — before the
 `MINIAUDIO_IMPLEMENTATION` include; that define block is the authoritative
-list. Zeus only uses raw device playback / capture; the file-decode and
+list. SimpleHPSDR only uses raw device playback / capture; the file-decode and
 high-level engine layers stay out of the binary.

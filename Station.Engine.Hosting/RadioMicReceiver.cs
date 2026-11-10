@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
@@ -10,7 +10,7 @@
 using System.Buffers.Binary;
 using Microsoft.Extensions.Logging;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
 /// Decoder + 960-sample re-blocker for the Saturn radio-mic stream (UDP 1026,
@@ -19,7 +19,7 @@ namespace Zeus.Server;
 /// <see cref="TxAudioIngest.OnMicPcmBytesFromRadioMic"/> hard-rejects anything
 /// that isn't exactly 960 samples / 3840 bytes (<c>MicBlockBytes</c>). A raw
 /// 64-sample block would be counted as a dropped frame → dead air. So, exactly
-/// as <see cref="Zeus.Server.Tci.TciTxAudioReceiver"/> does for arbitrary TCI
+/// as <see cref="SimpleHPSDR.Server.Tci.TciTxAudioReceiver"/> does for arbitrary TCI
 /// chunk sizes, this buffers the 64-sample/packet f32-mono stream and emits only
 /// full 3840-byte blocks, carrying the &lt;960-sample remainder across packets.
 /// No resampler — the 1026 stream is natively 48 kHz; only the block SIZE is

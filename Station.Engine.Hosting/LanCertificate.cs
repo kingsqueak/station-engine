@@ -8,16 +8,16 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.Extensions.Logging;
 
-namespace Zeus.Hosting;
+namespace SimpleHPSDR.Hosting;
 
 /// <summary>
-/// Creates and caches the self-signed certificate used by Zeus LAN HTTPS
+/// Creates and caches the self-signed certificate used by SimpleHPSDR LAN HTTPS
 /// listeners. The certificate is shared by the full server and StationEngine;
-/// ZeusProduct loads the completed PFX after the Engine readiness probe passes.
+/// SimpleHPSDRProduct loads the completed PFX after the Engine readiness probe passes.
 /// </summary>
 public static class LanCertificate
 {
-    private const string CertFileName = "zeus-lan.pfx";
+    private const string CertFileName = "simplehpsdr-lan.pfx";
     private const int LockAttempts = 100;
     private const int LockRetryMilliseconds = 50;
     private const string SanExtensionOid = "2.5.29.17";
@@ -82,7 +82,7 @@ public static class LanCertificate
     }
 
     public static int GetHttpsPort()
-        => int.TryParse(Environment.GetEnvironmentVariable("ZEUS_HTTPS_PORT"), out var port)
+        => int.TryParse(Environment.GetEnvironmentVariable("SIMPLEHPSDR_HTTPS_PORT"), out var port)
             ? port
             : 6443;
 
@@ -155,7 +155,7 @@ public static class LanCertificate
         using var createdKey = existingKey is null ? RSA.Create(2048) : null;
         var rsa = existingKey ?? createdKey!;
         var request = new CertificateRequest(
-            $"CN=Zeus on {Environment.MachineName}",
+            $"CN=SimpleHPSDR on {Environment.MachineName}",
             rsa,
             HashAlgorithmName.SHA256,
             RSASignaturePadding.Pkcs1);
@@ -164,7 +164,7 @@ public static class LanCertificate
         san.AddDnsName("localhost");
         if (!string.IsNullOrEmpty(Environment.MachineName))
             san.AddDnsName(Environment.MachineName);
-        san.AddDnsName("zeus.local");
+        san.AddDnsName("simplehpsdr.local");
         san.AddIpAddress(IPAddress.Loopback);
         foreach (var ip in ips)
             san.AddIpAddress(ip);
@@ -212,7 +212,7 @@ public static class LanCertificate
 
     private static string ResolveCertPath()
     {
-        return Path.Combine(Zeus.Contracts.EngineDataRoot.Resolve(), "certs", CertFileName);
+        return Path.Combine(SimpleHPSDR.Contracts.EngineDataRoot.Resolve(), "certs", CertFileName);
     }
 
     private static FileStream AcquireCertificateLock(string certificatePath)

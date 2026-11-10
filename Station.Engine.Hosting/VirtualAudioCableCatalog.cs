@@ -2,7 +2,7 @@
 
 using System.Text.RegularExpressions;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
 /// Identifies common virtual-audio cable endpoints from their public device

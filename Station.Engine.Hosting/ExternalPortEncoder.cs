@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Zeus — OpenHPSDR Protocol-1 / Protocol-2 client.
+// SimpleHPSDR — OpenHPSDR Protocol-1 / Protocol-2 client.
 // Copyright (C) 2025-2026 Douglas J. Cerrato (KB2UKA),
 //                         Christian Suarez (N9WAR), and contributors.
 //
@@ -31,8 +31,8 @@
 // boost/bias, gain 0) every surface produces literal zero / ANT1, so the wire
 // bytes are unchanged on every board. The PureSignal golden suites stay green.
 //
-// Dependency direction: Station.Engine.Hosting references Zeus.Protocol1 /
-// Zeus.Protocol2 (not the reverse), so this seam consults the protocol layer's
+// Dependency direction: Station.Engine.Hosting references SimpleHPSDR.Protocol1 /
+// SimpleHPSDR.Protocol2 (not the reverse), so this seam consults the protocol layer's
 // pure helpers via InternalsVisibleTo. The protocol clients never call back
 // into this assembly — that would be a cycle.
 //
@@ -40,11 +40,11 @@
 // RX-aux on P2 rides the Protocol2Client.SetAntennas state path directly (it is
 // state, not a pure per-call encode), so it is not modelled here.
 
-using Zeus.Contracts;
-using Zeus.Protocol1;
-using Zeus.Protocol2;
+using SimpleHPSDR.Contracts;
+using SimpleHPSDR.Protocol1;
+using SimpleHPSDR.Protocol2;
 
-namespace Zeus.Server;
+namespace SimpleHPSDR.Server;
 
 /// <summary>
 /// Immutable canonical desired external-port state. Protocol-agnostic — holds no
@@ -394,7 +394,7 @@ internal static class ExternalPortAudio
 
 /// <summary>
 /// Which transport a connected board uses, for encoder dispatch. The 0x0A
-/// family runs Protocol 2 in Zeus; every other supported board runs Protocol 1.
+/// family runs Protocol 2 in SimpleHPSDR; every other supported board runs Protocol 1.
 /// </summary>
 public enum RadioProtocol
 {
@@ -433,7 +433,7 @@ public static class ExternalPortEncoders
             : new Protocol1PortEncoder(board, caps.HasRxAntennaRelays);
     }
 
-    /// <summary>The transport Zeus uses for a given board kind.</summary>
+    /// <summary>The transport SimpleHPSDR uses for a given board kind.</summary>
     public static RadioProtocol DefaultProtocolFor(HpsdrBoardKind board) => board switch
     {
         HpsdrBoardKind.OrionMkII => RadioProtocol.Protocol2,

@@ -24,7 +24,7 @@ warren@wpratt.com
 
 */
 
-// Zeus extension (broadcast AM): mode 0 (AM / SAM) gains an optional
+// SimpleHPSDR extension (broadcast AM): mode 0 (AM / SAM) gains an optional
 // 4th-order Butterworth high-pass on the modulating signal and an optional
 // "broadcast" chain -- NRSC-style pre-emphasis, polarity invert, asymmetric
 // modulation (positive peaks up to pos_limit, negative peaks held at
@@ -54,7 +54,7 @@ typedef struct _ammod {
   double c_level;
   double a_level;
   double mult;
-  // ---- Zeus broadcast-AM extension ----
+  // ---- SimpleHPSDR broadcast-AM extension ----
   int rate;
   double hpf_hz;                        // 0 => high-pass off
   double lpf_hz;                        // 0 => brickwall low-pass off
