@@ -259,7 +259,7 @@ internal class P2AutoConnectService : BackgroundService
             ? HpsdrBoardKind.OrionMkII
             : probe.BoardKind;
         // SimpleHPSDR: a Brick is known by its MAC (BrickRadios).
-        BoardCapabilitiesTable.ConnectedBrick = BrickRadios.FromMac(probe.Mac);
+        BoardCapabilitiesTable.SetConnectedBrick(probe.Mac);
         _log.LogInformation(
             "p2.autoconnect connecting endpoint={Endpoint} rateKhz={RateKhz} board={Board}",
             endpoint,

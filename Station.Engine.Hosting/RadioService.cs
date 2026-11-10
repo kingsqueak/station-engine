@@ -1642,7 +1642,7 @@ public sealed partial class RadioService : IDisposable
         PhysicalAddress? mac = null)
     {
         // SimpleHPSDR: a Brick is known by its MAC (BrickRadios).
-        BoardCapabilitiesTable.ConnectedBrick = BrickRadios.FromMac(mac);
+        BoardCapabilitiesTable.SetConnectedBrick(mac);
         var (generation, operatorActionToken) = BeginOperatorConnectionAction();
         var attempt = new P1ConnectionAttempt(
             endpoint,

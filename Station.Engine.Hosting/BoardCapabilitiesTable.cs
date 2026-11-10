@@ -71,14 +71,24 @@ internal static class BoardCapabilitiesTable
     // None. A Brick announces itself as a plain Hermes / Angelia, so this is
     // what tells the capabilities apart; the engine drives one radio at a time.
     private static int s_connectedBrick;
+    private static int s_connectedBrickWatts;
     public static BrickModel ConnectedBrick
     {
         get => (BrickModel)Volatile.Read(ref s_connectedBrick);
         set => Volatile.Write(ref s_connectedBrick, (int)value);
     }
 
+    /// <summary>Record the Brick (if any) behind this MAC: its model and its
+    /// rating (the Brick2 comes in 15 W and 50 W versions).</summary>
+    public static void SetConnectedBrick(System.Net.NetworkInformation.PhysicalAddress? mac)
+    {
+        Volatile.Write(ref s_connectedBrickWatts, BrickRadios.RatedWatts(mac) ?? 0);
+        ConnectedBrick = BrickRadios.FromMac(mac);
+    }
+
     // Brick2: Hermes-class with one SMA antenna port (no Alex antenna relays or
-    // RX aux inputs), a 15 W PA on 160-6 m, and its own 0-31 dB step attenuator.
+    // RX aux inputs), a 15 W PA on 160-6 m (50 W on the high-power version,
+    // MAC 02:B2:03), and its own 0-31 dB step attenuator.
     // Built on first use: HermesClass is declared further down, and static
     // fields initialise in source order.
     private static BoardCapabilities? s_brick2;
@@ -89,6 +99,12 @@ internal static class BoardCapabilitiesTable
         HasTxAntennaRelays = false,
         HasRxAntennaRelays = false,
         RxAuxInputs = RxAuxInputs.None,
+    };
+    private static BoardCapabilities? s_brick2Hp;
+    private static BoardCapabilities Brick2Hp => s_brick2Hp ??= Brick2 with
+    {
+        MaxPowerWatts = 50,
+        RatedPowerWatts = 50,
     };
 
     // Brick3: Angelia (ANAN-100D) class, 15 W on 160-6 m (10 W digital modes;
@@ -105,7 +121,8 @@ internal static class BoardCapabilitiesTable
     public static BoardCapabilities For(HpsdrBoardKind board, OrionMkIIVariant variant) =>
         (board, ConnectedBrick) switch
         {
-            (HpsdrBoardKind.Hermes, BrickModel.Brick2) => Brick2,
+            (HpsdrBoardKind.Hermes, BrickModel.Brick2) =>
+                Volatile.Read(ref s_connectedBrickWatts) == 50 ? Brick2Hp : Brick2,
             (HpsdrBoardKind.Angelia, BrickModel.Brick3) => Brick3,
             _ => ForBoard(board, variant),
         };

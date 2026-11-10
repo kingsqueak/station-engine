@@ -645,7 +645,7 @@ public static class RadioConnectionEndpoints
         // reply names the board, so use it rather than Unknown (#3070).
         var boardKind = ResolveP2BoardKind(req.BoardId, probe);
         // SimpleHPSDR: a Brick is known by its MAC (BrickRadios).
-        BoardCapabilitiesTable.ConnectedBrick = BrickRadios.FromMac(probe?.Mac);
+        BoardCapabilitiesTable.SetConnectedBrick(probe?.Mac);
 
         try
         {

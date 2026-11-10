@@ -30,6 +30,21 @@ public static class BrickRadios
     public static BrickModel FromMac(System.Net.NetworkInformation.PhysicalAddress? mac) =>
         mac is null ? BrickModel.None : FromMac(mac.GetAddressBytes());
 
+    /// <summary>Rated output in watts: 50 for the Brick2 high-power version
+    /// (02:B2:03), 15 for the other Brick2s and the Brick3, null when it isn't
+    /// a Brick.</summary>
+    public static int? RatedWatts(System.Net.NetworkInformation.PhysicalAddress? mac)
+    {
+        if (mac is null) return null;
+        var b = mac.GetAddressBytes();
+        return FromMac(b) switch
+        {
+            BrickModel.Brick2 => b.Length > 2 && b[2] == 0x03 ? 50 : 15,
+            BrickModel.Brick3 => 15,
+            _ => null,
+        };
+    }
+
     /// <summary>A name for the radio picker, or null when it isn't a Brick.</summary>
     public static string? Name(System.Net.NetworkInformation.PhysicalAddress? mac)
     {

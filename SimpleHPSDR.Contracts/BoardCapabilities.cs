@@ -201,7 +201,7 @@ public sealed record BoardCapabilities(
     bool HasHl2UserGpio = false,
     /// <summary>SimpleHPSDR: the radio's rated output in watts when it differs
     /// from the drive bracket (PaMaxPowerWatts), for the power meter scale and
-    /// the drive readout. Set only for the Brick SDRs (15 W radios driven
+    /// the drive readout. Set only for the Brick SDRs (15 W or 50 W radios driven
     /// through the 100 W Hermes / Angelia gain tables); null elsewhere.</summary>
     int? RatedPowerWatts = null)
 {
