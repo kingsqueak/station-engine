@@ -192,6 +192,9 @@ internal sealed class NativeAudioSink : IRxAudioSink, IPreviewAudioSink, IHosted
     // thread inside OnPlaybackData. Volatile is sufficient: a stale read
     // across a toggle just means one extra (or one missing) block, inaudible.
     private volatile bool _previewEnabled;
+    private volatile bool _previewExclusive;
+    public int PreviewQueuedSamples => _previewRing.Count;
+    public void SetPreviewExclusive(bool exclusive) => _previewExclusive = exclusive;
 
     public bool IsMuted => _muteState.IsMuted;
     public bool IsEnabled => OutputEnabled && _previewEnabled;
@@ -951,6 +954,9 @@ internal sealed class NativeAudioSink : IRxAudioSink, IPreviewAudioSink, IHosted
         bool mixedPreview = false;
         if (IsEnabled)
         {
+            // A recording playing: it replaces receive audio rather than
+            // having the band's noise underneath.
+            if (_previewExclusive) mono.Clear();
             Span<float> aud = totalFrames <= 4096
                 ? stackalloc float[totalFrames]
                 : new float[totalFrames];

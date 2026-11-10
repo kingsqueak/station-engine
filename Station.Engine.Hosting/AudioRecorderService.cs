@@ -430,23 +430,28 @@ public sealed class AudioRecorderService : IDisposable
     private void RunLocal(Playback play, IPreviewAudioSink speaker)
     {
         bool wasEnabled = speaker.IsEnabled;
+        // Kept queued ahead of the output device (its callbacks can take
+        // several thousand samples at once); paced by what's actually queued,
+        // so it follows the device's own clock instead of a timer.
+        const int QueueTarget = 7200;   // 150 ms, under the 16384-sample ring
         try
         {
+            speaker.SetPreviewExclusive(true);
             speaker.SetEnabled(true);
-            long start = Stopwatch.GetTimestamp();
             int blocks = (play.Clip.Length + BlockSamples - 1) / BlockSamples;
-            const int LeadBlocks = 3;
             for (int i = 0; i < blocks && !play.Cancelled; i++)
             {
-                long due = start + (long)((i - LeadBlocks) * 0.020 * Stopwatch.Frequency);
-                while (Stopwatch.GetTimestamp() < due && !play.Cancelled) Thread.Sleep(1);
+                while (speaker.PreviewQueuedSamples > QueueTarget && !play.Cancelled) Thread.Sleep(2);
                 int offset = i * BlockSamples;
                 int n = Math.Min(BlockSamples, play.Clip.Length - offset);
                 speaker.PublishPreview(play.Clip.AsSpan(offset, n), RateHz);
-                play.PositionSamples = offset + n;
+                play.PositionSamples = Math.Max(0, offset + n - speaker.PreviewQueuedSamples);
             }
-            long end = start + (long)(blocks * 0.020 * Stopwatch.Frequency);
-            while (Stopwatch.GetTimestamp() < end && !play.Cancelled) Thread.Sleep(2);
+            // Let what's queued play out.
+            var drain = Stopwatch.StartNew();
+            while (speaker.PreviewQueuedSamples > 0 && !play.Cancelled && drain.ElapsedMilliseconds < 2000)
+                Thread.Sleep(5);
+            play.PositionSamples = play.Clip.Length;
         }
         catch (Exception ex)
         {
@@ -456,6 +461,7 @@ public sealed class AudioRecorderService : IDisposable
         finally
         {
             // Off clears what's still queued, so Stop is immediate.
+            speaker.SetPreviewExclusive(false);
             if (!wasEnabled) speaker.SetEnabled(false);
             lock (_sync) if (ReferenceEquals(_playback, play)) _playback = null;
         }

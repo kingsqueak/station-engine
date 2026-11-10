@@ -37,4 +37,12 @@ public interface IPreviewAudioSink
     /// this call is a no-op.
     /// </summary>
     void PublishPreview(ReadOnlySpan<float> monoSamples, int sampleRate);
+
+    /// <summary>SimpleHPSDR: samples published but not yet played, so a
+    /// publisher can pace itself by the output device's own clock.</summary>
+    int PreviewQueuedSamples => 0;
+
+    /// <summary>SimpleHPSDR: while true, the side-channel replaces receive
+    /// audio instead of being mixed over it (playing a recording).</summary>
+    void SetPreviewExclusive(bool exclusive) { }
 }
