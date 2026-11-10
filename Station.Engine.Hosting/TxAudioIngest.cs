@@ -256,6 +256,16 @@ public sealed class TxAudioIngest : IDisposable
     // concurrent native-mic frame within TciHysteresisMs is suppressed -- the
     // recording replaces the live mic on the air, they never mix.
     private long _lastWavTickMs;
+    // SimpleHPSDR: a WAV clip made from the microphone (a voice keyer message)
+    // goes through the TX audio chain like live speech; a recording of received
+    // audio skips mic gain and the processing (the default, as before).
+    private volatile bool _wavProcessed;
+
+    /// <summary>SimpleHPSDR: raw microphone audio as it arrives (48 kHz mono,
+    /// before mic gain), whether or not it is going to the air. For the
+    /// recorder's voice keyer messages. Valid only during the call.</summary>
+    internal delegate void MicSamplesHandler(ReadOnlySpan<float> samples);
+    internal event MicSamplesHandler? MicSamplesObserved;
     // Browser/mobile mic recency: desktop mode can have either NativeMicCapture
     // or a radio-digitised jack running continuously, so remote WebSocket mic
     // frames must temporarily own the "live mic" source. Otherwise mobile PTT
@@ -1672,6 +1682,7 @@ public sealed class TxAudioIngest : IDisposable
     internal void OnHostMicSamplesFromMic(ReadOnlySpan<float> samples, MicBlockValidity validity)
     {
         if (samples.IsEmpty) return;
+        if (ActiveSource == MicBlockSource.Host) MicSamplesObserved?.Invoke(samples);
         // A capture route change / ASIO restart bumps the generation: never
         // splice the old partial 20 ms block onto the new stream.
         if (!IsCurrent(validity) || validity.Generation != _hostFanoutGeneration)
@@ -1734,6 +1745,8 @@ public sealed class TxAudioIngest : IDisposable
     /// </summary>
     internal void OnMicPcmBytesFromRadioMic(ReadOnlyMemory<byte> f32lePayload)
     {
+        if (MicSamplesObserved is { } observe && ActiveSource == MicBlockSource.RadioMic)
+            observe(MemoryMarshal.Cast<byte, float>(f32lePayload.Span));
         long now = Environment.TickCount64;
         if (ShouldSuppressForAuthoritativeSource(now)) return;
         long lastBrowserMic = Volatile.Read(ref _lastBrowserMicTickMs);
@@ -1795,8 +1808,9 @@ public sealed class TxAudioIngest : IDisposable
     /// then reblocks it for TX modulation with the audio suite and mic gain
     /// bypassed so the recording retains its original audio. The caller
     /// keys MOX; this method does not touch MOX.</summary>
-    internal void OnMicPcmBytesFromWav(ReadOnlyMemory<byte> f32lePayload)
+    internal void OnMicPcmBytesFromWav(ReadOnlyMemory<byte> f32lePayload, bool processed = false)
     {
+        _wavProcessed = processed;
         Volatile.Write(ref _lastWavTickMs, Environment.TickCount64);
         OnMicPcmBytes(f32lePayload, MicBlockSource.Wav);
     }
@@ -2131,7 +2145,7 @@ public sealed class TxAudioIngest : IDisposable
             if (_accumulatorFill > 0 && _accumulatorSource != source)
                 _accumulatorFill = 0;
             _accumulatorSource = source;
-            SetRecordingBypassLocked(engine, source == MicBlockSource.Wav);
+            SetRecordingBypassLocked(engine, source == MicBlockSource.Wav && !_wavProcessed);
 
             // Decode f32le into accumulator. WDSP wants -1..+1 range; browser
             // ships the same convention.

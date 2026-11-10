@@ -223,6 +223,7 @@ public static class StationEngineHostingExtensions
         });
         services.AddSingleton<CwEngine>();
         services.AddSingleton<CwIdService>();
+        services.AddSingleton<AudioRecorderService>();
         services.AddSingleton<CwDecoderService>();
         services.AddSingleton<ExternalPttService>();
         services.AddHl2IoBoard();

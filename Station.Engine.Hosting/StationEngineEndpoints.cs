@@ -181,6 +181,7 @@ public static class StationEngineEndpoints
         endpoints.MapModeEndpoint();
         endpoints.MapFilterEndpoints();
         endpoints.MapRadioDspControlEndpoints();
+        endpoints.MapRecorderEndpoints();
         endpoints.MapTxPhaseRotatorUtilityEndpoints();
         endpoints.MapTxFidelityPolicyEndpoints();
         endpoints.MapReceiverGainProtectionEndpoints();
