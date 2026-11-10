@@ -1,7 +1,7 @@
 # native/radae/vendor — RADE V1 vendored source provenance
 
-Zeus builds its RADE V1 decoder (`libzeus_rade`, see `../CMakeLists.txt`) from three
-upstream C slices. They are **not committed to the private Zeus git tree** — together
+SimpleHPSDR builds its RADE V1 decoder (`libsimplehpsdr_rade`, see `../CMakeLists.txt`) from three
+upstream C slices. They are **not committed to the private SimpleHPSDR git tree** — together
 they are ~95 MB, almost all of it compiled-in neural-network weight tables. The shared
 `fetch-sources.sh` path vendors and integrity-checks them before native builds and
 materializes them into every corresponding-source export. The machine-readable pins
@@ -19,7 +19,7 @@ All three slices are vendored from a single upstream repository:
 | HEAD subject | *"Remove vendored radae_nopy; build rade.lib from in-repo radae_c and update credits/docs"* |
 
 (That HEAD commit is the one that switched Thetis-RADE itself from `radae_nopy` to the
-in-repo `radae_c` + co-vendored `opus_dnn` model — i.e. exactly the composition Zeus
+in-repo `radae_c` + co-vendored `opus_dnn` model — i.e. exactly the composition SimpleHPSDR
 adopts here.)
 
 ## Slices to vendor
@@ -37,7 +37,7 @@ preserving the directory name (drop the `Project Files/lib/` prefix):
 Pure-C, Python-free RADE modem. IQ → 36-float feature frames; encoder/decoder weights
 compiled in (`src/rade_enc_data.c`, `src/rade_dec_data.c`, ~24 MB each). The public API
 (`src/rade_api.h`, implemented by `src/radc_api.c`) is byte-for-byte compatible with the
-reference `rade_api.h`. Zeus uses both the decode and transmit paths; the whole
+reference `rade_api.h`. SimpleHPSDR uses both the decode and transmit paths; the whole
 `src/` tree is vendored and the compiled-in data tables are shared.
 
 ### `opus_dnn/` — BSD-3-Clause (Xiph.Org / Skype / Jean-Marc Valin et al.)
@@ -65,7 +65,7 @@ radae_c's built-in `rade_rx_get_eoo_callsign()` uses a simple 7-bit-MSB packing
 that is *not* the FreeDV-GUI on-air format. The shim therefore uses
 `freedv_text/src/rade_text.c` (CRC8 + 6-bit chars + LDPC HRA_56_56 +
 gp_interleaver) for **both** TX-encode and RX-decode of the callsign, so it
-interoperates with FreeDV-GUI RADE stations. Compiled into `zeus_rade` via
+interoperates with FreeDV-GUI RADE stations. Compiled into `simplehpsdr_rade` via
 `../CMakeLists.txt` (`FREEDV_TXT_SOURCES`) along with the codec2 LDPC files; on
 Windows a one-file `shim/compat/alloca.h` maps `<alloca.h>`→`<malloc.h>` (the
 codec2 sources hardcode the glibc/BSD header). Licenses within the slice:
@@ -85,8 +85,8 @@ codec2 sources hardcode the glibc/BSD header). Licenses within the slice:
 | freedv_text/src (rade_text) | BSD | © Mooneer Salem | no |
 | freedv_text/codec2 (LDPC) | mixed per-file; composite LGPL-2.1-only | © David Rowe / Codec2; Iterative Solutions authors retained in `mpdecode_core.c` | section 3 election for the conveyed copies |
 
-The audio RX/TX portion (`radae_c` + `opus_dnn` + Zeus shim) is BSD-licensed.
-The five Codec2 LDPC units are compiled into the same `zeus_rade` shared
+The audio RX/TX portion (`radae_c` + `opus_dnn` + SimpleHPSDR shim) is BSD-licensed.
+The five Codec2 LDPC units are compiled into the same `simplehpsdr_rade` shared
 library for the EOO-callsign path. For the exact conveyed copies, the Station
 Engine notice set records the LGPL-2.1 section 3 election to GPL-2.0-or-later
 while preserving original authorship and LGPL provenance.
@@ -101,14 +101,14 @@ The one-shared-library composition above was built and validated end-to-end:
   (+ the placeholder-stub step). FARGAN symbols present in `libopus.a`.
 - **radae_c** compiled with `-DRADE_STATIC -DRADE_PYTHON_FREE=1 -DIS_BUILDING_RADE_API=1`.
 - Linked **radae_c objects + shim + whole-archived opus_dnn** into one
-  `libzeus_rade.so` (11 MB). All `zeus_rade_*` symbols exported.
+  `libsimplehpsdr_rade.so` (11 MB). All `simplehpsdr_rade_*` symbols exported.
 - **Decode test** on a 5'26" off-air RADE recording (`FDV_offair.wav`, 48 kHz mono),
   fed as **real samples** (`RADE_COMP.real = s, .imag = 0` — radae_c's modem expects a
   real 8 kHz signal; this is the reference feed in `ChannelMaster/radae.c`, *not* a
   Hilbert IQ front-end like radae_nopy's `real2iq`):
 
   ```
-  zeus_rade_test: pcm_samples=5017920 ticks=2717 synced=2620 last_snr=14dB
+  simplehpsdr_rade_test: pcm_samples=5017920 ticks=2717 synced=2620 last_snr=14dB
   out.wav stat: Maximum amplitude 0.999969  RMS 0.116568  (313.6 s of real speech)
   ```
 
@@ -124,12 +124,12 @@ describe the currently conveyed binaries; of those, only win-x64 has been
 re-exercised against the fidelity/loopback suite. See the
 [2026-08-07 all-RID build and ABI export validation record](#proven-build--abi-export-validation-all-supported-rids-2026-08-07).
 
-The shim gained a full TX path (`zeus_rade_tx`): 16 kHz speech → opus_dnn LPCNet
+The shim gained a full TX path (`simplehpsdr_rade_tx`): 16 kHz speech → opus_dnn LPCNet
 feature analyzer (`lpcnet_compute_single_frame_features`) → `rade_tx` → modem IQ;
 the transmitted SSB audio is the **real** part of the IQ (inverse of the RX feed).
 The EOO callsign uses `freedv_text` (`rade_text`), not radae_c's 7-bit packing, so
 it matches FreeDV-GUI on the air. A self-contained encode→decode loopback
-(`zeus_rade_test loopback N9WAR`, win-x64 MinGW) PROVES it end-to-end:
+(`simplehpsdr_rade_test loopback N9WAR`, win-x64 MinGW) PROVES it end-to-end:
 
 ```
 loopback: ticks=60 synced=48 last_snr=35dB pcm=89440 callsign=N9WAR
@@ -147,7 +147,7 @@ Superseded by the [2026-08-07 all-RID build and ABI export validation record](#p
 The same composition was then PROVEN on native Windows with MinGW UCRT64 gcc 16.1
 (Ninja, `OPUS_DISABLE_INTRINSICS=ON`):
 
-- `zeus_rade.dll` (11.0 MB) linked clean; all 12 `zeus_rade_*` symbols exported.
+- `simplehpsdr_rade.dll` (11.0 MB) linked clean; all 12 `simplehpsdr_rade_*` symbols exported.
 - **Standalone** — `objdump -p` shows deps only on `KERNEL32` + `ADVAPI32` +
   system UCRT (`api-ms-win-crt-*`); NO `libgcc_s_seh-1.dll` / `libwinpthread-1.dll`
   / `libstdc++`. The static-link flags are now in `../CMakeLists.txt` (`if(MINGW)`).
@@ -155,11 +155,11 @@ The same composition was then PROVEN on native Windows with MinGW UCRT64 gcc 16.
   decoded audio max-amp `0.999969` — **byte-for-byte identical to the Linux run**.
 
 Windows build notes now folded into `../CMakeLists.txt`:
-- `if(WIN32) PREFIX ""` so MinGW emits `zeus_rade.dll`, not `libzeus_rade.dll`
+- `if(WIN32) PREFIX ""` so MinGW emits `simplehpsdr_rade.dll`, not `libsimplehpsdr_rade.dll`
   (matches the .NET loader's probe name).
 - `if(MINGW)` static-runtime link (`-static -static-libgcc -Wl,-Bstatic`).
 - `-O1` on the two ~24 MB weight `.c` files (compile-time/RAM; they are data).
-- The `shim/zeus_rade_test.c` harness needs `_setmode(_O_BINARY)` on Windows (stdio
+- The `shim/simplehpsdr_rade_test.c` harness needs `_setmode(_O_BINARY)` on Windows (stdio
   binary mode) — added there; the production P/Invoke path doesn't use stdio.
 
 ## Proven build + managed decode/transmit (macOS arm64, 2026-08-04)
@@ -169,10 +169,10 @@ Superseded by the [2026-08-07 all-RID build and ABI export validation record](#p
 The exact workflow recipe was run locally on Apple Silicon with macOS 26.5.2,
 AppleClang 21.0.0, CMake 4.3.2, and Ninja 1.13.0. AppleClang required an
 explicit `stdlib.h` include for the upstream `radc_rx.c` use of `abs`; Ninja
-required an explicit target dependency from `zeus_rade` to the Opus static
+required an explicit target dependency from `simplehpsdr_rade` to the Opus static
 archive. Both build fixes are constrained to Apple in `../CMakeLists.txt`.
 
-- Artifact: `Zeus.Dsp/runtimes/osx-arm64/native/libzeus_rade.dylib`
+- Artifact: `SimpleHPSDR.Dsp/runtimes/osx-arm64/native/libsimplehpsdr_rade.dylib`
 - Architecture: Mach-O 64-bit dynamically linked shared library arm64
 - SHA-256: `c2bcf319778617d5fab41c927f0aeea025fdfd309984cbec1ea0778fa6f6765f`
 - ABI: all 18 managed-probe exports present
@@ -189,22 +189,22 @@ rebuilt all four runtime artifacts from the pinned vendor slices and validated
 all 26 managed-probe exports on each artifact.
 
 - **linux-x64**
-  - Artifact: `Zeus.Dsp/runtimes/linux-x64/native/libzeus_rade.so`
+  - Artifact: `SimpleHPSDR.Dsp/runtimes/linux-x64/native/libsimplehpsdr_rade.so`
   - SHA-256: `ed569a070379c47c1e9583792b4d6f01eecdaacedceece90ad6379c5c66a8897`
   - ABI: all 26 managed-probe exports present
   - Execution: not exercised against the RADE fidelity/loopback suite in this workflow run
 - **linux-arm64**
-  - Artifact: `Zeus.Dsp/runtimes/linux-arm64/native/libzeus_rade.so`
+  - Artifact: `SimpleHPSDR.Dsp/runtimes/linux-arm64/native/libsimplehpsdr_rade.so`
   - SHA-256: `0f411f4a3eb8419c6cf9a7d1f3a2ff396da03f826d4118c02b2512abef233baa`
   - ABI: all 26 managed-probe exports present
   - Execution: unproven; there is no Raspberry Pi CI leg
 - **win-x64**
-  - Artifact: `Zeus.Dsp/runtimes/win-x64/native/zeus_rade.dll`
+  - Artifact: `SimpleHPSDR.Dsp/runtimes/win-x64/native/simplehpsdr_rade.dll`
   - SHA-256: `79dfe2be219d9619758381307aea258007bd83775ee8f079b2613c69fee31867`
   - ABI: all 26 managed-probe exports present
   - Execution: RADE fidelity/loopback suite passed
 - **osx-arm64**
-  - Artifact: `Zeus.Dsp/runtimes/osx-arm64/native/libzeus_rade.dylib`
+  - Artifact: `SimpleHPSDR.Dsp/runtimes/osx-arm64/native/libsimplehpsdr_rade.dylib`
   - SHA-256: `a593e230c3e6e8c3d98f71d5a447c6de244f16f6e5692bea1753ea23e2cfcda7`
   - ABI: all 26 managed-probe exports present
   - Execution: not exercised against the RADE fidelity/loopback suite in this workflow run

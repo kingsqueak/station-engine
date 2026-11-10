@@ -35,63 +35,63 @@
   "binaries": [
     {
       "rid": "linux-x64",
-      "path": "Zeus.Dsp/runtimes/linux-x64/native/libzeus_rade.so",
-      "sha256": "ed569a070379c47c1e9583792b4d6f01eecdaacedceece90ad6379c5c66a8897",
-      "toolchain": "Ubuntu 22.04 runner with CMake and Ninja; build and ABI export validation recorded in the 2026-08-07 section of native/radae/vendor/PROVENANCE.md"
+      "path": "SimpleHPSDR.Dsp/runtimes/linux-x64/native/libsimplehpsdr_rade.so",
+      "sha256": "3a8178c6ae4757e983dfd99d485b98b48e891c0858f38f3725a5a956c153d829",
+      "toolchain": "Debian bookworm container on ubuntu-24.04, GCC, CMake, Ninja (Native libraries workflow, 2026-11-10)"
     },
     {
       "rid": "linux-arm64",
-      "path": "Zeus.Dsp/runtimes/linux-arm64/native/libzeus_rade.so",
-      "sha256": "0f411f4a3eb8419c6cf9a7d1f3a2ff396da03f826d4118c02b2512abef233baa",
-      "toolchain": "Ubuntu 22.04 runner with gcc-aarch64-linux-gnu and g++-aarch64-linux-gnu cross toolchains, CMake, and Ninja; build and ABI export validation recorded in the 2026-08-07 section of native/radae/vendor/PROVENANCE.md"
+      "path": "SimpleHPSDR.Dsp/runtimes/linux-arm64/native/libsimplehpsdr_rade.so",
+      "sha256": "dff638855e188edff60168a4777272fe563f85b21de41dbfa9fb3b5659ee9803",
+      "toolchain": "Debian bookworm container on ubuntu-24.04-arm, GCC, CMake, Ninja (Native libraries workflow, 2026-11-10)"
     },
     {
       "rid": "win-x64",
-      "path": "Zeus.Dsp/runtimes/win-x64/native/zeus_rade.dll",
-      "sha256": "79dfe2be219d9619758381307aea258007bd83775ee8f079b2613c69fee31867",
-      "toolchain": "Windows 2022 runner under MSYS2 UCRT64 with mingw-w64-ucrt-x86_64-gcc, mingw-w64-ucrt-x86_64-cmake, and mingw-w64-ucrt-x86_64-ninja; build and ABI export validation recorded in the 2026-08-07 section of native/radae/vendor/PROVENANCE.md"
+      "path": "SimpleHPSDR.Dsp/runtimes/win-x64/native/simplehpsdr_rade.dll",
+      "sha256": "abd3797bcce0eecf626fed16a6acb3e4e3699d14740b0e8e74835b522186a585",
+      "toolchain": "MSYS2 UCRT64 MinGW GCC, CMake, Ninja on windows-latest (Native libraries workflow, 2026-11-10)"
     },
     {
       "rid": "osx-arm64",
-      "path": "Zeus.Dsp/runtimes/osx-arm64/native/libzeus_rade.dylib",
-      "sha256": "a593e230c3e6e8c3d98f71d5a447c6de244f16f6e5692bea1753ea23e2cfcda7",
-      "toolchain": "macOS 14 runner with CMake and Ninja; build and ABI export validation recorded in the 2026-08-07 section of native/radae/vendor/PROVENANCE.md"
+      "path": "SimpleHPSDR.Dsp/runtimes/osx-arm64/native/libsimplehpsdr_rade.dylib",
+      "sha256": "cb9cff3fb3d14f1336799e52e22aa82dab067d2906a1a005c15682ac3882e02c",
+      "toolchain": "AppleClang (Xcode 27.2), CMake, Ninja, macOS 14.0 target (built locally, 2026-11-10)"
     },
     {
       "rid": "osx-x64",
-      "path": "Zeus.Dsp/runtimes/osx-x64/native/libzeus_rade.dylib",
-      "sha256": "c2d27aa979876bf33ba643e58a479ac5893cc71a5a9cc1c61b125acfa9f4188d",
-      "toolchain": "AppleClang 21.0.0 and CMake 4.3.2 on Apple Silicon with CMAKE_OSX_ARCHITECTURES=x86_64 and CMAKE_OSX_DEPLOYMENT_TARGET=12.0; Mach-O architecture, deployment target, and ABI exports verified locally on 2026-08-23"
+      "path": "SimpleHPSDR.Dsp/runtimes/osx-x64/native/libsimplehpsdr_rade.dylib",
+      "sha256": "ed621843e38907ac413ca8ad716de600604b49fe1d5b6723fd5d80be127ce12c",
+      "toolchain": "AppleClang (Xcode 27.2), CMake, Ninja, x86_64, macOS 14.0 target (built locally, 2026-11-10)"
     }
   ],
   "buildInputs": [
     {
       "path": "native/radae/CMakeLists.txt",
-      "sha256": "9c3b1e6b890ebc3089d97a8c92fd2033c6b3b3ab89fe9274a370f7dc2bf5bdaa"
+      "sha256": "8178ac4bcbf53e625b5195046de216dc43e56058a2e09fecb2fbb91d536d38fa"
     },
     {
       "path": "native/radae/shim/compat/alloca.h",
-      "sha256": "6a3be6234d1722798019dcde23004c2d7f56f53ddcd5ede612ae6913313c64d4"
+      "sha256": "dc1eac41ca431d50f5a776eedc60b1e560463d3cc9bd8a6b6085b8e52f7d6b21"
     },
     {
-      "path": "native/radae/shim/zeus_rade.c",
-      "sha256": "f3ce5feb1910b83a54772fd72ecce59a7c92860f0e151ddc74fc67042d5b7342"
+      "path": "native/radae/shim/simplehpsdr_rade.c",
+      "sha256": "5be42ccf778b8b3d50b44a961e3576ad18a4a4b140e2877893be455330fc0307"
     },
     {
-      "path": "native/radae/shim/zeus_rade.h",
-      "sha256": "7fe0ac28e5e196a1e2ff22019a2bfe2a2a048494fce99746c92c469ce2f67afa"
+      "path": "native/radae/shim/simplehpsdr_rade.h",
+      "sha256": "1ed32bf1adefdd02f6c7c94b984fbc4067ddbcaaef8001c53a42ac859430ec12"
     },
     {
-      "path": "native/radae/shim/zeus_rade_test.c",
-      "sha256": "0e7d2eaf3647c46b192cd0f9799a421d38356b9308f800969614d768ce699e74"
+      "path": "native/radae/shim/simplehpsdr_rade_test.c",
+      "sha256": "b6870671137fd698f6f9fea3ccca2a75c5d8b20525ff43d185557493f5d9ffad"
     }
   ],
   "buildConfiguration": {
     "cmakeArguments": [
       "-DCMAKE_BUILD_TYPE=Release",
       "-DOPUS_DISABLE_INTRINSICS=ON",
-      "-DZEUS_RADE_BUILD_TEST=OFF"
+      "-DSIMPLEHPSDR_RADE_BUILD_TEST=OFF"
     ],
-    "localChanges": "Zeus CMake composition and shim are identified by buildInputs; fetched upstream slices are unmodified."
+    "localChanges": "SimpleHPSDR CMake composition and shim are identified by buildInputs; fetched upstream slices are unmodified."
   }
 }

@@ -26,7 +26,7 @@ IFS=$'\t' read -r upstream_repository upstream_commit sparse_path <<< "$fetch_co
 [[ -n "$upstream_repository" && -n "$upstream_commit" && -n "$sparse_path" ]] \
   || fail "pinned RADE fetch configuration is incomplete"
 
-work="$(mktemp -d "${TMPDIR:-/tmp}/zeus-rade-source.XXXXXX")" \
+work="$(mktemp -d "${TMPDIR:-/tmp}/simplehpsdr-rade-source.XXXXXX")" \
   || fail "could not create a temporary checkout"
 cleanup() {
   rm -rf -- "$work"

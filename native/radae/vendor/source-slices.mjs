@@ -249,7 +249,7 @@ export function createRadeBinding(sourceRoot, { spec = loadRadeSourceSpec() } = 
     buildInputs,
     buildConfiguration: {
       cmakeArguments: [...spec.cmakeArguments],
-      localChanges: "Zeus CMake composition and shim are identified by buildInputs; fetched upstream slices are unmodified.",
+      localChanges: "SimpleHPSDR CMake composition and shim are identified by buildInputs; fetched upstream slices are unmodified.",
     },
   };
 }
