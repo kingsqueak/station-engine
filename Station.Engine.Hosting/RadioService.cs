@@ -6106,13 +6106,17 @@ public sealed partial class RadioService : IDisposable
     /// radio's LAN and should be listening before the port is set: p2app
     /// does not retry a failed connect until the port is set back to 0.
     /// </summary>
-    public int GetG2FrontPanelCatPort() =>
-        _preferredRadioStore?.GetG2FrontPanelCatPort() ?? 0;
+    // SimpleHPSDR: for this run only, never saved. A saved port went out at the
+    // next connect before anything was listening, and p2app never retries; the
+    // app announces it after it starts listening.
+    private volatile int _g2FrontPanelCatPort;
+
+    public int GetG2FrontPanelCatPort() => _g2FrontPanelCatPort;
 
     public int SetG2FrontPanelCatPort(int port)
     {
         int clamped = Math.Clamp(port, 0, ushort.MaxValue);
-        _preferredRadioStore?.SetG2FrontPanelCatPort(clamped);
+        _g2FrontPanelCatPort = clamped;
         _p2Client?.SetCatPort(clamped);
         return clamped;
     }
@@ -6120,8 +6124,11 @@ public sealed partial class RadioService : IDisposable
     /// <summary>True when the effective board is the 0x0A (OrionMkII /
     /// Saturn) family, the only one whose high-priority packet carries
     /// the CAT port.</summary>
+    // SimpleHPSDR: only a G2 / G2-1K has p2app and its front panel. The other
+    // radios behind the OrionMkII board ID (7000DLE, 8000DLE, ...) don't.
     public bool G2FrontPanelCatPortSupported =>
-        EffectiveBoardKind == HpsdrBoardKind.OrionMkII;
+        EffectiveBoardKind == HpsdrBoardKind.OrionMkII
+        && EffectiveOrionMkIIVariant is OrionMkIIVariant.G2 or OrionMkIIVariant.G2_1K;
 
     /// <summary>
     /// True when a non-HL2 Protocol-1 board is the live connection. Protocol 1
