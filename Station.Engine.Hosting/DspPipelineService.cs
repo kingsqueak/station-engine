@@ -1191,6 +1191,11 @@ public partial class DspPipelineService : BackgroundService,
     // its analyzer and buffers and never touches ZoomLevel or the operator's
     // wideband target centre.
     private PublicListen.PublicWidebandOverview _publicWideband = new(TimeProvider.System);
+    // The app's separate wideband window (SimpleHPSDR): a third consumer with
+    // its own analyzer, kept running only while the window polls for rows.
+    internal readonly WidebandTool WidebandTool = new(TimeProvider.System);
+    private int _toolWidebandActive;
+    private int _txMoxHeld, _txTuneHeld;
     private int _publicWidebandActive;
     private int _p2WidebandHardwareEnabled;
     // Serializes the _p2WidebandHardwareEnabled exchange with the radio call
@@ -2607,7 +2612,9 @@ public partial class DspPipelineService : BackgroundService,
         bool publicDesired = client is not null &&
             _publicWideband.UpdateDemand(listenerWideband || bandSurvey);
         Volatile.Write(ref _publicWidebandActive, publicDesired ? 1 : 0);
-        bool transportDesired = p2Desired || publicDesired;
+        bool toolDesired = client is not null && WidebandTool.IsDemanded;
+        Volatile.Write(ref _toolWidebandActive, toolDesired ? 1 : 0);
+        bool transportDesired = p2Desired || publicDesired || toolDesired;
         // Flag exchange and radio call are one step: two threads racing here
         // must never leave the radio in the opposite state to the flag.
         lock (_p2WidebandTransportLock)
@@ -2619,7 +2626,7 @@ public partial class DspPipelineService : BackgroundService,
         bool current = Volatile.Read(ref _widebandTransportEnabled) != 0;
         if (anyDesired != current)
             Volatile.Write(ref _widebandTransportEnabled, anyDesired ? 1 : 0);
-        if (!anyDesired && !publicDesired)
+        if (!anyDesired && !publicDesired && !toolDesired)
         {
             lock (_widebandFrameLock) { _widebandFramePending = false; }
         }
@@ -3263,6 +3270,16 @@ public partial class DspPipelineService : BackgroundService,
         // delays it. Own analyzer, own buffers: nothing below reads or writes
         // operator display state.
         PublishPublicWidebandOverview(sampleCount, sampleRateHz);
+        if (Volatile.Read(ref _toolWidebandActive) != 0)
+        {
+            try
+            {
+                WidebandTool.TryProcess(
+                    _widebandAnalysisSamples.AsSpan(0, sampleCount), sampleRateHz,
+                    transmitting: Volatile.Read(ref _txMoxHeld) != 0 || Volatile.Read(ref _txTuneHeld) != 0);
+            }
+            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException) { }
+        }
         return true;
     }
 
@@ -3896,6 +3913,7 @@ public partial class DspPipelineService : BackgroundService,
 
     internal virtual void SetMox(bool on)
     {
+        Volatile.Write(ref _txMoxHeld, on ? 1 : 0);
         // Direct call, not queued: HL2 stops RX while MOX is asserted, so a
         // PostDspCommand queued from the HTTP thread would not drain until
         // MOX releases — TXA stays in RX state and TX produces buzz. WDSP
@@ -3991,6 +4009,7 @@ public partial class DspPipelineService : BackgroundService,
 
     internal virtual void SetTxTune(bool on)
     {
+        Volatile.Write(ref _txTuneHeld, on ? 1 : 0);
         lock (_engineLock) { _engine?.SetTxTune(on); }
     }
 
@@ -9328,7 +9347,8 @@ public partial class DspPipelineService : BackgroundService,
     {
         if (adcIndex != 0) return;
         bool operatorWants = Volatile.Read(ref _p2WidebandTransportEnabled) != 0 && _hub.DisplayStreamRequested;
-        if (!operatorWants && Volatile.Read(ref _publicWidebandActive) == 0) return;
+        if (!operatorWants && Volatile.Read(ref _publicWidebandActive) == 0
+            && Volatile.Read(ref _toolWidebandActive) == 0) return;
 
         bool release = false;
         lock (_widebandFrameLock)

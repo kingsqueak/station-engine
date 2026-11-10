@@ -174,6 +174,17 @@ public static class StationEngineEndpoints
         endpoints.MapRadioConnectionEndpoints();
         endpoints.MapVfoEndpoints();
         endpoints.MapReceiverConfigurationEndpoints();
+        // SimpleHPSDR: the separate wideband window. Each poll keeps the radio's
+        // raw-ADC snapshots coming for a few seconds and returns the latest row.
+        endpoints.MapGet("/api/wideband/tool", (DspPipelineService pipeline) =>
+        {
+            if (!pipeline.PublicWidebandCapable)
+                return Results.Conflict(new { error = "The wideband view needs a Protocol 2 radio." });
+            pipeline.WidebandTool.Demand();
+            return pipeline.WidebandTool.Snapshot() is { } row
+                ? Results.Bytes(row, "application/octet-stream")
+                : Results.NoContent();
+        });
         endpoints.MapRadioTuningEndpoints();
         endpoints.MapReceiverLoEndpoint();
         endpoints.MapCtunEndpoint();
