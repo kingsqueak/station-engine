@@ -304,6 +304,9 @@ internal static class BoardCapabilitiesTable
     // NO balanced XLR (G2 / G2-1K only).
     private static readonly BoardCapabilities Saturn7000DLE = Saturn with
     {
+        // The Protocol-2 firmware offers the same DDC ladder as the G2 (to 1536
+        // kHz, as in Thetis); Protocol 1 stays capped at 384 kHz elsewhere.
+        MaxRxSampleRateHz = 1_536_000,
         SupportsG2AdcOptions = true,
     };
 
@@ -313,6 +316,7 @@ internal static class BoardCapabilitiesTable
     private static readonly BoardCapabilities Saturn8000DLE = Saturn with
     {
         MaxPowerWatts = 250,
+        MaxRxSampleRateHz = 1_536_000,
         SupportsG2AdcOptions = true,
     };
 
