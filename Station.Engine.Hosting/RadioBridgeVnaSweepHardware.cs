@@ -15,6 +15,10 @@ public sealed class RadioBridgeVnaSweepHardware : IVnaSweepHardware, IDisposable
 {
     private const int MaximumPoints = 201;
     private const double AnalyzerTargetWatts = 5.0;
+    // SimpleHPSDR: drive % is not linear in watts at the bottom of many PAs
+    // (a 7000DLE gave 0.9 W at the 5% meant for 5 W), so the first point raises
+    // TUNE drive in steps until the bridge reads enough, up to this ceiling.
+    private const double AnalyzerCeilingWatts = 15.0;
     private static readonly TimeSpan FrequencySettle = TimeSpan.FromMilliseconds(90);
     private static readonly TimeSpan SampleTimeout = TimeSpan.FromSeconds(2);
     private readonly RadioService _radio;
@@ -82,6 +86,9 @@ public sealed class RadioBridgeVnaSweepHardware : IVnaSweepHardware, IDisposable
             throw new InvalidOperationException("The radio changed state before analyzer drive could be applied.");
 
         long expectedVfo = before.VfoHz;
+        int appliedTune = requestedTune;
+        int ceilingTune = Math.Max(requestedTune, TunePercentForTargetWatts(AnalyzerCeilingWatts, paMaxWatts));
+        bool powerFound = false;
         try
         {
             DrainSamples();
@@ -119,9 +126,27 @@ public sealed class RadioBridgeVnaSweepHardware : IVnaSweepHardware, IDisposable
                     // single TX edge. Wait for four consecutive RF-valid pairs
                     // there, and after every keyed frequency step, rather than
                     // averaging stale bridge ADCs into a false 0 W result.
-                    var (fwd, rev) = await ReadSettledAverageAsync(
-                        _samples.Reader, calibration, sixMeters, frequencyHz,
-                        SampleTimeout, token).ConfigureAwait(false);
+                    (double Fwd, double Ref) reading;
+                    while (true)
+                    {
+                        try
+                        {
+                            reading = await ReadSettledAverageAsync(
+                                _samples.Reader, calibration, sixMeters, frequencyHz,
+                                SampleTimeout, token).ConfigureAwait(false);
+                            powerFound = true;
+                            break;
+                        }
+                        catch (InvalidOperationException) when (!powerFound && appliedTune < ceilingTune)
+                        {
+                            // Too little power at the first point: raise TUNE drive and try again.
+                            int next = Math.Min(ceilingTune, Math.Max(appliedTune + 1, (int)Math.Ceiling(appliedTune * 1.5)));
+                            if (!_radio.SetAnalyzerTuneDriveIfCurrent(next, appliedTune)) throw;
+                            appliedTune = next;
+                            DrainSamples();
+                        }
+                    }
+                    var (fwd, rev) = reading;
                     var (_, _, swr) = TxMetersService.ComputeMeters(fwd, rev,
                         calibration, sixMeters);
                     double gammaMagnitude = Math.Clamp(
@@ -137,7 +162,7 @@ public sealed class RadioBridgeVnaSweepHardware : IVnaSweepHardware, IDisposable
         {
             if (_radio.Snapshot().VfoHz == expectedVfo)
                 _radio.SetVfo(before.VfoHz, fromExternal: true);
-            _radio.SetTuneDriveIfCurrent(before.TunePct, requestedTune);
+            _radio.SetAnalyzerTuneDriveIfCurrent(before.TunePct, appliedTune);
             DrainSamples();
         }
     }

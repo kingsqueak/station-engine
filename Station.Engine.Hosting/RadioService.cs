@@ -5638,6 +5638,11 @@ public sealed partial class RadioService : IDisposable
     internal bool SetTuneDriveIfCurrent(int percent, int expectedCurrent)
         => SetTuneDriveCore(percent, persist: false, expectedCurrent, abortIfTxActive: true);
 
+    // SimpleHPSDR: the analyser raises TUNE drive while it holds TUN, to find
+    // enough power for the bridge (not persisted; restored after the sweep).
+    internal bool SetAnalyzerTuneDriveIfCurrent(int percent, int expectedCurrent)
+        => SetTuneDriveCore(percent, persist: false, expectedCurrent, abortIfTxActive: false);
+
     internal bool SetPaCalibrationTuneDriveIfCurrent(int percent, int expectedCurrent)
         => SetTuneDriveCore(
             percent,
