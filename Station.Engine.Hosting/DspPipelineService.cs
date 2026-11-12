@@ -1536,10 +1536,12 @@ public partial class DspPipelineService : BackgroundService,
     // gain·e^{jθ} before RX0 demodulation. No source survives its paired frame.
     // Config and IQ processing are serialized through the engine lock.
     // Protocol 1 ingest does not use this combiner.
-    private volatile bool _divEnabled;
-    private int _divReferenceRx;
-    private DiversityOutput _divOutput;
-    private double _divWeightI = 1.0, _divWeightQ;
+    // Diversity settings as one frozen object: the settings thread swaps it in
+    // a single step and the receive thread reads it once per IQ frame, so a
+    // frame never mixes the new I weight with the old Q weight.
+    private sealed record DiversityWeights(
+        bool Enabled, double WeightI, double WeightQ, int ReferenceRx, DiversityOutput Output);
+    private DiversityWeights _diversity = new(false, 1.0, 0.0, 0, default);
     private double[] _divCombineBuf = [];
     // AGC mode + custom params latch (issue: DSP controls Thetis parity §4).
     // Same change-detect pattern as _appliedNr — SetAgc only fires when the
@@ -1582,7 +1584,8 @@ public partial class DspPipelineService : BackgroundService,
     private int _appliedRxAnalyzerFftSize;
     // PureSignal latched values — same change-detect pattern as the others
     // so OnRadioStateChanged only fires PS setters when values move.
-    private bool _appliedPsEnabled;
+    // Read by SetMox (keying thread) and Tick (receive thread).
+    private volatile bool _appliedPsEnabled;
     private bool _appliedPsAuto = true;
     private bool _appliedPsSingle;
     private double _appliedPsMoxDelaySec = 0.2;
@@ -8767,14 +8770,12 @@ public partial class DspPipelineService : BackgroundService,
     private void ApplyDiversityConfig(DiversityConfig cfg)
     {
         double theta = cfg.PhaseDeg * Math.PI / 180.0;
-        _divWeightI = cfg.Gain * Math.Cos(theta);
-        _divWeightQ = cfg.Gain * Math.Sin(theta);
-        _divReferenceRx = cfg.ReferenceRx;
-        _divOutput = cfg.Output;
-        _divEnabled = cfg.Enabled;
+        var weights = new DiversityWeights(
+            cfg.Enabled, cfg.Gain * Math.Cos(theta), cfg.Gain * Math.Sin(theta), cfg.ReferenceRx, cfg.Output);
+        Volatile.Write(ref _diversity, weights);
         _log.LogInformation(
             "dsp.diversity enabled={En} gain={G:F3} phaseDeg={P:F1} sourceRx={Src} referenceRx={Ref} output={Output} weight=({I:F3},{Q:F3})",
-            cfg.Enabled, cfg.Gain, cfg.PhaseDeg, cfg.SourceRx, cfg.ReferenceRx, cfg.Output, _divWeightI, _divWeightQ);
+            cfg.Enabled, cfg.Gain, cfg.PhaseDeg, cfg.SourceRx, cfg.ReferenceRx, cfg.Output, weights.WeightI, weights.WeightQ);
     }
 
     // The source shares RX0's producer-owned lifetime and sample identity.
@@ -8782,14 +8783,15 @@ public partial class DspPipelineService : BackgroundService,
     private void FeedRx0WithOptionalDiversity(IDspEngine engine, int channel,
         ReadOnlySpan<double> rx0, ReadOnlySpan<double> source)
     {
-        if (!_divEnabled || source.IsEmpty || source.Length != rx0.Length)
+        var div = Volatile.Read(ref _diversity);
+        if (!div.Enabled || source.IsEmpty || source.Length != rx0.Length)
         {
             engine.FeedIq(channel, rx0);
             return;
         }
         if (_divCombineBuf.Length < rx0.Length) _divCombineBuf = new double[rx0.Length];
         var dest = _divCombineBuf.AsSpan(0, rx0.Length);
-        DiversityCombine(rx0, source, _divWeightI, _divWeightQ, dest, _divReferenceRx, _divOutput);
+        DiversityCombine(rx0, source, div.WeightI, div.WeightQ, dest, div.ReferenceRx, div.Output);
         engine.FeedIq(channel, dest);
     }
 
@@ -10377,7 +10379,7 @@ public partial class DspPipelineService : BackgroundService,
                     // inactive leaves raw WDSP audio on this bus.
                     double appliedAfDb = _freeDvOwnerIndex == 0 && _audioModem.Active
                         ? 20.0 * Math.Log10(Math.Max(_freeDvAfGainLinear, 1.0e-9))
-                        : _appliedRxAfGainDb;
+                        : Volatile.Read(ref _appliedRxAfGainDb);
                     ApplyRxAudioLeveler(
                         audioBuf.AsSpan(0, audioSampleCount),
                         ref _rxAudioLeveler,
