@@ -1105,8 +1105,6 @@ public partial class DspPipelineService : BackgroundService,
 
     // An external slice receiver feeds demodulated audio onto the SAME RX mix
     // bus as the hardware receivers. The null port produces no samples.
-    private readonly IExternalRxAudioSource _externalRxAudioSource;
-    private readonly float[] _kiwiMixBuf = new float[AudioDrainCapacity];
     // MON + DUP: the fully processed receive block captured at the RX publish
     // point, mixed into the TX-monitor lane later in the same tick.
     private readonly float[] _duplexMonitorRxBuf = new float[AudioDrainCapacity];
@@ -1126,8 +1124,6 @@ public partial class DspPipelineService : BackgroundService,
     private SimpleHPSDR.Protocol2.Protocol2Client? _p2ConnectingClient;
     private Action? _p2DisconnectedHandler;
     private long _p2ConnectionGeneration;
-    private readonly IExternalRadioSidecar _externalRadioSidecar;
-    private readonly bool _hasExternalRadioSidecar;
 
     // Wideband display mode. P2 uses bounded ADC snapshots; P3 consumes a
     // sidecar-projected full-span DisplayFrame when available. The radio/sidecar
@@ -1180,8 +1176,6 @@ public partial class DspPipelineService : BackgroundService,
     private bool _widebandFramePending;
     private int _widebandPendingSampleCount;
     private int _widebandPendingSampleRateHz = SimpleHPSDR.Protocol2.Protocol2Client.WidebandAdcSampleRateHz;
-    private long _p3WidebandDisplayMissingLogMs;
-    private long _p3WidebandDisplayErrorLogMs;
     // _p2WidebandTransportEnabled is the OPERATOR's wideband ownership flag (it
     // gates every operator frame); _p2WidebandHardwareEnabled is what the radio
     // was last told, i.e. the union of operator and wideband-window demand.
@@ -2033,10 +2027,8 @@ public partial class DspPipelineService : BackgroundService,
         IAudioModemPort? audioModem = null,
         Func<TxAudioIngest?>? txIngestFactory = null,
         Nr3ModelStore? nr3ModelStore = null,
-        IExternalRxAudioSource? externalRxAudioSource = null,
         RxAudioMuteState? rxAudioMute = null,
         TxIqRing? txIqRing = null,
-        IExternalRadioSidecar? externalRadioSidecar = null,
         IConfiguration? configuration = null,
         IProductTxAudioPort? productAudio = null,
         ProductPluginAudioPort? productPluginAudio = null,
@@ -2061,11 +2053,7 @@ public partial class DspPipelineService : BackgroundService,
         _productAudio = productAudio ?? new NullProductTxAudioPort();
         _productPluginAudio = productPluginAudio;
         _productPluginAudio?.ConfigureLocalMonitorSink(EnqueueMonitorAudio);
-        _externalRxAudioSource = externalRxAudioSource ?? new NullExternalRxAudioSource();
         _rxAudioMute = rxAudioMute;
-        _hasExternalRadioSidecar = externalRadioSidecar is not null and not NullExternalRadioSidecar;
-        _externalRadioSidecar = externalRadioSidecar ?? new NullExternalRadioSidecar();
-        _externalRadioSidecar.ConfigureTxIqSafetyGate(_txEgressGate.IsCurrent);
         // Materialise once at construction so the per-tick fan-out is an
         // array-index loop (no enumerator allocation, no LINQ on the hot path).
         _audioSinks = audioSinks.ToArray();
@@ -2350,7 +2338,6 @@ public partial class DspPipelineService : BackgroundService,
     /// from the same transport so the two can't disagree.</summary>
     internal virtual TxTransportLevel TxTransportLevel48k()
     {
-        if (_radio.IsProtocol3Active) return TxTransportLevel.Unknown;
         var p2 = _p2Client;
         if (p2 is not null) return new(p2.TxIqBacklogSamples48k, p2.TxIqUnderruns);
         if (_radio.ActiveClient is not null && _txIqRing is not null)
@@ -2360,8 +2347,6 @@ public partial class DspPipelineService : BackgroundService,
 
     public virtual bool DrainTxIqTransportTail(TimeSpan timeout)
     {
-        if (_radio.IsProtocol3Active)
-            return _externalRadioSidecar.WaitForTxIqIdle(timeout);
         var p2 = _p2Client;
         if (p2 is not null)
         {
@@ -2580,9 +2565,7 @@ public partial class DspPipelineService : BackgroundService,
         // received IQ. This avoids a blank handoff; once ready, only one source
         // can publish RxId0 frames.
         bool p2Desired = client is not null && enabled && displayRequested && !p2DetailReady;
-        bool p3Desired = client is null && _hasExternalRadioSidecar &&
-            _radio.IsProtocol3Active && enabled && displayRequested;
-        bool anyDesired = p2Desired || p3Desired;
+        bool anyDesired = p2Desired;
 
         bool p2Current = Volatile.Read(ref _p2WidebandTransportEnabled) != 0;
         if (p2Desired != p2Current)
@@ -3390,149 +3373,6 @@ public partial class DspPipelineService : BackgroundService,
         }
     }
 
-    private async Task RunP3WidebandDisplayPollerAsync(CancellationToken ct)
-    {
-        if (!_hasExternalRadioSidecar) return;
-
-        using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(100));
-        while (await timer.WaitForNextTickAsync(ct).ConfigureAwait(false))
-        {
-            if (!ShouldPollP3WidebandDisplay()) continue;
-            // The fixed 100 ms poller is not paced to the operator's display cap.
-            if (!TryBeginDisplayFrame(
-                    Stopwatch.GetTimestamp(),
-                    producerIsRatePaced: false,
-                    out var displayPlan))
-            {
-                continue;
-            }
-
-            ExternalDisplayFrame? sidecarFrame;
-            try
-            {
-                var state = _radio.Snapshot();
-                var viewport = WidebandSpectrumAnalyzer.ResolveViewport(
-                    state.ZoomLevel,
-                    WidebandViewportTargetCenterHz(state));
-                sidecarFrame = await _externalRadioSidecar.FetchDisplayFrameAsync(
-                        WidebandSpectrumAnalyzer.DisplayWidth,
-                        viewport.ZoomLevel,
-                        viewport.CenterHz,
-                        ct)
-                    .ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) { throw; }
-            catch (Exception ex)
-            {
-                LogP3WidebandDisplayError(ex);
-                continue;
-            }
-
-            if (sidecarFrame is null)
-            {
-                LogP3WidebandDisplayMissing();
-                continue;
-            }
-            if (!ShouldPollP3WidebandDisplay()) continue;
-
-            PublishP3WidebandDisplayFrame(sidecarFrame, displayPlan);
-        }
-    }
-
-    private bool ShouldPollP3WidebandDisplay() =>
-        _hasExternalRadioSidecar &&
-        _radio.IsProtocol3Active &&
-        Volatile.Read(ref _widebandDisplayEnabled) != 0 &&
-        _hub.DisplayStreamRequested;
-
-    private void PublishP3WidebandDisplayFrame(
-        ExternalDisplayFrame source,
-        DisplayFramePlan displayPlan)
-    {
-        if (source.PanDb.Length <= 0 || source.WfDb.Length <= 0 || source.WfDb.Length != source.PanDb.Length) return;
-        if (source.PanDb.Length > _widebandPanDecimatedBuf.Length) return;
-
-        SanitizeDisplayBuffer(source.PanDb);
-        if (displayPlan.IncludeWaterfall)
-            SanitizeDisplayBuffer(source.WfDb);
-
-        var panBins = FrameBins(
-            source.PanDb,
-            _widebandPanDecimatedBuf,
-            displayPlan.Decimation,
-            out var frameWidth);
-        var wfBins = displayPlan.IncludeWaterfall
-            ? FrameBins(
-                source.WfDb,
-                _widebandWfDecimatedBuf,
-                displayPlan.Decimation,
-                out _)
-            : InvalidFrameBins(
-                _widebandWfDecimatedBuf,
-                source.WfDb.Length,
-                displayPlan.Decimation,
-                out _);
-        var bodyFlags = source.BodyFlags | DisplayBodyFlags.PanValid;
-        if (!displayPlan.IncludeWaterfall)
-            bodyFlags &= ~DisplayBodyFlags.WfValid;
-
-        double nowMs = UnixTimeMillisecondsHighRes();
-        var frame = new DisplayFrame(
-            Seq: NextDisplaySeq(),
-            TsUnixMs: nowMs,
-            RxId: source.RxId,
-            BodyFlags: bodyFlags,
-            Width: frameWidth,
-            CenterHz: source.CenterHz,
-            HzPerPixel: source.HzPerPixel * displayPlan.Decimation,
-            PanDb: panBins,
-            WfDb: wfBins);
-
-        lock (_calPanLock)
-        {
-            CopyDiagnosticDisplayBins(source.PanDb, _calPanSnapshot);
-            if (displayPlan.IncludeWaterfall)
-                CopyDiagnosticDisplayBins(source.WfDb, _diagWfSnapshot);
-            _calPanHzPerPixel = DiagnosticHzPerPixel(source.HzPerPixel, source.PanDb.Length, _panadapterWidth);
-            _calPanCenterHz = source.CenterHz;
-            _calPanSnapshotMs = (long)nowMs;
-            _calPanSnapshotVersion++;
-            if (displayPlan.IncludeWaterfall)
-                _diagWfSnapshotMs = (long)nowMs;
-            _diagDisplayFrameMs = (long)nowMs;
-            _diagDisplaySeq = frame.Seq;
-            _diagDisplayFrameCount++;
-            _diagLastPanValid = true;
-            _diagLastWfValid = displayPlan.IncludeWaterfall;
-            _diagLastPanSource = "p3-wideband";
-            _diagLastWfSource = displayPlan.IncludeWaterfall ? "p3-wideband" : "waterfall-decimated";
-            _diagLastKeyed = _keyed;
-            _diagLastPsMonitorRequested = false;
-            _diagLastPsFeedbackCorrecting = false;
-        }
-
-        _hub.Broadcast(frame);
-    }
-
-    private void LogP3WidebandDisplayMissing()
-    {
-        long now = Environment.TickCount64;
-        long last = Interlocked.Read(ref _p3WidebandDisplayMissingLogMs);
-        if (now - last < 5_000) return;
-        if (Interlocked.CompareExchange(ref _p3WidebandDisplayMissingLogMs, now, last) != last) return;
-        _log.LogInformation(
-            "p3.wideband-display.waiting reason=sidecar-wideband-frame-unavailable");
-    }
-
-    private void LogP3WidebandDisplayError(Exception ex)
-    {
-        long now = Environment.TickCount64;
-        long last = Interlocked.Read(ref _p3WidebandDisplayErrorLogMs);
-        if (now - last < 5_000) return;
-        if (Interlocked.CompareExchange(ref _p3WidebandDisplayErrorLogMs, now, last) != last) return;
-        _log.LogWarning(ex, "p3.wideband-display.poll.error");
-    }
-
     private void PublishAudio(in AudioFrame frame)
     {
         for (int i = 0; i < _audioSinks.Length; i++)
@@ -3581,24 +3421,10 @@ public partial class DspPipelineService : BackgroundService,
     }
 
     private void PublishTxSuppressedAudio(float[] audioBuf, int sampleCount, double nowMs, SquelchConfig squelch)
-        => PublishTxSuppressedAudio(
-            audioBuf, sampleCount, nowMs, squelch, ReadOnlySpan<float>.Empty, 0);
-
-    private void PublishTxSuppressedAudio(
-        float[] audioBuf,
-        int sampleCount,
-        double nowMs,
-        SquelchConfig squelch,
-        ReadOnlySpan<float> externalRx,
-        int externalRxCount)
     {
         int count = sampleCount > 0
             ? Math.Min(sampleCount, audioBuf.Length)
             : Math.Min(audioBuf.Length, MonitorInjectSilentBlockSamples);
-        externalRxCount = Math.Min(
-            audioBuf.Length,
-            Math.Clamp(externalRxCount, 0, externalRx.Length));
-        count = Math.Max(count, externalRxCount);
         if (count <= 0) return;
 
         var span = audioBuf.AsSpan(0, count);
@@ -3619,9 +3445,7 @@ public partial class DspPipelineService : BackgroundService,
                 Samples: new ReadOnlyMemory<float>(audioBuf, 0, count));
             PublishCwSidetoneAudio(in sidetoneFrame);
         }
-        if (externalRxCount > 0)
-            for (int i = 0; i < externalRxCount; i++) span[i] += externalRx[i];
-        if (sidetoneWrote || externalRxCount > 0)
+        if (sidetoneWrote)
             LimitRxAudioBuffer(span);
 
         double finalAudioRms = Rms(span);
@@ -3636,20 +3460,20 @@ public partial class DspPipelineService : BackgroundService,
             Samples: new ReadOnlyMemory<float>(audioBuf, 0, count));
 
         CaptureAudioDiagnostics(
-            externalRxCount > 0 ? "external-rx" : sidetoneWrote ? "cw-sidetone" : "tx-rx-muted",
+            sidetoneWrote ? "cw-sidetone" : "tx-rx-muted",
             in frame,
             finalAudioRms,
             finalAudioPeak,
             txMonitorRequested: false,
             squelch);
-        // During a DUP transmission this block (silence, sidetone, Kiwi)
+        // During a DUP transmission this block (silence, sidetone)
         // stands in for starved receive audio, so it rides the duplex lane and
         // radio speakers keep one continuous stream through the over.
         if (_fullDuplexRxActiveForCurrentTx)
             PublishDuplexRxAudio(in frame);
         else
             PublishAudio(in frame);
-        if (sidetoneWrote || externalRxCount > 0)
+        if (sidetoneWrote)
             RxAudioAvailable?.Invoke(0, AudioOutputRateHz, new ReadOnlyMemory<float>(audioBuf, 0, count));
     }
 
@@ -3808,7 +3632,6 @@ public partial class DspPipelineService : BackgroundService,
         using var timer = new PeriodicTimer(TickPeriod);
         using var widebandAnalyzerCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         var widebandAnalyzerTask = RunWidebandDisplayAnalyzerAsync(widebandAnalyzerCts.Token);
-        var p3WidebandDisplayTask = RunP3WidebandDisplayPollerAsync(widebandAnalyzerCts.Token);
 
         try
         {
@@ -3869,8 +3692,6 @@ public partial class DspPipelineService : BackgroundService,
             CloseCurrentEngine();
             widebandAnalyzerCts.Cancel();
             try { await widebandAnalyzerTask.ConfigureAwait(false); }
-            catch (OperationCanceledException) { }
-            try { await p3WidebandDisplayTask.ConfigureAwait(false); }
             catch (OperationCanceledException) { }
         }
     }
@@ -8336,8 +8157,6 @@ public partial class DspPipelineService : BackgroundService,
         long revision = _txEgressGate.CommittedRevision;
         if (!_txEgressGate.IsCurrent(revision)) return;
         _p2Client?.SendTxIq(iqInterleaved, revision);
-        if (_radio.IsProtocol3Active)
-            _externalRadioSidecar.ForwardTxIq(iqInterleaved, revision);
         // Measurement-only: record the egress instant for TX-turnaround stats
         // after the IQ has been forwarded, so observation never delays egress.
         _txTurnaround?.OnTxIqEgress();
@@ -8356,7 +8175,6 @@ public partial class DspPipelineService : BackgroundService,
         _txEgressGate.Revoke();
         _txIqRing?.Clear();
         _p2Client?.ResetTxIqForSafety();
-        _externalRadioSidecar.RevokeTxIq();
     }
 
     /// <summary>
@@ -8373,32 +8191,6 @@ public partial class DspPipelineService : BackgroundService,
             releaseToDrain = new { lastMs = (double?)null, p50Ms = (double?)null, p95Ms = (double?)null, samples = 0 },
         };
 
-
-    public void DisconnectP3TxEngine()
-    {
-        if (!_radio.IsProtocol3Active && Volatile.Read(ref _engine) is SyntheticDspEngine or OfflinePreviewDspEngine)
-            return;
-
-        var disconnectedEngine = CreateDisconnectedEngine(out int channelId);
-
-        IDspEngine? old;
-        int oldChannel;
-        lock (_engineLock)
-        {
-            old = _engine;
-            oldChannel = _channelId;
-            PublishPrimaryEngineLocked(disconnectedEngine, channelId);
-            ResetSecondaryRxChannels();
-            Volatile.Write(ref _sampleRateHz, SyntheticSampleRateHz);
-        }
-
-        TeardownEngine(old, oldChannel);
-        _psResyncRequired = true;
-        _appliedTxMonitorEnabled = false;
-        RaiseEngineChanged(disconnectedEngine);
-        OnRadioStateChanged(_radio.Snapshot());
-        _log.LogInformation("dsp.pipeline p3 tx disconnected, engine={Engine}", disconnectedEngine.GetType().Name);
-    }
 
     public async Task DisconnectP2Async(CancellationToken ct)
     {
@@ -8674,7 +8466,7 @@ public partial class DspPipelineService : BackgroundService,
         // crawl the gain to a rail off garbage. Hold instead. P3 is exempt —
         // its meter rides the sidecar and its engine never has a spectrum by
         // design, so the S-meter fallback below is its normal path.
-        if (!_radio.IsProtocol3Active && Volatile.Read(ref _engine) is not WdspDspEngine)
+        if (Volatile.Read(ref _engine) is not WdspDspEngine)
             return double.NaN;
 
         // Fast-attack triggers (Thetis FastAttackNoiseFloorRX1 setters).
@@ -8709,8 +8501,7 @@ public partial class DspPipelineService : BackgroundService,
         if (keyed
             || Volatile.Read(ref _rxPostTxMuteBlocksRemaining) > 0
             || _rxAudioSuppressedForTx
-            || (!_radio.IsProtocol3Active
-                && _hub.DisplayStreamRequested
+            || (_hub.DisplayStreamRequested
                 && Volatile.Read(ref _autoAgcRequiresFreshRxPan) != 0
                 && Environment.TickCount64 < Volatile.Read(ref _autoAgcFreshRxPanDeadlineMs)))
             return double.NaN;
@@ -9384,45 +9175,20 @@ public partial class DspPipelineService : BackgroundService,
         return count;
     }
 
-    // Local-radio TX suppression must never consume the independent KiwiSDR
-    // receive path. Once keyed, discard the already-mixed hardware receivers
-    // and retain only the external receiver block. This also seeds the output
-    // when a half-duplex board (notably HL2) produces no local RX samples while
-    // MOX is asserted.
-    internal static int PrepareLocalRxForExternalOutput(
-        Span<float> localRx,
-        int localRxCount,
-        int externalRxCount,
-        bool suppressLocalRx)
-    {
-        localRxCount = Math.Clamp(localRxCount, 0, localRx.Length);
-        externalRxCount = Math.Clamp(externalRxCount, 0, localRx.Length);
-        if (externalRxCount == 0) return localRxCount;
-        if (!suppressLocalRx && localRxCount > 0)
-        {
-            if (externalRxCount > localRxCount)
-                localRx.Slice(localRxCount, externalRxCount - localRxCount).Clear();
-            return Math.Max(localRxCount, externalRxCount);
-        }
-
-        int count = Math.Max(localRxCount, externalRxCount);
-        localRx[..count].Clear();
-        return externalRxCount;
-    }
-
-    internal static int MixExternalRxIntoTxMonitor(
+    // MON + DUP: add the captured receive block to the TX monitor block.
+    internal static int MixRxIntoTxMonitor(
         Span<float> monitor,
         int monitorCount,
-        ReadOnlySpan<float> externalRx,
-        int externalRxCount)
+        ReadOnlySpan<float> rx,
+        int rxCount)
     {
         monitorCount = Math.Clamp(monitorCount, 0, monitor.Length);
-        externalRxCount = Math.Clamp(externalRxCount, 0, externalRx.Length);
-        int count = Math.Min(monitor.Length, Math.Max(monitorCount, externalRxCount));
-        int overlap = Math.Min(monitorCount, externalRxCount);
-        for (int i = 0; i < overlap; i++) monitor[i] += externalRx[i];
-        if (externalRxCount > monitorCount)
-            externalRx.Slice(monitorCount, externalRxCount - monitorCount)
+        rxCount = Math.Clamp(rxCount, 0, rx.Length);
+        int count = Math.Min(monitor.Length, Math.Max(monitorCount, rxCount));
+        int overlap = Math.Min(monitorCount, rxCount);
+        for (int i = 0; i < overlap; i++) monitor[i] += rx[i];
+        if (rxCount > monitorCount)
+            rx.Slice(monitorCount, rxCount - monitorCount)
                 .CopyTo(monitor[monitorCount..]);
         return count;
     }
@@ -9437,12 +9203,6 @@ public partial class DspPipelineService : BackgroundService,
         float gain = (float)Math.Pow(10.0, clampedDb / 20.0);
         for (int i = 0; i < samples.Length; i++) samples[i] *= gain;
     }
-
-    internal static bool ShouldMixExternalRxIntoTxMonitor(
-        int externalRxCount,
-        bool txMonitorMeterOnly,
-        bool rxAudioMuted) =>
-        externalRxCount > 0 && !txMonitorMeterOnly && !rxAudioMuted;
 
     private bool Tick(float[] panBuf, float[] wfBuf, float[] audioBuf, bool displayOnly = false)
     {
@@ -10189,27 +9949,6 @@ public partial class DspPipelineService : BackgroundService,
             _mixSlices[mixSliceCount++] = new RxAudioSlice(sec.AudioBuf, n, fadeRemaining);
         }
 
-        // Kiwi slice: an INDEPENDENT remote receiver that shares the final
-        // output cadence but stays outside the local-radio DSP lane. Drain at most
-        // audioSampleCount samples so it's fed at exactly the RX rate (its own
-        // clock differs from the radio ADC; the source caps buffered latency to
-        // bound that drift), then add it after local processing. When the slice
-        // is disabled/muted Active is false and this is one bool
-        // read. RX1 silent (audioSampleCount==0) reads nothing this tick.
-        bool externalRxActive = _externalRxAudioSource.Active;
-        int externalRxCount = 0;
-        if (externalRxActive)
-        {
-            // Half-duplex boards may stop producing local RX audio while keyed.
-            // Keep the independently clocked Kiwi draining at the normal 30 Hz
-            // output cadence even when RX1's read count is zero.
-            int requested = audioSampleCount > 0
-                ? audioSampleCount
-                : MonitorInjectSilentBlockSamples;
-            int want = Math.Min(requested, _kiwiMixBuf.Length);
-            externalRxCount = _externalRxAudioSource.Read(_kiwiMixBuf.AsSpan(0, want));
-        }
-
         // RX1's own samples were already zeroed above when it is muted or TX
         // suppression is active without DUP; tell the mixer to drop RX1 from
         // the bus too. Every live, unmuted secondary still sums in normally.
@@ -10224,47 +9963,24 @@ public partial class DspPipelineService : BackgroundService,
         // do NOT mix it into the RX frame here and instead route it, recorder-only,
         // through the mute-exempt lane after the RX-publish block (see below).
         bool rxAudioMuted = _rxAudioMute?.IsMuted ?? false;
-        bool liveLocalRxAudioBeforeExternalRouting = audioSampleCount > 0;
-        // DUP carried real local samples into the bus this tick. Kiwi then joins
-        // the local mix exactly as it does outside TX instead of replacing it.
-        bool duplexCarriesLocalRx =
-            duplexLocalRxLive && liveLocalRxAudioBeforeExternalRouting;
-        bool externalRxPreserved =
-            suppressRxAudioForTx && externalRxCount > 0 && !duplexCarriesLocalRx;
-        if (suppressRxAudioForTx && localRxAudioContinuous &&
-            (!liveLocalRxAudioBeforeExternalRouting || externalRxPreserved))
+        // With DUP active, the bus can carry live local audio even while the
+        // keyed/post-TX suppression clock is running. Only fall back to the
+        // synthesized suppressed/sidetone block when no local audio is present.
+        bool liveLocalRxAudio = audioSampleCount > 0;
+        // DUP carried real local samples into the bus this tick.
+        bool duplexCarriesLocalRx = duplexLocalRxLive && liveLocalRxAudio;
+        if (suppressRxAudioForTx && localRxAudioContinuous && !liveLocalRxAudio)
         {
             localRxAudioContinuous = false;
             _localRxAudioContinuousForCurrentTx = false;
         }
-        // Keep Kiwi outside the local-radio DSP/plugin/fade lane. That lane can
-        // be nonlinear and stateful, so subtracting raw Kiwi afterward cannot
-        // recover its contribution. Seed a silent output-sized local block when
-        // Kiwi is the only available clock source; Kiwi is added immediately
-        // before the final limiter below.
-        //
-        // While TX/drain suppression is active without live DUP audio, prefer
-        // Kiwi and drop the whole local mix. When DUP carries live local audio,
-        // keep it and let Kiwi sum in as it does during receive. The common
-        // non-Kiwi case is unaffected because this is a no-op whenever
-        // externalRxCount == 0.
-        audioSampleCount = PrepareLocalRxForExternalOutput(
-            audioBuf,
-            audioSampleCount,
-            externalRxCount,
-            suppressRxAudioForTx && !duplexCarriesLocalRx);
         // MON + DUP: the monitor lane below mixes the fully processed receive
         // block (captured at the publish point) with the TX monitor, as Thetis
         // mixes RX and MON on its audio bus while full duplex is on.
         bool duplexRxUnderTxMonitor =
             txMonitorOn && !txMonitorMeterOnly && duplexCarriesLocalRx;
         int duplexMonitorRxCount = 0;
-        // With DUP active, the bus can carry live local audio even while the
-        // keyed/post-TX suppression clock is running. Only fall back to the
-        // synthesized suppressed/sidetone block when no local audio is present.
-        bool liveLocalRxAudio = audioSampleCount > 0;
-        bool suppressPublishedRxAudio =
-            suppressRxAudioForTx && !liveLocalRxAudio && !externalRxPreserved;
+        bool suppressPublishedRxAudio = suppressRxAudioForTx && !liveLocalRxAudio;
 
         if (audioSampleCount > 0)
         {
@@ -10276,11 +9992,10 @@ public partial class DspPipelineService : BackgroundService,
             // not reintroduce an abrupt edge after this early demod-stage ramp.
             if (_rxFadeOutPending)
             {
-                if (externalRxPreserved || localRxAudioContinuous)
+                if (localRxAudioContinuous)
                 {
-                    // Consume the local-radio fade edge without applying it to
-                    // independent Kiwi samples or local RX audio that has
-                    // remained continuous since key-down.
+                    // Consume the fade edge without applying it to local RX
+                    // audio that has remained continuous since key-down.
                     _rxFadeOutPending = false;
                 }
                 else
@@ -10304,22 +10019,7 @@ public partial class DspPipelineService : BackgroundService,
             // rx.post-demod manifest slot, wired through _rxAudioPluginHandler
             // below. The two never share plugin instances or IIR state.
 
-            if (externalRxPreserved && (!txMonitorOn || txMonitorMeterOnly))
-            {
-                // Preserve the established local-TX suppressed lane (silence
-                // plus optional sidetone) and add Kiwi only at its output.
-                // Do not advance local RX plugins/decoder/squelch merely because
-                // an independent external receiver is enabled.
-                PublishTxSuppressedAudio(
-                    audioBuf,
-                    audioSampleCount,
-                    nowMs,
-                    state.Squelch ?? new SquelchConfig(),
-                    _kiwiMixBuf,
-                    externalRxCount);
-                MarkTxSuppressedAudioBlockPublished();
-            }
-            else if (duplexRxUnderTxMonitor
+            if (duplexRxUnderTxMonitor
                 || ShouldPublishNormalRxAudio(txMonitorOn, suppressPublishedRxAudio, txMonitorMeterOnly))
             {
                 // FM squelch is owned by WDSP's FMSQ noise detector upstream;
@@ -10365,9 +10065,9 @@ public partial class DspPipelineService : BackgroundService,
                 // ADC overload. Thus post-AGC noise alone can never open it. Cuts
                 // and the instantaneous peak guard remain active for loud arrivals.
                 // Evidence is RX0-specific, so do not boost the shared mixed bus
-                // when a secondary/Kiwi slice is present; per-RX evidence belongs
+                // when a secondary slice is present; per-RX evidence belongs
                 // before a future per-receiver mixer, not inferred after summing.
-                if (mixSliceCount == 0 && !externalRxActive)
+                if (mixSliceCount == 0)
                 {
                     bool loudnessBoostAllowed =
                         RxConstantLoudnessBoostAllowed(Environment.TickCount64);
@@ -10439,20 +10139,6 @@ public partial class DspPipelineService : BackgroundService,
                     Volatile.Write(ref _rxPostTxFadeInSamplesRemaining, next);
                 }
 
-                // Kiwi is independent of the local radio, so it bypasses local
-                // RX plugins, squelch, MOX fades, and the post-TX settle fade.
-                // A final safety limit is needed only after adding that external
-                // contribution to the already-limited local output.
-                if (externalRxCount > 0)
-                {
-                    audioSampleCount = MixExternalRxIntoTxMonitor(
-                        audioBuf,
-                        audioSampleCount,
-                        _kiwiMixBuf,
-                        externalRxCount);
-                    LimitRxAudioBuffer(audioBuf.AsSpan(0, audioSampleCount));
-                }
-
                 double finalAudioRms = Rms(audioBuf.AsSpan(0, audioSampleCount));
                 double finalAudioPeak = PeakAbs(audioBuf.AsSpan(0, audioSampleCount));
 
@@ -10489,12 +10175,11 @@ public partial class DspPipelineService : BackgroundService,
                 _productPluginAudio?.PublishRxAudio(
                     0, AudioOutputRateHz, audioBuf.AsSpan(0, audioSampleCount));
                 RxAudioAvailable?.Invoke(0, AudioOutputRateHz, new ReadOnlyMemory<float>(audioBuf, 0, audioSampleCount));
-                if (externalRxPreserved || (suppressRxAudioForTx && liveLocalRxAudio))
+                if (suppressRxAudioForTx && liveLocalRxAudio)
                 {
                     // Advance the local-radio post-TX drain here too: normal
                     // RX audio published while suppressRxAudioForTx is still
-                    // set means either Kiwi was preserved or DUP carried live
-                    // local audio. The drain clock must keep ticking so the
+                    // set means DUP carried live local audio. The drain clock must keep ticking so the
                     // suppression state reaches zero after MOX-off even on a
                     // single-receiver full-duplex station.
                     MarkTxSuppressedAudioBlockPublished();
@@ -10619,46 +10304,26 @@ public partial class DspPipelineService : BackgroundService,
                 TxMonitorAudioAvailable?.Invoke(0, AudioOutputRateHz, new ReadOnlyMemory<float>(audioBuf, 0, monCount));
                 // Monitor volume is an operator playback preference, not a
                 // TX-chain control. Apply it only after diagnostics and the
-                // TX-air tap have observed the unmodified signal. External RX
-                // is mixed below and therefore keeps its own AF level.
+                // TX-air tap have observed the unmodified signal.
                 ApplyTxMonitorVolume(audioBuf.AsSpan(0, monCount), TxMonitorVolumeDb);
             }
 
             // Meter-only monitor (Auto Tune) intentionally has no monitor
-            // broadcast; the ordinary RX path above has already carried Kiwi.
-            // For the audible TX monitor, retain Kiwi alongside the local
-            // sidetone/processed monitor instead of letting TX replace it.
+            // broadcast.
             if (!txMonitorMeterOnly)
             {
                 int publishCount = monCount;
-                // MON can remain enabled before, during, and after a keying
-                // cycle, so Kiwi belongs in this lane whenever it has samples,
-                // not only while the local-RX suppression latch is set. Respect
-                // master RX mute: only the local monitor is mute-exempt.
-                // MON + DUP: the captured receive block already carries Kiwi
-                // (mixed at the RX publish point), so it replaces the raw Kiwi
-                // add here. Master RX mute keeps receive out of the mix.
+                // MON + DUP: mix in the captured receive block. Master RX mute
+                // keeps receive out of the mix: only the local monitor is
+                // mute-exempt.
                 bool includeDuplexRx = duplexMonitorRxCount > 0 && !rxAudioMuted;
-                bool includeExternalRx = !includeDuplexRx && ShouldMixExternalRxIntoTxMonitor(
-                    externalRxCount,
-                    txMonitorMeterOnly,
-                    rxAudioMuted);
                 if (includeDuplexRx)
                 {
-                    publishCount = MixExternalRxIntoTxMonitor(
+                    publishCount = MixRxIntoTxMonitor(
                         audioBuf,
                         monCount,
                         _duplexMonitorRxBuf,
                         duplexMonitorRxCount);
-                    LimitRxAudioBuffer(audioBuf.AsSpan(0, publishCount));
-                }
-                else if (includeExternalRx)
-                {
-                    publishCount = MixExternalRxIntoTxMonitor(
-                        audioBuf,
-                        monCount,
-                        _kiwiMixBuf,
-                        externalRxCount);
                     LimitRxAudioBuffer(audioBuf.AsSpan(0, publishCount));
                 }
 
@@ -10667,7 +10332,7 @@ public partial class DspPipelineService : BackgroundService,
                     var publishFrame = new AudioFrame(
                         // The duplex mix alters the monitor frame in place (no
                         // separate publish), so it keeps the monitor's number.
-                        Seq: monCount > 0 && !includeExternalRx ? _audioSeq : ++_audioSeq,
+                        Seq: monCount > 0 ? _audioSeq : ++_audioSeq,
                         TsUnixMs: nowMs,
                         RxId: 0,
                         Channels: 1,
@@ -10682,7 +10347,7 @@ public partial class DspPipelineService : BackgroundService,
             }
         }
 
-        if (++_rxMeterTickMod >= RxMeterTickModulus && !_radio.IsProtocol3Active)
+        if (++_rxMeterTickMod >= RxMeterTickModulus)
         {
             // Under P3 the WDSP RX channel is never fed IQ, so this meter block
             // would broadcast the "no data" floor (the −250 dBm S-meter bug).
@@ -10896,129 +10561,6 @@ public partial class DspPipelineService : BackgroundService,
     /// <summary>Test/diagnostic seam for the measured passband-quality frame.</summary>
     public event Action<RxSignalQualityFrame>? RxSignalQualityUpdated;
 
-    /// <summary>
-    /// Protocol-3 RX meter ingress (S-meter fix): the sidecar frame forwarder
-    /// calls this with the n9dsp per-channel meter readings that ride the
-    /// display frames. Publishes through the exact same outputs as the WDSP
-    /// meter tick — 0x14 RxMeterFrame, 0x19 RxMetersV2Frame, the CAT/TCI
-    /// RxMeterUpdated event, Auto-AGC, and the live-diagnostics snapshot — so
-    /// every meter consumer works identically under P3. The WDSP tick's own
-    /// meter block is suppressed while P3 is active.
-    /// <paramref name="dbfsRaw"/> is n9dsp's uncalibrated dBFS reading; the
-    /// per-board RX meter offset is applied here, same as the P2 path.
-    /// </summary>
-    public void PublishProtocol3RxMeters(
-        int channel,
-        double dbfsRaw,
-        double agcGainDb,
-        double adcHeadroomDb)
-    {
-        if (!_radio.IsProtocol3Active) return;
-        var state = _radio.Snapshot();
-        long? receiverVfoHz = Protocol3MeterReceiverVfoHz(state, channel);
-        byte? receiverAdcSource = Protocol3MeterReceiverAdcSource(state, channel);
-        double operatorSMeterOffsetDb = OperatorSMeterOffsetDb();
-        double baseRxCalOffsetDb = RadioCalibrations.RxMeterOffsetDb(
-            _radio.EffectiveBoardKind,
-            _radio.EffectiveOrionMkIIVariant)
-            + (receiverVfoHz is long vfoHz
-                ? _radio.TransverterMeterCorrectionDb(vfoHz)
-                : 0.0)
-            + (receiverAdcSource is byte adcSource
-                ? RxAttenuatorMeterOffsetDb(state, adcSource)
-                : 0.0);
-        double rxCalOffsetDb = AddOperatorSMeterOffset(
-            baseRxCalOffsetDb,
-            operatorSMeterOffsetDb);
-        double dbm = ApplyRxMeterCalibration(dbfsRaw, rxCalOffsetDb);
-        if (!double.IsFinite(dbm)) dbm = -160.0;
-        float adcPk = (float)(double.IsFinite(adcHeadroomDb) ? -adcHeadroomDb : -200.0);
-        float agc = (float)(double.IsFinite(agcGainDb) ? agcGainDb : 0.0);
-        // Post-AGC envelope estimate: signal + inserted AGC gain. n9dsp does
-        // not export a discrete envelope tap yet; this keeps the Meters Panel
-        // fields plausible until one lands.
-        float env = (float)Math.Min(dbm + agc, 0.0);
-        var v2 = new RxMetersV2Frame(
-            SignalPk: (float)dbm,
-            SignalAv: (float)dbm,
-            AdcPk: adcPk,
-            AdcAv: adcPk,
-            AgcGain: agc,
-            AgcEnvPk: env,
-            AgcEnvAv: env,
-            // Protocol 3 does not feed its display IQ through the local WDSP
-            // analyzer, so there is no honest max-bin value to publish.
-            SignalMaxBin: -200f);
-
-        _hub.Broadcast(new RxMeterFrame((float)dbm));
-        RxMeterUpdated?.Invoke(channel, dbm);
-        // P3 has no panadapter spectrum, so the tracker takes its S-meter
-        // fallback branch (gated + attack-smoothed) instead of the raw
-        // signalDbm the old loop consumed directly. dbm here is ALREADY
-        // cal-offset (ApplyRxMeterCalibration above), so no offset is added
-        // to the tracked value — unlike the raw-bin main path.
-        var p3State = _radio.Snapshot();
-        double p3Floor = double.NaN;
-        if (p3State.AutoAgcEnabled)
-        {
-            double tracked = UpdateAutoAgcNoiseFloorDbm(
-                p3State, dbm, _keyed, Environment.TickCount64, out _);
-            if (double.IsFinite(tracked))
-                p3Floor = tracked;
-        }
-        _radio.HandleRxMetersForAutoAgc(dbm, p3Floor, v2.AdcPk, v2.AgcGain, Environment.TickCount64);
-        lock (_rxMeterDiagLock)
-        {
-            _diagRxMetersValid = double.IsFinite(dbfsRaw);
-            _diagRxMetersMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            _diagRxMetersChannelId = channel;
-            _diagRxDbm = dbm;
-            _diagRxScalarSignalAvailable = double.IsFinite(dbfsRaw);
-            _diagRxReceiveEligible = DiagnosticReceiveEligible;
-            _diagRxMeters = v2;
-        }
-        _hub.Broadcast(v2);
-        RxMetersV2Updated?.Invoke(channel, v2);
-        // Protocol 3 currently has no normalized raw-spectrum passband source.
-        // Explicitly clear quality rather than falling back to a display floor.
-        Volatile.Write(ref _rxLevelerRfSignalResolved, 0);
-        Volatile.Write(ref _rxLevelerAdcOverloadRisk, 0);
-        _rxLevelerRfAcquireHits = 0;
-        _rxLevelerRfReleaseMisses = 0;
-        Interlocked.Exchange(ref _rxLevelerRfEvidenceMs, Environment.TickCount64);
-        var unavailableQuality = RxSignalQualityFrame.Unavailable((byte)Math.Clamp(channel, 0, byte.MaxValue));
-        _hub.Broadcast(unavailableQuality);
-        RxSignalQualityUpdated?.Invoke(unavailableQuality);
-    }
-
-    internal static long? Protocol3MeterReceiverVfoHz(StateDto state, int channel)
-    {
-        if (channel == 0) return state.VfoHz;
-        var receivers = state.Receivers;
-        if (receivers is null) return null;
-        for (int i = 0; i < receivers.Count; i++)
-        {
-            var receiver = receivers[i];
-            if (receiver.Index == channel && receiver.Enabled)
-                return receiver.VfoHz;
-        }
-        return null;
-    }
-
-    internal static byte? Protocol3MeterReceiverAdcSource(StateDto state, int channel)
-    {
-        if (channel == 0) return PrimaryReceiverAdcSource(state);
-        var receivers = state.Receivers;
-        if (receivers is null) return null;
-        for (int i = 0; i < receivers.Count; i++)
-        {
-            var receiver = receivers[i];
-            if (receiver.Index == channel && receiver.Enabled)
-                return receiver.AdcSource;
-        }
-        return null;
-    }
-
     internal static RxSignalQualityFrame BuildRxSignalQualityFrame(
         byte rxId,
         InPassbandSnrEstimator.Result result,
@@ -11154,72 +10696,6 @@ public partial class DspPipelineService : BackgroundService,
         return RxConstantLoudnessEvidenceIsCurrent(evidenceMs, nowMs) &&
             Volatile.Read(ref _rxLevelerRfSignalResolved) != 0 &&
             Volatile.Read(ref _rxLevelerAdcOverloadRisk) == 0;
-    }
-
-    /// <summary>
-    /// Protocol-3 final RX audio diagnostics. P3 audio bypasses the WDSP tick and
-    /// is published by <see cref="Protocol3SidecarFrameForwarder"/>, but live DSP
-    /// diagnostics still need the same final-audio freshness/RMS/peak evidence as
-    /// the P2 path. This is read-only telemetry; sinks are still fanned out by the
-    /// P3 forwarder.
-    /// </summary>
-    public void PublishProtocol3RxAudioDiagnostics(in AudioFrame frame)
-    {
-        if (!_radio.IsProtocol3Active) return;
-        if (frame.RxId != 0 ||
-            frame.Channels != 1 ||
-            frame.SampleRateHz != AudioOutputRateHz ||
-            frame.SampleCount == 0)
-        {
-            return;
-        }
-
-        var samples = frame.Samples.Span;
-        int count = Math.Min(frame.SampleCount, samples.Length);
-        if (count <= 0) return;
-        var block = samples[..count];
-        double rms = Rms(block);
-        double peak = PeakAbs(block);
-        bool txMonitorRequested = _radio.Snapshot().TxMonitorEnabled;
-
-        lock (_audioDiagLock)
-        {
-            _diagAudioValid = true;
-            _diagAudioFrameMs = (long)frame.TsUnixMs;
-            _diagAudioSeq = frame.Seq;
-            _diagAudioFrameCount++;
-            _diagAudioSource = "p3-rx";
-            _diagAudioSampleRateHz = checked((int)frame.SampleRateHz);
-            _diagAudioSampleCount = count;
-            _diagAudioRms = rms;
-            _diagAudioPeak = peak;
-            _diagAudioTxMonitorRequested = txMonitorRequested;
-            _diagAudioSquelchEnabled = false;
-            _diagAudioSquelchOpen = true;
-            _diagAudioSquelchTailActive = false;
-            _diagAudioSquelchGain = 1.0;
-            _diagAudioLevelerValid = false;
-            _diagAudioLevelerInputRmsDbfs = double.NaN;
-            _diagAudioLevelerOutputRmsDbfs = double.NaN;
-            _diagAudioLevelerInputPeakDbfs = double.NaN;
-            _diagAudioLevelerOutputPeakDbfs = double.NaN;
-            _diagAudioLevelerDesiredGainDb = double.NaN;
-            _diagAudioLevelerAppliedGainDb = double.NaN;
-            _diagAudioLevelerGainDeltaDb = double.NaN;
-            _diagAudioLevelerPeakHeadroomDb = double.NaN;
-            _diagAudioLevelerPreLimitPeakDbfs = double.NaN;
-            _diagAudioLevelerOutputLimitReductionDb = double.NaN;
-            _diagAudioLevelerOutputLimitSampleCount = 0;
-            _diagAudioLevelerPauseHoldBlocks = 0;
-            _diagAudioLevelerBoostSlewLimited = false;
-            _diagAudioLevelerPeakLimited = false;
-            _diagAudioLevelerOutputLimited = false;
-            _diagAudioSquelchMode = "off";
-            _diagAudioSquelchGateSource = "disabled";
-            _diagAudioSquelchOpenKnown = true;
-            _diagAudioMonitorBacklogSamples = 0;
-            _diagAudioSinkCount = _audioSinks.Length;
-        }
     }
 
     /// <summary>

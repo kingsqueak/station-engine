@@ -630,13 +630,11 @@ public sealed class TxMetersService : BackgroundService
                     // fail to protect. The TX-timeout guard above still runs under
                     // P3. Re-enable this trip once the P3 raw→watts calibration is
                     // confirmed against a known load.
-                    if (!_radio.IsProtocol3Active
-                        && ShouldEngageTunSwrFoldback(swr, isTun, fwdW, tuneDrivePct))
+                    if (ShouldEngageTunSwrFoldback(swr, isTun, fwdW, tuneDrivePct))
                     {
                         _radio.EngageTunSwrFoldback();
                     }
-                    if (!_radio.IsProtocol3Active
-                        && EvaluateSwrTrip(swr, DateTime.UtcNow, isTun, keyedAt, fwdW, tuneDrivePct) is { } tripReason)
+                    if (EvaluateSwrTrip(swr, DateTime.UtcNow, isTun, keyedAt, fwdW, tuneDrivePct) is { } tripReason)
                     {
                         // Log the inputs the trip decision was actually made on.
                         // The operator-facing alert text carries only the SWR and

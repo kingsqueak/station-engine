@@ -11,7 +11,6 @@ public partial class DspPipelineService
     // Protocol 3 receives and processes audio in the sidecar, outside the local CW tap.
     private bool CwNoiseReductionBypassForReceiver(StateDto state, int receiver) =>
         !Volatile.Read(ref _cwNoiseReductionDisposed) &&
-        !_radio.IsProtocol3Active &&
         CwNoiseReductionBypassRequested(state, receiver, _hub.CwDecodeRequestedOn(receiver));
 
     internal static bool CwNoiseReductionBypassRequested(StateDto state, int receiver, bool requested)

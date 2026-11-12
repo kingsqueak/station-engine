@@ -342,7 +342,6 @@ public static class RadioConnectionEndpoints
 
         endpoints.MapPost("/api/disconnect", async (
             RadioService radio,
-            IExternalRadioSidecar sidecar,
             DspPipelineService dsp,
             IP2AutoConnectControl p2AutoConnect,
             HttpContext ctx) =>
@@ -371,13 +370,6 @@ public static class RadioConnectionEndpoints
             }
             log.LogInformation("api.disconnect");
             p2AutoConnect.DisableForManualDisconnect();
-            if (radio.IsProtocol3Active)
-            {
-                await sidecar.DisconnectAsync(ctx.RequestAborted).ConfigureAwait(false);
-                radio.MarkProtocol3Disconnected();
-                dsp.DisconnectP3TxEngine();
-                return Results.Ok(radio.Snapshot());
-            }
             if (radio.IsProtocol2Active)
             {
                 await dsp.DisconnectP2Async(ctx.RequestAborted).ConfigureAwait(false);

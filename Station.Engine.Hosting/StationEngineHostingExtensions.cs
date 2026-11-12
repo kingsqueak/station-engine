@@ -82,8 +82,6 @@ public static class StationEngineHostingExtensions
         services.AddSingleton<IProductTxAudioPort>(sp => sp.GetRequiredService<ProductAudioRingPort>());
         services.AddSingleton<ProductPluginAudioPort>();
         services.AddSingleton<ITxAudioPreviewProcessor, NullTxAudioPreviewProcessor>();
-        services.AddSingleton<IExternalRxAudioSource, NullExternalRxAudioSource>();
-        services.AddSingleton<IExternalRadioSidecar, NullExternalRadioSidecar>();
         services.AddSingleton<IInitialTxAudioConfigSource, NullInitialTxAudioConfigSource>();
 
         services.AddSingleton<DspSettingsStore>();

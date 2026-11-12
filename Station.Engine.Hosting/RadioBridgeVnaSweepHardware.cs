@@ -49,9 +49,6 @@ public sealed class RadioBridgeVnaSweepHardware : IVnaSweepHardware, IDisposable
             HpsdrBoardKind board = _radio.ConnectedBoardKind;
             if (!_radio.IsConnected)
                 return Unavailable(board, "Connect a supported radio to run an SWR sweep.");
-            if (_radio.IsProtocol3Active)
-                return Unavailable(board,
-                    "This Protocol 3 bridge scale is not yet validated for analyzer measurements. Saved sweeps remain available.");
             return new VnaCapabilityDto(true, false, board.ToString(), "radio-forward-reverse-bridge",
                 "Ready for a scalar SWR sweep with the connected radio. Complex impedance requires vector hardware.",
                 RequiresExternalBridge: false, RequiresCalibration: false, MaximumPoints);

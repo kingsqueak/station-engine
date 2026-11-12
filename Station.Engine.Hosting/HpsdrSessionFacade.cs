@@ -145,12 +145,6 @@ public sealed class HpsdrSessionFacade : IRadioSession
         ThrowIfDisposed();
         ct.ThrowIfCancellationRequested();
 
-        if (_disconnectAsync is null && _radio.IsProtocol3Active)
-        {
-            throw new InvalidOperationException(
-                "Protocol-3 disconnection must use the existing sidecar orchestration callback.");
-        }
-
         try
         {
             Interlocked.Increment(ref _disconnectOperationActive);

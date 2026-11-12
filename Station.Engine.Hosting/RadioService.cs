@@ -349,11 +349,6 @@ public sealed partial class RadioService : IDisposable
     // Brick2 is Hermes-on-P2, not OrionMkII). Unknown stays unknown; Decision 4
     // forbids inventing an OrionMkII identity for TX safety policy.
     private HpsdrBoardKind _p2BoardKind = HpsdrBoardKind.Unknown;
-    // True while SimpleHPSDR is connected through the private N9DSP Protocol 3
-    // sidecar. The public host deliberately keeps only connection metadata;
-    // the sidecar owns all P3/N9DSP runtime code and binaries.
-    private bool _p3Active;
-    private int _p3MaxReceivers = SimpleHPSDR.Contracts.WireContract.MaxReceivers;
     // Firmware / gateware version string for the live connection, captured at
     // connect time from the discovery reply (P1: code-version byte raw[9];
     // P2: raw[13] + beta). Diagnostics-only — surfaced by ConnectionProbe so a
@@ -1405,7 +1400,7 @@ public sealed partial class RadioService : IDisposable
     /// </summary>
     public bool IsConnected
     {
-        get { lock (_sync) return _activeClientForTest is not null || _activeClient is not null || _p2Active || _p3Active; }
+        get { lock (_sync) return _activeClientForTest is not null || _activeClient is not null || _p2Active; }
     }
 
     /// <summary>True while a Protocol-1 client owns the connection — i.e. the
@@ -1425,11 +1420,6 @@ public sealed partial class RadioService : IDisposable
     internal bool IsProtocol2Active
     {
         get { lock (_sync) return _p2Active; }
-    }
-
-    internal bool IsProtocol3Active
-    {
-        get { lock (_sync) return _p3Active; }
     }
 
     /// <summary>Cheap MOX accessor (no Receivers projection, unlike Snapshot).
@@ -1748,7 +1738,7 @@ public sealed partial class RadioService : IDisposable
             if (_operatorConnectionGeneration != attempt.Generation
                 || attempt.OperatorActionToken.IsCancellationRequested)
                 throw new OperationCanceledException(attempt.OperatorActionToken);
-            if (_activeClient is not null || _p2Active || _p3Active)
+            if (_activeClient is not null || _p2Active)
                 throw new InvalidOperationException("Already connected. Disconnect first.");
 
             // Drop any RX-audio buffered from a previous session so a fresh
@@ -1962,7 +1952,7 @@ public sealed partial class RadioService : IDisposable
         {
             lock (_sync)
             {
-                if (_activeClient is null || _p2Active || _p3Active
+                if (_activeClient is null || _p2Active
                     || !TryParseEndpoint(_state.Endpoint ?? string.Empty, out var current)
                     || !expected.Equals(current)) return null;
             }
@@ -2000,7 +1990,7 @@ public sealed partial class RadioService : IDisposable
             // never let the old callback claim the new session.
             if (expectedClient is not null && !ReferenceEquals(_activeClient, expectedClient))
                 return _state;
-            if (_activeClient is null && (_p2Active || _p3Active))
+            if (_activeClient is null && _p2Active)
                 return _state;
             client = _activeClient;
             _activeClient = null;
@@ -8118,8 +8108,6 @@ public sealed partial class RadioService : IDisposable
             _p2Client = client;
             _p2Active = true;
             _p2BoardKind = boardKind;
-            _p3Active = false;
-            _p3MaxReceivers = SimpleHPSDR.Contracts.WireContract.MaxReceivers;
             // Record the discovered firmware for the diagnostics snapshot.
             _connectedFirmware = firmware;
             ResetPhysicalProtectionNoLock();
@@ -8242,90 +8230,6 @@ public sealed partial class RadioService : IDisposable
     internal int SendProtocol2SpeakerAudio(ReadOnlySpan<byte> packet) =>
         Volatile.Read(ref _p2Client)?.SendSpeakerAudio(packet) ?? 0;
 
-    public void MarkProtocol3Connected(
-        string endpoint,
-        int sampleRateHz,
-        int maxReceivers,
-        string? firmware = null)
-    {
-        // Claiming the hardware for P3 supersedes any pending P1 start-failure
-        // auto-retry, whichever path marked the connection.
-        NotifyOperatorConnectionAction();
-        Protocol2Client? previous;
-        lock (_sync)
-        {
-            previous = _p2Client;
-            _p2Client = null;
-            _p2Active = false;
-            _p2BoardKind = HpsdrBoardKind.Unknown;
-            _p3Active = true;
-            _p3MaxReceivers = Math.Clamp(maxReceivers, 1, SimpleHPSDR.Contracts.WireContract.MaxReceivers);
-            _connectedFirmware = firmware;
-            ResetPhysicalProtectionNoLock();
-            _attOffsetDb = 0;
-            _predictiveMagnitudeControlActive = false;
-            _adcOverloadLevel = 0;
-            ResetAdcProtectionWindowNoLock();
-            _lastTickMs = long.MinValue;
-            _lastAttAttackMs = long.MinValue;
-            _adcProtectionResumeAfterMs = long.MinValue;
-            _lastOverloadMs = long.MinValue;
-            _lastAppliedEffectiveDb = -1;
-            _lastAdcOverloadBits = 0;
-            _lastAdc0MaxMagnitude = null;
-            _lastAdc1MaxMagnitude = null;
-            _adc0MaxMagnitudeAtOverload = 0;
-            _adc1MaxMagnitudeAtOverload = 0;
-            _lastAdcTelemetryUtc = null;
-        }
-        if (previous is not null) previous.TelemetryReceived -= OnP2Telemetry;
-        Mutate(s => s with
-        {
-            Status = ConnectionStatus.Connected,
-            Endpoint = endpoint,
-            SampleRate = sampleRateHz,
-            // P3 always starts disarmed. An optional external provider path is
-            // capability-gated later, but it still requires an explicit
-            // operator arm in this server session. Persisted intent is never
-            // applied automatically here.
-            PsEnabled = false,
-            ZoomLevel = Math.Min(s.ZoomLevel, LegacyMaxDisplayZoomLevel),
-            AttOffsetDb = 0,
-            AdcOverloadWarning = false,
-        });
-        RecomputePaAndPush();
-    }
-
-    public void MarkProtocol3Disconnected()
-    {
-        lock (_sync)
-        {
-            _p3Active = false;
-            _p3MaxReceivers = SimpleHPSDR.Contracts.WireContract.MaxReceivers;
-            _connectedFirmware = null;
-            ResetPhysicalProtectionNoLock();
-            _attOffsetDb = 0;
-            _predictiveMagnitudeControlActive = false;
-            _adcOverloadLevel = 0;
-            ResetAdcProtectionWindowNoLock();
-            _lastTickMs = long.MinValue;
-            _lastAttAttackMs = long.MinValue;
-            _adcProtectionResumeAfterMs = long.MinValue;
-            _lastOverloadMs = long.MinValue;
-            _lastAppliedEffectiveDb = -1;
-        }
-        Mutate(s => s with
-        {
-            Status = ConnectionStatus.Disconnected,
-            Endpoint = null,
-            PsEnabled = false,
-            AttOffsetDb = 0,
-            AdcOverloadWarning = false,
-        });
-        _currentPsBoardKey = string.Empty;
-        _currentPsTxAttnDb = -1;
-    }
-
     // Resolves the board class for ALL board-specific behavior: PA settings,
     // drive-byte encoding, ATT behavior, filter switching. Normally returns
     // the board ID from discovery for P1 or P2. When the
@@ -8366,10 +8270,6 @@ public sealed partial class RadioService : IDisposable
                     // API did not carry discovery identity (issue #171).
                     // Decision 4 makes an absent identity fail-safe Unknown.
                     return ResolveProtocol2BoardKind(_p2BoardKind);
-                }
-                if (_p3Active)
-                {
-                    return HpsdrBoardKind.OrionMkII;
                 }
                 return HpsdrBoardKind.Unknown;
             }
@@ -8418,7 +8318,6 @@ public sealed partial class RadioService : IDisposable
     private string? ConnectedProtocolLocked()
     {
         if (_p2Active) return "P2";
-        if (_p3Active) return "P3";
         if (_activeClient is not null) return "P1";
         return null;
     }
@@ -8443,8 +8342,6 @@ public sealed partial class RadioService : IDisposable
                 if (_p2Active)
                     return SimpleHPSDR.Protocol2.Protocol2Client.RxDdcCapacityFor(ConnectedBoardKind, EffectiveOrionMkIIVariant)
                          - SimpleHPSDR.Protocol2.Protocol2Client.RxBaseDdc(ConnectedBoardKind);
-                if (_p3Active)
-                    return _p3MaxReceivers;
                 if (_activeClient is not null)
                     return Protocol1OrdinaryMaxReceivers;
                 return SimpleHPSDR.Contracts.WireContract.MaxReceivers;
