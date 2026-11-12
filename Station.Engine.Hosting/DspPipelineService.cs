@@ -2293,6 +2293,9 @@ public partial class DspPipelineService : BackgroundService,
     public virtual bool DrainVoiceTxTail(int tailDelayMs, Func<bool>? shouldAbort = null) =>
         ResolveTxIngest()?.DrainVoiceTxTail(tailDelayMs, shouldAbort) ?? false;
 
+    /// <summary>Why the last voice tail drain gave up, or null.</summary>
+    public virtual string? LastVoiceTailGiveUp => ResolveTxIngest()?.LastVoiceTailGiveUp;
+
     /// <summary>
     /// Finish a CW station ID that is on the air at an accepted local MOX
     /// release, before the wire MOX bit drops. <paramref name="shouldAbort"/>

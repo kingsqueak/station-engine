@@ -140,7 +140,10 @@ public sealed class TxAudioIngest : IDisposable
     // modulated samples in _scratchIq stay intact for the peak diagnostic — we
     // mute by writing FROM this buffer, not by zeroing _scratchIq in place.
     private readonly float[] _muteIq = new float[4096];
-    private const int IdlePreRollSamples = 3 * MicBlockSamples;
+    // Mic audio kept from just before a voice key-up and sent first, so the
+    // opening syllable isn't lost while the key reaches the radio. 100 ms: the
+    // app's VOX can take about 80 ms from speech to key, and 60 ms clipped it.
+    private const int IdlePreRollSamples = 5 * MicBlockSamples;
     private const int MaxVoiceOnsetSamples = 10 * MicBlockSamples;
     private int _voiceOnsetCapacitySamples = MaxVoiceOnsetSamples;
     private readonly Queue<(float[] Samples, MicBlockSource Source, MicBlockValidity? Validity)> _idlePreRoll = new();
@@ -964,15 +967,16 @@ public sealed class TxAudioIngest : IDisposable
     /// </summary>
     public bool DrainVoiceTxTail(int tailDelayMs, Func<bool>? shouldAbort = null)
     {
-        if (_audioModem.Active) return false;
-        if (_txOwnedByTuneDriver()) return false;
+        LastVoiceTailGiveUp = null;
+        if (_audioModem.Active) return VoiceTailGaveUp("audio modem active");
+        if (_txOwnedByTuneDriver()) return VoiceTailGaveUp("tune driver owns TX");
 
         var engine = _engineProvider();
         int blockSize = engine?.TxBlockSamples ?? 0;
         int iqOut = engine?.TxOutputSamples ?? 0;
         if (engine is null || blockSize <= 0 || iqOut <= 0
             || blockSize > _tailMic.Length || 2 * iqOut > _tailIq.Length)
-            return false;
+            return VoiceTailGaveUp("engine block sizes");
 
         long freq = System.Diagnostics.Stopwatch.Frequency;
         long startTs = _stopwatchTicks();
@@ -984,11 +988,11 @@ public sealed class TxAudioIngest : IDisposable
         var plan = PlanVoiceTail(tailDelayMs, _voiceDspLatencyMs(), blockSize, _voiceRadioFifoGuardMs());
         int settleMs = plan.SettleMs;
         _voiceTailWait(settleMs, shouldAbort);
-        if (shouldAbort?.Invoke() == true) return false;
+        if (shouldAbort?.Invoke() == true) return VoiceTailGaveUp("aborted after settle");
 
         lock (_sync)
         {
-            if (Interlocked.CompareExchange(ref _tailDraining, 1, 0) != 0) return false;
+            if (Interlocked.CompareExchange(ref _tailDraining, 1, 0) != 0) return VoiceTailGaveUp("tail already draining");
             _preserveOnsetAccumulatorDuringTail = true;
         }
 
@@ -1000,10 +1004,10 @@ public sealed class TxAudioIngest : IDisposable
         {
             // Releasing during relay settling must not replay held speech
             // into the still-muted IQ path. Keep the original deadline.
-            if (!WaitForVoiceOnsetPreKey(freq, shouldAbort)) return false;
+            if (!WaitForVoiceOnsetPreKey(freq, shouldAbort)) return VoiceTailGaveUp("pre-key wait");
             onsetDrained = DrainVoiceOnsetPaced(freq, shouldAbort, _voiceTailWait);
-            if (shouldAbort?.Invoke() == true) return false;
-            if (!DrainProcessedVoiceOnset(freq, shouldAbort)) return false;
+            if (shouldAbort?.Invoke() == true) return VoiceTailGaveUp("aborted after onset drain");
+            if (!DrainProcessedVoiceOnset(freq, shouldAbort)) return VoiceTailGaveUp("processed onset drain");
 
             lock (_sync)
             {
@@ -1049,7 +1053,7 @@ public sealed class TxAudioIngest : IDisposable
             bool hasAmCarrier = _txHasAmCarrier();
             for (int b = 0; b < maxFlushBlocks; b++)
             {
-                if (shouldAbort?.Invoke() == true) return false;
+                if (shouldAbort?.Invoke() == true) return VoiceTailGaveUp("aborted in DSP flush");
                 ClockTailBlock(engine, blockSize, iqOut, ref iqPeak, out float blockPeak, hasAmCarrier);
                 flushBlocks++;
                 quietBlocks = b >= minFlushBlocks && blockPeak <= RogerBeepFlushIqThreshold
@@ -1062,7 +1066,7 @@ public sealed class TxAudioIngest : IDisposable
                     _voiceTailWait((int)Math.Ceiling((paceAt - now) * 1000.0 / freq), shouldAbort);
             }
 
-            if (shouldAbort?.Invoke() == true) return false;
+            if (shouldAbort?.Invoke() == true) return VoiceTailGaveUp("aborted after DSP flush");
             int backlogSamples = _txTransportLevel().BacklogSamples;
             int transportBudgetMs = Math.Clamp(
                 backlogSamples < 0 ? 5000
@@ -1072,7 +1076,7 @@ public sealed class TxAudioIngest : IDisposable
                 + (long)(freq * transportBudgetMs / 1000.0);
             do
             {
-                if (shouldAbort?.Invoke() == true) return false;
+                if (shouldAbort?.Invoke() == true) return VoiceTailGaveUp("aborted in transport drain");
                 transportDrained = _drainTxTransport?.Invoke(TimeSpan.FromMilliseconds(10)) ?? true;
             } while (!transportDrained && _stopwatchTicks() < transportStop);
             if (!transportDrained)
@@ -1082,11 +1086,11 @@ public sealed class TxAudioIngest : IDisposable
             // operator's requested hold as a minimum before unkey.
             int guardMs = plan.GuardMs;
             _voiceTailWait(guardMs, shouldAbort);
-            if (shouldAbort?.Invoke() == true) return false;
+            if (shouldAbort?.Invoke() == true) return VoiceTailGaveUp("aborted in FIFO guard");
             long holdRemaining = deadline - _stopwatchTicks();
             if (holdRemaining > 0)
                 _voiceTailWait((int)Math.Ceiling(holdRemaining * 1000.0 / freq), shouldAbort);
-            if (shouldAbort?.Invoke() == true) return false;
+            if (shouldAbort?.Invoke() == true) return VoiceTailGaveUp("aborted in hold");
 
             double elapsedMs = (_stopwatchTicks() - startTs)
                 * 1000.0 / freq;
@@ -1099,7 +1103,7 @@ public sealed class TxAudioIngest : IDisposable
         catch (Exception ex)
         {
             _log.LogWarning(ex, "tx.voice.tail drain threw");
-            return false;
+            return VoiceTailGaveUp("threw");
         }
         finally
         {
@@ -1117,6 +1121,16 @@ public sealed class TxAudioIngest : IDisposable
             }
             Volatile.Write(ref _tailDraining, 0);
         }
+    }
+
+    /// <summary>Why the last voice tail drain gave up (null when it finished),
+    /// so the release log can say; the fallback then holds only what's left of the tail.</summary>
+    internal string? LastVoiceTailGiveUp { get; private set; }
+
+    private bool VoiceTailGaveUp(string why)
+    {
+        LastVoiceTailGiveUp = why;
+        return false;
     }
 
     /// <summary>

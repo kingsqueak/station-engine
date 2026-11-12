@@ -1043,8 +1043,19 @@ public sealed class TxService
             {
                 if (IsVoiceTxMode(state.Mode))
                 {
+                    // If the drain gives up part way, hold only what's left of the
+                    // configured tail: holding all of it again on top of the time
+                    // the drain had already spent stretched every voice unkey to
+                    // about twice the setting.
+                    long tailStart = System.Diagnostics.Stopwatch.GetTimestamp();
                     if (!_pipeline.DrainVoiceTxTail(tailMs, IsReleaseTailAbortRequested))
-                        HoldTailDelayUnlessAborted(tailMs);
+                    {
+                        double spentMs = (System.Diagnostics.Stopwatch.GetTimestamp() - tailStart)
+                            * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+                        _log.LogInformation("tx.voice.tail gave up: {Why} after {Spent:F1} ms, holding the rest of {Tail} ms",
+                            _pipeline.LastVoiceTailGiveUp ?? "unknown", spentMs, tailMs);
+                        HoldTailDelayUnlessAborted(Math.Max(0, tailMs - (int)Math.Round(spentMs)));
+                    }
                 }
                 else
                 {
