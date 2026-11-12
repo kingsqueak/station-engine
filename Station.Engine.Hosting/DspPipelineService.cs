@@ -2651,6 +2651,23 @@ public partial class DspPipelineService : BackgroundService,
     /// </summary>
     internal bool PublicWidebandCapable => _p2Client is not null;
 
+    /// <summary>SimpleHPSDR: the filter close-up for receiver <paramref name="rx"/>:
+    /// int32 sample rate, int32 FFT size, then that many float32 dB values, low to
+    /// high with the dial in the middle. Null until there's enough signal.</summary>
+    internal byte[]? CloseUpSnapshot(int rx, int fftSize)
+    {
+        var engine = Volatile.Read(ref _engine);
+        if (engine is null || rx < 0 || rx >= MaxReceivers) return null;
+        int chan = rx == 0 ? Volatile.Read(ref _channelId) : Volatile.Read(ref _secondaryRx[rx].ChannelId);
+        if (chan < 0) return null;
+        var buf = new byte[8 + 4 * fftSize];
+        var db = System.Runtime.InteropServices.MemoryMarshal.Cast<byte, float>(buf.AsSpan(8));
+        if (!engine.TryGetRxCloseUp(chan, fftSize, db, out int rate)) return null;
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(buf, rate);
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(buf.AsSpan(4), fftSize);
+        return buf;
+    }
+
     /// <summary>True while the public overview keeps the P2 wideband transport running.</summary>
     internal bool PublicWidebandActive => Volatile.Read(ref _publicWidebandActive) != 0;
 

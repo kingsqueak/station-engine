@@ -185,6 +185,15 @@ public static class StationEngineEndpoints
                 ? Results.Bytes(row, "application/octet-stream")
                 : Results.NoContent();
         });
+        // SimpleHPSDR: high-resolution spectrum around a receiver's dial for the
+        // app's filter close-up. Each poll keeps it fed for a few seconds.
+        endpoints.MapGet("/api/rx/{rx:int}/closeup", (int rx, int? size, DspPipelineService pipeline) =>
+        {
+            int n = size is 2048 or 4096 or 8192 or 16384 ? size.Value : 4096;
+            return pipeline.CloseUpSnapshot(rx, n) is { } bytes
+                ? Results.Bytes(bytes, "application/octet-stream")
+                : Results.NoContent();
+        });
         endpoints.MapRadioTuningEndpoints();
         endpoints.MapReceiverLoEndpoint();
         endpoints.MapCtunEndpoint();

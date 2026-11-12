@@ -297,6 +297,9 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
         public required int SnrAnalyzerId;
         public required long SnrAnalyzerGeneration;
         public volatile bool SnrAnalyzerHasSnapped;
+        // SimpleHPSDR close-up: fed while the app has asked within the last few seconds.
+        public CloseUpAnalyzer? CloseUp;
+        public long CloseUpDemandUntilMs;
         public readonly float[] AudioRing = new float[AudioRingCapacity];
         public int AudioHead;
         public int AudioCount;
@@ -2578,6 +2581,14 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
             NativeMethods.GetPixels(channelId, (int)which, ref MemoryMarshal.GetReference(dbOut), out int flag);
             return flag == 1;
         }
+    }
+
+    public bool TryGetRxCloseUp(int channelId, int fftSize, Span<float> dbOut, out int sampleRateHz)
+    {
+        sampleRateHz = CloseUpAnalyzer.OutputRateHz;
+        if (!_channels.TryGetValue(channelId, out var state)) return false;
+        Volatile.Write(ref state.CloseUpDemandUntilMs, Environment.TickCount64 + 3000);
+        return state.CloseUp is { } a && a.TryGetSpectrum(fftSize, dbOut);
     }
 
     public bool TryGetRxSnrPowerSpectrum(
@@ -5932,6 +5943,11 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
                 {
                     NativeMethods.Spectrum0(state.SpectrumRun, state.Id, 0, 0, ref spectrumIq[0]);
                     NativeMethods.Spectrum0(state.SpectrumRun, state.SnrAnalyzerId, 0, 0, ref spectrumIq[0]);
+                }
+                if (Environment.TickCount64 < Volatile.Read(ref state.CloseUpDemandUntilMs))
+                {
+                    state.CloseUp ??= CloseUpAnalyzer.TryCreate(state.SampleRateHz);
+                    state.CloseUp?.Feed(spectrumIq.AsSpan(0, frame.Length), state.CtunShiftHz);
                 }
                 // The analyzer now has a snapped pixel buffer; GetPixels is safe.
                 state.AnalyzerHasSnapped = true;

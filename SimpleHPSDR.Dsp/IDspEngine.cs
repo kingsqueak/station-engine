@@ -269,6 +269,15 @@ public interface IDspEngine : IDisposable
 
     bool TryGetDisplayPixels(int channelId, DisplayPixout which, Span<float> dbOut);
 
+    /// <summary>SimpleHPSDR: a high-resolution spectrum around the channel's dial
+    /// (<see cref="CloseUpAnalyzer"/>), in dB, low to high with the dial at
+    /// fftSize/2. Each call keeps the close-up fed for a few seconds.</summary>
+    bool TryGetRxCloseUp(int channelId, int fftSize, Span<float> dbOut, out int sampleRateHz)
+    {
+        sampleRateHz = 0;
+        return false;
+    }
+
     /// <summary>Drain the fixed, full-span, one-hertz-normalized average-power RX PSD.</summary>
     bool TryGetRxSnrPowerSpectrum(int channelId, Span<float> dbOut, out RxSnrSpectrumInfo info)
     {
