@@ -193,6 +193,56 @@ public sealed class TxAudioIngest : IDisposable
     private const int VoiceTailSettleMinMs = 20;   // one 20 ms mic frame still in capture
     private const int VoiceTailSettleMaxMs = 200;
     private const int VoiceTailQuietBlocks = 1;
+    // The release flush follows the speech. A mic block entering TXA counts as
+    // quiet when its RMS is within 6 dB of the mic's own noise floor and at
+    // least 20 dB under the loudest block of this over. The flush then covers
+    // only the part of TXA that can still hold speech: its latency less the
+    // quiet run, with this much of the run not credited (soft word endings).
+    private const int VoiceTailQuietMarginMs = 60;
+    private const float MicQuietFloorRatio = 2.0f;       // +6 dB over the floor
+    private const float MicQuietPeakRatio = 0.1f;        // -20 dB under the over's peak
+    private const float MicFloorRisePerBlock = 1.002f;   // floor creeps up ~6 dB in 2 s
+    private bool _voiceOnsetSkippedQuiet;
+    private float _micFloorRms = float.MaxValue;
+    private float _micOverPeakRms;
+    private int _micQuietBlocks;
+
+    /// <summary>Feed one mic block (as it enters TXA) to the quiet tracker.</summary>
+    private void TrackMicQuiet(ReadOnlySpan<float> block)
+    {
+        double sum = 0;
+        for (int i = 0; i < block.Length; i++) sum += (double)block[i] * block[i];
+        float rms = block.Length > 0 ? (float)Math.Sqrt(sum / block.Length) : 0f;
+        if (!float.IsFinite(rms)) { Volatile.Write(ref _micQuietBlocks, 0); return; }
+        // Digital silence (a muted or zero-filled block) is quiet, but it says
+        // nothing about the mic's noise floor: a floor of zero would never rise.
+        if (rms < 1.0e-6f) { Volatile.Write(ref _micQuietBlocks, _micQuietBlocks + 1); return; }
+        _micFloorRms = rms < _micFloorRms ? rms : _micFloorRms * MicFloorRisePerBlock;
+        if (rms > _micOverPeakRms) _micOverPeakRms = rms;
+        float threshold = Math.Min(_micFloorRms * MicQuietFloorRatio, _micOverPeakRms * MicQuietPeakRatio);
+        Volatile.Write(ref _micQuietBlocks, rms <= threshold ? _micQuietBlocks + 1 : 0);
+    }
+
+    /// <summary>True when a mic block that has not entered TXA yet would count
+    /// as quiet. Reads the tracker, never changes it.</summary>
+    private bool IsMicBlockQuiet(ReadOnlySpan<float> block)
+    {
+        double sum = 0;
+        for (int i = 0; i < block.Length; i++) sum += (double)block[i] * block[i];
+        float rms = block.Length > 0 ? (float)Math.Sqrt(sum / block.Length) : 0f;
+        if (!float.IsFinite(rms)) return false;
+        if (rms < 1.0e-6f) return true;
+        return rms <= Math.Min(_micFloorRms * MicQuietFloorRatio, _micOverPeakRms * MicQuietPeakRatio);
+    }
+
+    /// <summary>Whole blocks TXA must still be flushed for: its latency less
+    /// the credited quiet run, never less than one block.</summary>
+    internal static int VoiceTailFlushBlocks(int dspLatencyMs, int quietBlocks, double blockPeriodMs)
+    {
+        double creditMs = Math.Max(0.0, quietBlocks * blockPeriodMs - VoiceTailQuietMarginMs);
+        double needMs = Math.Max(0.0, dspLatencyMs - creditMs);
+        return Math.Max(1, (int)Math.Ceiling(needMs / blockPeriodMs));
+    }
     // IQ the radio still holds after the host transport goes idle. HL2
     // gateware buffers 20 ms by default (register 0x17 unset); the G2 Saturn
     // DUC FIFO holds up to 4096 words (~28 ms at 192 kHz). The P2 pacer only
@@ -504,7 +554,26 @@ public sealed class TxAudioIngest : IDisposable
 
     private int DrainVoiceOnsetPaced(long frequency, Func<bool>? shouldAbort, Action<int, Func<bool>?>? wait = null)
     {
-        lock (_sync) _voiceOnsetArmed = false;
+        lock (_sync)
+        {
+            _voiceOnsetArmed = false;
+            // The buffer holds the mic's most recent audio, still waiting to
+            // enter TXA. When all of it is quiet there is nothing to send:
+            // drop it rather than play it out in real time. The flush that
+            // follows still pushes any speech left inside TXA (it is sized
+            // from the quiet run that actually entered TXA).
+            bool allQuiet = _voiceOnset.Count > 0;
+            foreach (var queued in _voiceOnset)
+                if (!IsMicBlockQuiet(queued.Samples)) { allQuiet = false; break; }
+            if (allQuiet)
+            {
+                _voiceOnset.Clear();
+                _voiceOnsetSamples = 0;
+                _voiceOnsetSkippedQuiet = true;
+                return 0;
+            }
+            _voiceOnsetSkippedQuiet = false;
+        }
         long paceAt = _stopwatchTicks();
         int drained = 0;
         while (true)
@@ -1022,6 +1091,9 @@ public sealed class TxAudioIngest : IDisposable
 
             if (residualSamples > 0)
             {
+                // The last partial block is speech like any other: it ends a
+                // quiet run unless it is quiet itself.
+                lock (_sync) TrackMicQuiet(new ReadOnlySpan<float>(_tailMic, 0, residualSamples));
                 produced = engine.ProcessTxBlock(
                     new ReadOnlySpan<float>(_tailMic, 0, blockSize),
                     new Span<float>(_tailIq, 0, 2 * iqOut));
@@ -1041,7 +1113,13 @@ public sealed class TxAudioIngest : IDisposable
             // silence before testing for quiet output. The initial output can
             // itself be silent while a delayed syllable is still on its way.
             int dspLatencyMs = plan.DspLatencyMs;
-            int minFlushBlocks = plan.MinFlushBlocks;
+            // Everything the mic delivered has now entered TXA (settle, onset
+            // drain and the partial block above), so the quiet run is final.
+            double blockPeriodMs = blockSize * 1000.0 / TxRateHz;
+            int micQuietBlocks = Volatile.Read(ref _micQuietBlocks);
+            int micQuietMs = (int)(micQuietBlocks * blockPeriodMs);
+            int minFlushBlocks = Math.Min(plan.MinFlushBlocks,
+                VoiceTailFlushBlocks(dspLatencyMs, micQuietBlocks, blockPeriodMs));
             int maxFlushBlocks = plan.MaxFlushBlocks;
             long periodTicks = (long)(freq * (double)blockSize / TxRateHz);
             long maxLagTicks = freq * VoiceTailMaxCatchUpMs / 1000;
@@ -1095,8 +1173,8 @@ public sealed class TxAudioIngest : IDisposable
             double elapsedMs = (_stopwatchTicks() - startTs)
                 * 1000.0 / freq;
             _log.LogInformation(
-                "tx.voice.tail dropping PTT: delayMs={Delay} settleMs={Settle} onsetBlocks={OnsetBlocks} residualSamples={Residual} produced={Produced} dspLatencyMs={DspLatency} flushBlocks={FlushBlocks} dspFlushed={DspFlushed} transportDrained={TransportDrained} guardMs={Guard} elapsedMs={Elapsed:F1}",
-                tailDelayMs, settleMs, onsetDrained, residualSamples, produced, dspLatencyMs, flushBlocks,
+                "tx.voice.tail dropping PTT: delayMs={Delay} settleMs={Settle} onsetBlocks={OnsetBlocks} residualSamples={Residual} produced={Produced} dspLatencyMs={DspLatency} onsetSkipped={OnsetSkipped} micQuietMs={MicQuiet} minFlushBlocks={MinFlush} flushBlocks={FlushBlocks} dspFlushed={DspFlushed} transportDrained={TransportDrained} guardMs={Guard} elapsedMs={Elapsed:F1}",
+                tailDelayMs, settleMs, onsetDrained, residualSamples, produced, dspLatencyMs, _voiceOnsetSkippedQuiet, micQuietMs, minFlushBlocks, flushBlocks,
                 quietBlocks >= VoiceTailQuietBlocks, transportDrained, guardMs, elapsedMs);
             return true;
         }
@@ -2036,7 +2114,13 @@ public sealed class TxAudioIngest : IDisposable
         // Latch the MOX rising edge so the next falling edge will drain the
         // ring. Monitor-only operation never sets _lastSeenMox so it's a true
         // edge tracker for keyed TX.
-        if (moxNow && !_lastSeenMox) { lock (_sync) _lastSeenMox = true; }
+        if (moxNow && !_lastSeenMox)
+        {
+            lock (_sync) _lastSeenMox = true;
+            // New over: judge quiet against this over's own speech level.
+            _micOverPeakRms = 0f;
+            Volatile.Write(ref _micQuietBlocks, 0);
+        }
 
         int blockSize = engine?.TxBlockSamples ?? 0;
         int iqOut = engine?.TxOutputSamples ?? 0;
@@ -2311,6 +2395,7 @@ public sealed class TxAudioIngest : IDisposable
                     _accumulatorFill = 0;
                     return;
                 }
+                TrackMicQuiet(new ReadOnlySpan<float>(_scratchMic, 0, blockSize));
                 float micPeak = 0f;
                 for (int s = 0; s < blockSize; s++)
                 {
