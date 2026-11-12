@@ -695,7 +695,8 @@ public sealed class TxMetersService : BackgroundService
                         CorrectionDb: psm.CorrectionDb,
                         CalState: psm.CalState,
                         Correcting: psm.Correcting,
-                        MaxTxEnvelope: psm.MaxTxEnvelope);
+                        MaxTxEnvelope: psm.MaxTxEnvelope,
+                        FitCount: unchecked((ushort)psm.CalibrationAttempts));
                     _hub.Broadcast(psFrame);
                     // Mirror the live read-out into the StateDto so REST/state
                     // pollers see it too — same pattern PA/Mic meters use.

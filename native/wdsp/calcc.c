@@ -1815,6 +1815,12 @@ void __cdecl doPSCorrChange(void* arg)
 					a->util.m_spline_restore = NULL;
 					a->util.c_spline_restore = NULL;
 					a->util.s_spline_restore = NULL;
+					// SimpleHPSDR: the correction is on from here, whether or
+					// not the state machine gets to LTURNON before automatic
+					// mode is switched back on.
+					EnterCriticalSection(&txa[a->channel].calcc.cs_update);
+					a->info[14] = 1;
+					LeaveCriticalSection(&txa[a->channel].calcc.cs_update);
 				}
 				else
 				{
@@ -2070,8 +2076,14 @@ void pscc (int channel, int size, double* tx, double* rx)
 				break;
 			case LSTAYON:
 				InterlockedExchange (&a->ctrl.current_state, LSTAYON);
-				if (a->ctrl.reset || a->ctrl.automode || a->ctrl.mancal)
+				if (a->ctrl.reset || a->ctrl.mancal)
 					a->ctrl.state = LRESET;
+				// SimpleHPSDR: automatic mode switched on while a correction is
+				// in place (one loaded from a file, or a single calibration)
+				// carries on adapting from it. It used to go through LRESET,
+				// which threw the correction away.
+				else if (a->ctrl.automode)
+					a->ctrl.state = LWAIT;
 				break;
 			case LTURNON:
 				InterlockedExchange (&a->ctrl.current_state, LTURNON);

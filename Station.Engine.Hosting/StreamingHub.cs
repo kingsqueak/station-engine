@@ -1050,7 +1050,7 @@ public sealed class StreamingHub : IDisposable, IAsyncDisposable
     {
         if (_clients.IsEmpty) return;
 
-        int total = PsMetersFrame.ByteLength;
+        int total = PsMetersFrame.FullByteLength;
         var payload = new byte[total];
         var writer = new FixedBufferWriter(payload, total);
         frame.Serialize(writer);

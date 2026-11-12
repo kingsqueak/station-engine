@@ -49,20 +49,26 @@ public readonly record struct PsMetersFrame(
     float CorrectionDb,
     byte CalState,
     bool Correcting,
-    float MaxTxEnvelope)
+    float MaxTxEnvelope,
+    // How many corrections PureSignal has fitted since the engine started
+    // (wraps at 65,536). A change means the correction was just updated.
+    ushort FitCount = 0)
 {
+    /// <summary>Shortest valid frame (without FitCount, as older engines send it).</summary>
     public const int ByteLength = 1 + 4 + 4 + 1 + 1 + 4;
+    public const int FullByteLength = ByteLength + 2;
 
     public void Serialize(IBufferWriter<byte> writer)
     {
-        var span = writer.GetSpan(ByteLength);
+        var span = writer.GetSpan(FullByteLength);
         span[0] = (byte)MsgType.PsMeters;
         BinaryPrimitives.WriteSingleLittleEndian(span.Slice(1, 4), FeedbackLevel);
         BinaryPrimitives.WriteSingleLittleEndian(span.Slice(5, 4), CorrectionDb);
         span[9] = CalState;
         span[10] = Correcting ? (byte)1 : (byte)0;
         BinaryPrimitives.WriteSingleLittleEndian(span.Slice(11, 4), MaxTxEnvelope);
-        writer.Advance(ByteLength);
+        BinaryPrimitives.WriteUInt16LittleEndian(span.Slice(15, 2), FitCount);
+        writer.Advance(FullByteLength);
     }
 
     public static PsMetersFrame Deserialize(ReadOnlySpan<byte> bytes)
@@ -76,6 +82,9 @@ public readonly record struct PsMetersFrame(
             CorrectionDb: BinaryPrimitives.ReadSingleLittleEndian(bytes.Slice(5, 4)),
             CalState: bytes[9],
             Correcting: bytes[10] != 0,
-            MaxTxEnvelope: BinaryPrimitives.ReadSingleLittleEndian(bytes.Slice(11, 4)));
+            MaxTxEnvelope: BinaryPrimitives.ReadSingleLittleEndian(bytes.Slice(11, 4)),
+            FitCount: bytes.Length >= FullByteLength
+                ? BinaryPrimitives.ReadUInt16LittleEndian(bytes.Slice(15, 2))
+                : (ushort)0);
     }
 }

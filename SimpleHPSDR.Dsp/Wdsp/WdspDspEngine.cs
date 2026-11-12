@@ -632,6 +632,9 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
     private readonly object _psLock = new();
     private volatile bool _psEnabled;
     private bool _psAuto = true;
+    private string? _psRestorePending;     // a correction file waiting for calcc to be idle (_psLock)
+    private long _psLastResetTicks;        // when calcc was last told to reset
+    private bool _psLoadedWaitingForTx;    // a correction is loaded and no TX has run through it yet (_psLock)
     private bool _psSingle;
     private double _psHwPeak = 0.4072;   // P1 default; RadioService overrides at connect
     private double _psMoxDelaySec = 0.2;
@@ -3112,7 +3115,8 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
                 _psAmpDelayNs = ClampPsAmpDelayNs(_psAmpDelayNs, _psFeedbackRateHz);
                 _ = NativeMethods.SetPSTXDelay(id, _psAmpDelayNs * 1e-9);
                 NativeMethods.SetPSHWPeak(id, _psHwPeak);
-                NativeMethods.SetPSControl(id, 1, 0, 0, 0);   // RESET state
+                NativeMethods.SetPSControl(id, 1, 0, 0, 0);
+                Volatile.Write(ref _psLastResetTicks, System.Diagnostics.Stopwatch.GetTimestamp());   // RESET state
                                                               // SetPSRunCal stays 0 until the operator arms PS.
                                                               // Bring-up diagnostic — drop once PS is confirmed stable on rack.
                 _log.LogInformation(
@@ -4844,6 +4848,7 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
                 // Reset diagnostic counters so the first state transition
                 // and the first 100 pscc blocks log on every fresh arm.
                 _lastLoggedPsState = 255;
+                _psLoadedWaitingForTx = false;
                 Interlocked.Exchange(ref _psFeedCount, 0);
                 NativeMethods.SetPSRunCal(id, 1);
                 int mancal = _psSingle ? 1 : 0;
@@ -4852,6 +4857,7 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
                 // single-cal cycle (which can leave the SM in LSTAYON) starts
                 // a fresh fit (Thetis PSForm.cs:645,661).
                 NativeMethods.SetPSControl(id, 1, mancal, automode, 0);
+                Volatile.Write(ref _psLastResetTicks, System.Diagnostics.Stopwatch.GetTimestamp());
                 // Open the PS-feedback display analyzer (issue #121). Inherits
                 // pixel width / zoom / matched RX rate from the TX analyzer so
                 // the PS-Monitor pan/wf frames slot into the same widget the
@@ -4887,6 +4893,8 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
                 }
                 NativeMethods.SetPSRunCal(id, 0);
                 NativeMethods.SetPSControl(id, 1, 0, 0, 0);
+                Volatile.Write(ref _psLastResetTicks, System.Diagnostics.Stopwatch.GetTimestamp());
+                _psLoadedWaitingForTx = false;
                 _psEnabled = false;
                 _psObservedPeak.Reset();
                 // PS and CESSB are independent, but re-assert the operator's
@@ -5137,6 +5145,34 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
             feedbackRaw = _psInfoBuf[4];
             correcting = _psInfoBuf[14] != 0;
             calState = (byte)Math.Clamp(_psInfoBuf[15], 0, 255);
+            // A queued correction loads once calcc is idle and waiting for a
+            // transmission (LWAIT), or holding a correction (LSTAYON).
+            // ...and any reset has had time to be taken (calcc sees it on its
+            // next feedback block, a few milliseconds).
+            bool resetSettled = System.Diagnostics.Stopwatch.GetElapsedTime(
+                Volatile.Read(ref _psLastResetTicks)).TotalMilliseconds >= 300;
+            if (_psRestorePending is { } pending && !_moxOn && resetSettled && calState is 1 or 8)
+            {
+                _psRestorePending = null;
+                NativeMethods.PSRestoreCorr(id, pending);
+                // WDSP switches automatic mode off when it loads a correction
+                // and holds it fixed. Switch it straight back on: with the
+                // patched calcc (LSTAYON goes to LWAIT, not LRESET) PureSignal
+                // keeps the loaded correction and adapts from it.
+                bool adapting = _psAuto && !_psSingle;
+                if (adapting) NativeMethods.SetPSControl(id, 0, 0, 1, 0);
+                _psLoadedWaitingForTx = true;
+                _log.LogInformation("wdsp.restorePsCorrection loaded path={Path} adapting={Adapting}", pending, adapting);
+            }
+            // WDSP raises info[14] for a loaded correction only once transmit
+            // audio has run through it (its loader waits in SetTXAiqcStart for
+            // the first TX blocks). Until then report it as in place, unless
+            // the file could not be read (info[12] bit 1).
+            if (_psLoadedWaitingForTx)
+            {
+                if (correcting || (_psInfoBuf[12] & 0b0010) != 0) _psLoadedWaitingForTx = false;
+                else correcting = true;
+            }
             calibrationAttempts = _psInfoBuf[5];
             // Report the live TX-reference peak captured in FeedPsFeedbackBlock
             // rather than GetPSMaxTX, which stays zero until calc() runs and so
@@ -5223,7 +5259,10 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
             // LRESET clears reset itself and resumes the selected mode.
             int mancal = _psSingle ? 1 : 0;
             int automode = (_psAuto && !_psSingle) ? 1 : 0;
+            _psRestorePending = null;      // a reset means start from nothing
+            _psLoadedWaitingForTx = false;
             NativeMethods.SetPSControl(id, 1, mancal, automode, 0);
+                Volatile.Write(ref _psLastResetTicks, System.Diagnostics.Stopwatch.GetTimestamp());
         }
         _log.LogInformation("wdsp.resetPs auto={Auto} single={Single}", _psAuto, _psSingle);
     }
@@ -5249,11 +5288,13 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
         int? txa;
         lock (_txaLock) txa = _txaChannelId;
         if (txa is not int id) return;
-        lock (_psLock)
-        {
-            NativeMethods.PSRestoreCorr(id, path);
-        }
-        _log.LogInformation("wdsp.restorePsCorrection path={Path}", path);
+        // Not loaded here. Switching PureSignal on (and a reset) sends calcc
+        // through LRESET, which throws away whatever correction is in place,
+        // and calcc only gets there on a later feedback block. A load issued
+        // while that is still on its way was lost. So the path waits until
+        // calcc is seen idle (GetPsStageMeters, about ten times a second).
+        lock (_psLock) _psRestorePending = path;
+        _log.LogInformation("wdsp.restorePsCorrection queued path={Path}", path);
     }
 
     // CFC (Continuous Frequency Compressor) — issue #123. xcfcomp already
