@@ -132,8 +132,10 @@ public sealed class TciServer : IHostedService, IDisposable
         CwSettingsStore cwSettings,
         TransverterSettingsStore transverterSettings,
         LayoutStore layouts,
-        ILoggerFactory loggerFactory)
+        ILoggerFactory loggerFactory,
+        IHostApplicationLifetime? lifetime = null)
     {
+        _lifetime = lifetime;
         _log = loggerFactory.CreateLogger<TciServer>();
         _options = options.Value;
         _listener = listener;
@@ -177,12 +179,32 @@ public sealed class TciServer : IHostedService, IDisposable
         _layouts.ActiveTransverterEnabledChanged += OnActiveTransverterEnabledChanged;
         _subscribed = true;
 
+        // Close TCI clients as soon as shutdown begins. The web server stops
+        // before this service and waits for open requests, and a connected TCI
+        // client's WebSocket is one, so leaving it to StopAsync stalled the
+        // whole shutdown until its timeout (and every later service failed).
+        _stoppingRegistration = _lifetime?.ApplicationStopping.Register(CloseAllSessions);
+
         _log.LogInformation("tci.listening bind={Bind} port={Port}", _listener.BindAddress, _listener.Port);
         return Task.CompletedTask;
     }
 
+    private readonly IHostApplicationLifetime? _lifetime;
+    private CancellationTokenRegistration? _stoppingRegistration;
+
+    private void CloseAllSessions()
+    {
+        _log.LogInformation("tci.closing-at-shutdown active={Count}", _clients.Count);
+        foreach (var session in _clients.Values)
+        {
+            try { session.Dispose(); }
+            catch (Exception ex) { _log.LogDebug(ex, "tci.session close at shutdown failed"); }
+        }
+    }
+
     public async Task StopAsync(CancellationToken ct)
     {
+        _stoppingRegistration?.Dispose();
         if (_subscribed)
         {
             _radio.StateChanged -= OnRadioStateChanged;
@@ -261,7 +283,10 @@ public sealed class TciServer : IHostedService, IDisposable
 
         try
         {
-            await session.RunAsync(context.RequestAborted);
+            // Ends with the client or with engine shutdown, whichever is first.
+            using var run = CancellationTokenSource.CreateLinkedTokenSource(
+                context.RequestAborted, _lifetime?.ApplicationStopping ?? CancellationToken.None);
+            await session.RunAsync(run.Token);
         }
         finally
         {

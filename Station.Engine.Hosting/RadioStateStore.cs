@@ -244,6 +244,14 @@ public sealed class RadioStateEntry
     // Full-duplex RX audio ("DUP"). See StateDto.FullDuplexMultiRxEnabled.
     // Default false matches legacy rows and the pre-toggle MOX behaviour.
     public bool FullDuplexMultiRxEnabled { get; set; }
+    // VFO lock and the diversity null (on, gain, phase, reference, output).
+    // Legacy rows hydrate unlocked and with diversity at its defaults, off.
+    public bool VfoLocked { get; set; }
+    public bool DiversityEnabled { get; set; }
+    public double DiversityGain { get; set; } = 1.0;
+    public double DiversityPhaseDeg { get; set; }
+    public int DiversityReferenceRx { get; set; }
+    public int DiversityOutput { get; set; }
     // RIT / XIT arm state and offsets (Thetis chkRIT/udRIT, chkXIT/udXIT, which
     // Thetis also restores across restarts). Legacy rows hydrate to off / 0 Hz.
     public bool RitEnabled { get; set; }

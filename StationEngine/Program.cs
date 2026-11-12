@@ -192,8 +192,11 @@ public partial class Program
             options.ValidateOnBuild = true;
             options.ValidateScopes = true;
         });
+        // Stopping the radio and the audio devices together can take more than
+        // 3 s; services left with a cancelled token then never stop cleanly
+        // and the engine exits with a fatal "failed to stop" error.
         builder.Services.Configure<Microsoft.Extensions.Hosting.HostOptions>(options =>
-            options.ShutdownTimeout = TimeSpan.FromSeconds(3));
+            options.ShutdownTimeout = TimeSpan.FromSeconds(10));
         builder.WebHost.ConfigureKestrel(server =>
         {
             if (ListenOnAllInterfaces(options.BindMode, options.LanHttpsPort))
@@ -571,3 +574,4 @@ public partial class Program
         // SimpleHPSDR fork: Public Listening is never activated.
     }
 }
+

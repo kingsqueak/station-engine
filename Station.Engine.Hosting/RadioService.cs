@@ -1021,6 +1021,20 @@ public sealed partial class RadioService : IDisposable
                 ? initialTxAudioConfig.LegacyTxEq?.Validated() ?? LegacyTxEqConfig.Default
                 : _dspSettingsStore.GetLegacyTxEq() ?? LegacyTxEqConfig.Default,
             RxEq = _dspSettingsStore.GetRxEq() ?? RxEqConfig.Default,
+            VfoLocked = rsSnap?.VfoLocked ?? false,
+            // TxReceiverIndex decides which slice transmits; TxVfo is only its
+            // A/B projection, so restore both together (B needs slice B open).
+            TxReceiverIndex = _state.TxVfo == TxVfo.B && _state.Rx2Enabled ? 1 : 0,
+            TxVfo = _state.TxVfo == TxVfo.B && _state.Rx2Enabled ? TxVfo.B : TxVfo.A,
+            Diversity = rsSnap is null ? _state.Diversity : (_state.Diversity ?? new DiversityConfig()) with
+            {
+                Enabled = rsSnap.DiversityEnabled,
+                Gain = double.IsFinite(rsSnap.DiversityGain) ? Math.Clamp(rsSnap.DiversityGain, 0.0, 5.0) : 1.0,
+                PhaseDeg = double.IsFinite(rsSnap.DiversityPhaseDeg) ? Math.Clamp(rsSnap.DiversityPhaseDeg, -180.0, 180.0) : 0.0,
+                ReferenceRx = Math.Clamp(rsSnap.DiversityReferenceRx, 0, 1),
+                Output = Enum.IsDefined((DiversityOutput)rsSnap.DiversityOutput) ? (DiversityOutput)rsSnap.DiversityOutput : DiversityOutput.Combined,
+                SourceRx = 1,
+            },
         };
         if (_state.Mode == RxMode.FM)
         {
@@ -8017,6 +8031,12 @@ public sealed partial class RadioService : IDisposable
                 TxVfo = snap.TxVfo,
                 CtunEnabled = snap.CtunEnabled,
                 FullDuplexMultiRxEnabled = snap.FullDuplexMultiRxEnabled,
+                VfoLocked = snap.VfoLocked,
+                DiversityEnabled = snap.Diversity?.Enabled ?? false,
+                DiversityGain = snap.Diversity?.Gain ?? 1.0,
+                DiversityPhaseDeg = snap.Diversity?.PhaseDeg ?? 0.0,
+                DiversityReferenceRx = snap.Diversity?.ReferenceRx ?? 0,
+                DiversityOutput = (int)(snap.Diversity?.Output ?? DiversityOutput.Combined),
                 RitEnabled = snap.RitEnabled,
                 RitHz = snap.RitHz,
                 XitEnabled = snap.XitEnabled,

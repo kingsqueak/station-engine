@@ -14,6 +14,16 @@ public static class StationEngineCapabilitiesEndpoints
         ArgumentNullException.ThrowIfNull(endpoints);
         endpoints.MapGet("/api/capabilities", (StationEngineCapabilitiesService caps) =>
             Results.Ok(caps.Snapshot));
+        // Orderly stop for the owning app: lets the host dispose its services,
+        // so RadioService writes its last state instead of losing up to a
+        // second of changes to a kill. Loopback callers only.
+        endpoints.MapPost("/api/engine/shutdown", (HttpContext http, IHostApplicationLifetime lifetime) =>
+        {
+            if (http.Connection.RemoteIpAddress is not { } ip || !System.Net.IPAddress.IsLoopback(ip))
+                return Results.StatusCode(StatusCodes.Status403Forbidden);
+            lifetime.StopApplication();
+            return Results.Accepted();
+        });
         return endpoints;
     }
 }
