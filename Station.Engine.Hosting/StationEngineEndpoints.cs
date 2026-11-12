@@ -176,6 +176,11 @@ public static class StationEngineEndpoints
         endpoints.MapReceiverConfigurationEndpoints();
         // SimpleHPSDR: the separate wideband window. Each poll keeps the radio's
         // raw-ADC snapshots coming for a few seconds and returns the latest row.
+        // Diagnostic, receive only: time from a retune command to the first IQ
+        // at the new centre. Steps the centre by stepHz and back, count times.
+        endpoints.MapPost("/api/diag/retune-lag", async (int? stepHz, int? count, DspPipelineService pipeline, HttpContext ctx) =>
+            Results.Ok(await pipeline.RunRetuneLagProbeAsync(
+                Math.Clamp(stepHz ?? 20_000, 1_000, 100_000), Math.Clamp(count ?? 20, 2, 200), ctx.RequestAborted)));
         endpoints.MapGet("/api/wideband/tool", (DspPipelineService pipeline) =>
         {
             if (!pipeline.WidebandCapable)

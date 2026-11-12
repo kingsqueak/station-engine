@@ -99,6 +99,12 @@ public interface IDspEngine : IDisposable
     /// <summary>Close a channel opened by <see cref="OpenRxDisplayChannel"/>.</summary>
     void CloseRxDisplayChannel(int channelId) => CloseChannel(channelId);
 
+    /// <summary>Retune in step with the engine's processing blocks: send the
+    /// radio its new centre and change the receive shift so both take effect
+    /// on the same IQ. False when the engine can't (the caller retunes at once).</summary>
+    bool TryScheduleAlignedRetune(int channelId, int shiftHz, double leadMs, Action sendRadioCommand) => false;
+    /// <summary>Carry out a scheduled retune now.</summary>
+    void FlushAlignedRetune(int channelId) { }
     void FeedIq(int channelId, ReadOnlySpan<double> interleavedIqSamples);
     void SetMode(int channelId, RxMode mode);
     void SetFilter(int channelId, int lowHz, int highHz);

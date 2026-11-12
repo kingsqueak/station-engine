@@ -1227,6 +1227,20 @@ public partial class DspPipelineService : BackgroundService,
     // when the dial moves doesn't require Mutate-ing the StateDto.
     // See docs/prd/panfall_behavior.md.
     private int _appliedCtunOffsetHz;
+    // Block-aligned retune (Protocol 2): the engine sends the radio its new
+    // centre just before a WDSP block starts and changes the shift for that
+    // block. The lead is the measured time from the command to the first IQ
+    // at the new centre (/api/diag/retune-lag: 1.2 ms median on an ANAN-7000DLE).
+    private const double AlignedRetuneLeadMs = 1.2;
+    private const int AlignedRetuneTimeoutMs = 60;
+    // SIMPLEHPSDR_ALIGNED_RETUNE=0 turns it off (retune and shift at once, as
+    // before), for comparison and as a way back if a radio misbehaves.
+    private static readonly bool AlignedRetuneEnabled =
+        Environment.GetEnvironmentVariable("SIMPLEHPSDR_ALIGNED_RETUNE") != "0";
+    private long _lastSentP2LoHw = long.MinValue;
+    private long _alignedRetuneLoHw = long.MinValue;
+    private int _alignedRetuneChannel = -1;
+    private long _alignedRetuneDeadlineTicks;
     private int _appliedTxLowHz;
     private int _appliedTxHighHz;
 
@@ -6062,7 +6076,24 @@ public partial class DspPipelineService : BackgroundService,
         // RadioLoHz to the P2 client (the P1 client gets the same push from
         // RadioService.SetRadioLo). See docs/prd/panfall_behavior.md.
         var p2 = _p2Client;
-        p2?.SetVfoAHz(_radio.ToHardwareFrequencyHz(s.RadioLoHz));
+        // A pan under CTUN moves the radio's centre and the WDSP shift by equal
+        // and opposite amounts. Those two must change on the same IQ, or the
+        // audio is at the wrong frequency in between, so that case goes to the
+        // engine's block-aligned retune further down instead of being sent now.
+        long loHw = _radio.ToHardwareFrequencyHz(s.RadioLoHz);
+        int ctunShiftForRetune = (int)(CwOffset.EffectiveLoHz(s.Mode, s.VfoHz) - s.RadioLoHz)
+            + (s.RitEnabled ? (int)s.RitHz : 0);
+        long nowForRetune = Stopwatch.GetTimestamp();
+        bool retuneStillScheduled = loHw == _alignedRetuneLoHw
+            && nowForRetune < Volatile.Read(ref _alignedRetuneDeadlineTicks);
+        bool alignRetune = AlignedRetuneEnabled && p2 is not null && _rxSinkAttached && !_keyed
+            && _lastSentP2LoHw != long.MinValue && loHw != _lastSentP2LoHw
+            && ctunShiftForRetune != _appliedCtunOffsetHz;
+        if (!alignRetune && !retuneStillScheduled)
+        {
+            p2?.SetVfoAHz(loHw);
+            if (p2 is not null) _lastSentP2LoHw = loHw;
+        }
         p2?.SetReceiverAdcSources(ReceiverAdcSource(s, 0), ReceiverAdcSource(s, 1));
         var diversity = s.Diversity ?? new DiversityConfig();
         bool diversityEnabled = diversity.Enabled && BoardCapabilitiesTable
@@ -6262,7 +6293,27 @@ public partial class DspPipelineService : BackgroundService,
         // same diff-gate as a retune.
         int ritHz = s.RitEnabled ? (int)s.RitHz : 0;
         int ctunShiftHz = (int)(CwOffset.EffectiveLoHz(s.Mode, s.VfoHz) - s.RadioLoHz) + ritHz;
-        if (ctunShiftHz != _appliedCtunOffsetHz)
+        if (alignRetune && p2 is not null)
+        {
+            var client = p2;
+            bool scheduled = engine.TryScheduleAlignedRetune(
+                channel, ctunShiftHz, AlignedRetuneLeadMs, () => client.SetVfoAHz(loHw));
+            if (scheduled)
+            {
+                _alignedRetuneLoHw = loHw;
+                _alignedRetuneChannel = channel;
+                Volatile.Write(ref _alignedRetuneDeadlineTicks,
+                    nowForRetune + Stopwatch.Frequency * AlignedRetuneTimeoutMs / 1000);
+            }
+            else
+            {
+                client.SetVfoAHz(loHw);
+                engine.SetCtunShift(channel, ctunShiftHz);
+            }
+            _lastSentP2LoHw = loHw;
+            _appliedCtunOffsetHz = ctunShiftHz;
+        }
+        else if (ctunShiftHz != _appliedCtunOffsetHz)
         {
             engine.SetCtunShift(channel, ctunShiftHz);
             _appliedCtunOffsetHz = ctunShiftHz;
@@ -8711,6 +8762,108 @@ public partial class DspPipelineService : BackgroundService,
     // (safe because everything below consumes the span synchronously). So this
     // sink must NOT retain frame.InterleavedSamples past the call and does not
     // return any buffer itself.
+    // ---- Retune-lag probe (diagnostic, receive only) ----------------------
+    // Measures how long after a retune command the first IQ at the new
+    // frequency reaches this process. While the probe runs, every RX1 packet's
+    // power-weighted mean frequency is noted (lag-1 autocorrelation): a retune
+    // by +step moves everything in the capture by -step, so that mean jumps.
+    private const int RetuneProbeRing = 8192;
+    private readonly long[] _retuneProbeTicks = new long[RetuneProbeRing];
+    private readonly double[] _retuneProbeHz = new double[RetuneProbeRing];
+    private long _retuneProbeCount;
+    private int _retuneProbeActive;
+
+    private void NoteRetuneProbe(ReadOnlySpan<double> iq, int sampleRateHz)
+    {
+        double re = 0, im = 0;
+        for (int i = 0; i + 3 < iq.Length; i += 2)
+        {
+            double a = iq[i], b = iq[i + 1], c = iq[i + 2], d = iq[i + 3];
+            re += a * c + b * d;
+            im += a * d - b * c;
+        }
+        long n = _retuneProbeCount;
+        int slot = (int)(n % RetuneProbeRing);
+        _retuneProbeTicks[slot] = Stopwatch.GetTimestamp();
+        _retuneProbeHz[slot] = Math.Atan2(im, re) * sampleRateHz / (2 * Math.PI);
+        Volatile.Write(ref _retuneProbeCount, n + 1);
+    }
+
+    private static double Median(List<double> v)
+    {
+        v.Sort();
+        return v.Count == 0 ? double.NaN : v[v.Count / 2];
+    }
+
+    /// <summary>Step the radio's centre frequency back and forth and time the
+    /// arrival of IQ at each new centre. Receive only; the centre is put back.</summary>
+    internal async Task<object> RunRetuneLagProbeAsync(int stepHz, int count, CancellationToken ct)
+    {
+        if (_p2Client is null && _radio.ActiveClient is null) return new { error = "No radio connected." };
+        if (_keyed) return new { error = "Not while transmitting." };
+        if (Interlocked.CompareExchange(ref _retuneProbeActive, 1, 0) != 0) return new { error = "Probe already running." };
+        long baseLo = _radio.Snapshot().RadioLoHz;
+        var lags = new List<double>();
+        var shifts = new List<double>();
+        int inconclusive = 0;
+        double tickMs = 1000.0 / Stopwatch.Frequency;
+        try
+        {
+            await Task.Delay(150, ct);
+            for (int i = 0; i < count; i++)
+            {
+                long target = baseLo + (i % 2 == 0 ? stepHz : 0);
+                long t0 = Stopwatch.GetTimestamp();
+                _radio.SetRadioLo(target);
+                long sent = Stopwatch.GetTimestamp();
+                await Task.Delay(120, ct);
+                long end = Volatile.Read(ref _retuneProbeCount);
+                var pre = new List<double>();
+                var post = new List<double>();
+                var after = new List<(double Ms, double Hz)>();
+                for (long k = Math.Max(0, end - RetuneProbeRing + 1); k < end; k++)
+                {
+                    int slot = (int)(k % RetuneProbeRing);
+                    double ms = (_retuneProbeTicks[slot] - t0) * tickMs;
+                    if (ms is >= -40 and < 0) pre.Add(_retuneProbeHz[slot]);
+                    else if (ms is >= 60 and < 110) post.Add(_retuneProbeHz[slot]);
+                    if (ms is >= 0 and < 60) after.Add((ms, _retuneProbeHz[slot]));
+                }
+                if (pre.Count < 10 || post.Count < 10) { inconclusive++; continue; }
+                double before = Median(pre), settled = Median(post), jump = settled - before;
+                // The capture has to hold enough signal for the jump to show.
+                if (Math.Abs(jump) < 0.05 * Math.Abs(stepHz)) { inconclusive++; continue; }
+                foreach (var (ms, hz) in after)
+                {
+                    if (Math.Abs(hz - before) <= Math.Abs(jump) / 2) continue;
+                    lags.Add(ms);
+                    shifts.Add(jump);
+                    break;
+                }
+                _ = sent;
+            }
+        }
+        finally
+        {
+            try { _radio.SetRadioLo(baseLo); } catch { }
+            Volatile.Write(ref _retuneProbeActive, 0);
+        }
+        var sorted = new List<double>(lags);
+        sorted.Sort();
+        return new
+        {
+            stepHz,
+            steps = count,
+            measured = lags.Count,
+            inconclusive,
+            lagMsMin = sorted.Count > 0 ? Math.Round(sorted[0], 2) : (double?)null,
+            lagMsMedian = sorted.Count > 0 ? Math.Round(sorted[sorted.Count / 2], 2) : (double?)null,
+            lagMsMax = sorted.Count > 0 ? Math.Round(sorted[^1], 2) : (double?)null,
+            lagsMs = lags.ConvertAll(v => Math.Round(v, 2)),
+            jumpHzMedian = shifts.Count > 0 ? Math.Round(Median(new List<double>(shifts)), 0) : (double?)null,
+        };
+    }
+
     void SimpleHPSDR.Protocol2.IRxPacketSink.OnIqFrame(in SimpleHPSDR.Protocol2.IqFrame frame)
     {
         DrainDspCommands();
@@ -8751,6 +8904,8 @@ public partial class DspPipelineService : BackgroundService,
             }
             int channel = Volatile.Read(ref _channelId);
             LogRxIqRms(0, frame.InterleavedSamples.Span, ref _rx1IqRmsLogMs);
+            if (Volatile.Read(ref _retuneProbeActive) != 0)
+                NoteRetuneProbe(frame.InterleavedSamples.Span, frame.SampleRateHz);
             FeedRx0WithOptionalDiversity(engine, channel, frame.InterleavedSamples.Span,
                 frame.DiversitySourceSamples.Span);
             RxIqAvailable?.Invoke(0, frame.SampleRateHz, frame.InterleavedSamples);
@@ -9206,6 +9361,15 @@ public partial class DspPipelineService : BackgroundService,
 
     private bool Tick(float[] panBuf, float[] wfBuf, float[] audioBuf, bool displayOnly = false)
     {
+        // A scheduled retune rides on the IQ stream. If none has flowed for
+        // AlignedRetuneTimeoutMs, carry it out now so the radio isn't left on
+        // the old centre.
+        long retuneDeadline = Volatile.Read(ref _alignedRetuneDeadlineTicks);
+        if (retuneDeadline != 0 && Stopwatch.GetTimestamp() >= retuneDeadline
+            && Interlocked.CompareExchange(ref _alignedRetuneDeadlineTicks, 0, retuneDeadline) == retuneDeadline)
+        {
+            Volatile.Read(ref _engine)?.FlushAlignedRetune(_alignedRetuneChannel);
+        }
         // issue #1167: the timer thread and the RX inline-tick thread can both
         // be live during the sink attach/detach window. FloatSpscRing is strict
         // single-producer; this gate guarantees only one Tick runs at a time so

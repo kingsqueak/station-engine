@@ -316,6 +316,17 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
         // sees pre-shift IQ, so its max-bin detector must move by this amount
         // while the demodulator shifts the same signal back to baseband.
         public int CtunShiftHz;
+        // Block-aligned retune. WDSP's receive chain works in blocks of
+        // RxaDspSize samples at the DSP rate, and its frequency shift is one
+        // value per block. A block starts every BlockFrames input frames, so
+        // the worker counts the frames it has exchanged since the channel last
+        // (re)started. Guarded by RetuneGate; the count belongs to the worker.
+        public readonly object RetuneGate = new();
+        public long ExchangeCount;
+        public int BlockPhaseReset;                 // set when the channel restarts
+        public (int ShiftHz, int LeadFrames, Action Send)? RetuneRequested;
+        public (long ApplyAtCount, int ShiftHz)? RetuneInFlight;
+        public int BlockFrames => Math.Max(1, SampleRateHz / DspRate * RxaDspSize / RxaInSize);
         // Thetis "AGC Top" max-gain setting in dB. 90 matches the Thetis
         // default (radio.cs:1021 rx_agc_max_gain); the /api/agcGain endpoint can
         // override at runtime.
@@ -1417,6 +1428,16 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
         // an `rx_osc = -(dial - centre)` then calls SetRXAShiftFreq(-osc), so
         // the net argument is (dial - centre) = our shiftHz. Same goes to
         // the nbp0 stage that enforces SSB sideband.
+        // An immediate change replaces the shift of anything still scheduled.
+        // A radio command that was waiting for its block boundary goes out now.
+        Action? sendNow;
+        lock (state.RetuneGate)
+        {
+            sendNow = state.RetuneRequested?.Send;
+            state.RetuneRequested = null;
+            state.RetuneInFlight = null;
+        }
+        try { sendNow?.Invoke(); } catch { }
         lock (state.FilterProfileGate)
         {
             RunNativeLifecycleCriticalSection(() =>
@@ -1428,6 +1449,112 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
             });
         }
         ConfigureMaxBinDetector(state);
+    }
+
+    /// <summary>
+    /// Retune in step with WDSP's blocks. The radio is told its new centre
+    /// (<paramref name="sendRadioCommand"/>) about <paramref name="leadMs"/>
+    /// before a block starts, so IQ at the new centre begins with that block,
+    /// and the shift changes for that block and no earlier. Changing the shift
+    /// at once instead puts up to one block (10.67 ms) of old-centre IQ through
+    /// the new shift. A newer request replaces one that has not been sent yet.
+    /// False when the channel can't do it (not running): the caller then
+    /// retunes at once.
+    /// </summary>
+    public bool TryScheduleAlignedRetune(int channelId, int shiftHz, double leadMs, Action sendRadioCommand)
+    {
+        if (_disposed != 0 || !_channels.TryGetValue(channelId, out var state)) return false;
+        if (state.Stopped || state.RxDspSuppressedForMox) return false;
+        double frameMs = RxaInSize * 1000.0 / state.SampleRateHz;
+        int leadFrames = Math.Clamp((int)Math.Round(leadMs / frameMs), 0, state.BlockFrames - 1);
+        lock (state.RetuneGate)
+            state.RetuneRequested = (shiftHz, leadFrames, sendRadioCommand);
+        return true;
+    }
+
+    /// <summary>Carry out anything still waiting from
+    /// <see cref="TryScheduleAlignedRetune"/> now (no IQ is flowing, or the
+    /// caller is about to change the same things itself).</summary>
+    public void FlushAlignedRetune(int channelId)
+    {
+        if (!_channels.TryGetValue(channelId, out var state)) return;
+        FlushAlignedRetune(state);
+    }
+
+    private static void FlushAlignedRetune(ChannelState state)
+    {
+        (int ShiftHz, int LeadFrames, Action Send)? requested;
+        (long ApplyAtCount, int ShiftHz)? inFlight;
+        lock (state.RetuneGate)
+        {
+            requested = state.RetuneRequested;
+            inFlight = state.RetuneInFlight;
+            state.RetuneRequested = null;
+            state.RetuneInFlight = null;
+        }
+        if (inFlight is { } f) ApplyShiftNative(state, f.ShiftHz);
+        if (requested is { } r)
+        {
+            try { r.Send(); } catch { }
+            ApplyShiftNative(state, r.ShiftHz);
+        }
+    }
+
+    // The native half of SetCtunShift, callable from the channel's own worker
+    // (which is alive, so the channel is open).
+    private static void ApplyShiftNative(ChannelState state, int shiftHz)
+    {
+        NativeMethods.SetRXAShiftFreq(state.Id, shiftHz);
+        NativeMethods.RXANBPSetShiftFrequency(state.Id, shiftHz);
+        NativeMethods.SetRXAShiftRun(state.Id, shiftHz != 0 ? 1 : 0);
+        state.CtunShiftHz = shiftHz;
+        ConfigureMaxBinDetector(state);
+    }
+
+    // Worker thread, just before a frame is exchanged.
+    private static void BeforeRxExchange(ChannelState state)
+    {
+        if (Volatile.Read(ref state.BlockPhaseReset) != 0)
+        {
+            Volatile.Write(ref state.BlockPhaseReset, 0);
+            state.ExchangeCount = 0;
+            // The block grid moved: finish anything in progress at once.
+            if (state.RetuneInFlight is not null || state.RetuneRequested is not null)
+                FlushAlignedRetune(state);
+        }
+        if (state.RetuneInFlight is null) return;
+        int shift;
+        lock (state.RetuneGate)
+        {
+            if (state.RetuneInFlight is not { } f || state.ExchangeCount < f.ApplyAtCount) return;
+            shift = f.ShiftHz;
+            state.RetuneInFlight = null;
+        }
+        ApplyShiftNative(state, shift);
+    }
+
+    // Worker thread, just after a frame is exchanged.
+    private static void AfterRxExchange(ChannelState state)
+    {
+        long count = ++state.ExchangeCount;
+        if (state.RetuneRequested is null) return;
+        Action send;
+        lock (state.RetuneGate)
+        {
+            if (state.RetuneRequested is not { } r || state.RetuneInFlight is not null) return;
+            int n = state.BlockFrames;
+            int framesToBoundary = (int)((n - count % n) % n);
+            if (framesToBoundary != r.LeadFrames) return;
+            // The first frame of the new block is exchange number `count +
+            // framesToBoundary`. WDSP runs a block when its last frame is
+            // exchanged, so by the middle of the new block the old one is
+            // done and the new one has not started: change the shift there.
+            long applyAt = count + framesToBoundary + (n >= 2 ? n / 2 : 0);
+            state.RetuneInFlight = (applyAt, r.ShiftHz);
+            state.RetuneRequested = null;
+            send = r.Send;
+        }
+        try { send(); } catch { }
     }
 
     public void SetRxDisplayFastAttack(int channelId, bool fast)
@@ -3322,6 +3449,7 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
         // it never waits on the worker. A receiver opened during the over is
         // already natively running; the call is then a no-op.
         NativeMethods.SetChannelState(receive.Id, 1, 0);
+        Volatile.Write(ref receive.BlockPhaseReset, 1);
         lock (receive.MoxGate) receive.RxDspSuppressedForMox = false;
     }
 
@@ -4337,6 +4465,7 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
             finally
             {
                 NativeMethods.SetChannelState(state.Id, oldState, 0);
+                Volatile.Write(ref state.BlockPhaseReset, 1);
             }
         });
     }
@@ -5864,11 +5993,13 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
                                 break;
                         }
 
+                        BeforeRxExchange(state);
                         NativeMethods.fexchange0(
                             state.Id,
                             ref frame[0],
                             ref audio[0],
                             out _);
+                        AfterRxExchange(state);
                         // Publish under MoxGate so key-down cannot clear the
                         // ring and then lose a race to this pre-MOX frame.
                         PushAudio(state, audio, monoSamples);
