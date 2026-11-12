@@ -85,7 +85,7 @@ public sealed partial class WdspDspEngine
     // enabled. Written under _dexpLock, read lock-free.
     private volatile bool _dexpInstanceLive;
     private volatile bool _dexpActive;
-    // Set whenever a block bypasses DEXP (disabled, digital/roger/injected
+    // Set whenever a block bypasses DEXP (disabled, digital/tone/injected
     // bypass) so stale detector / look-ahead state is flushed on resume.
     private volatile bool _dexpNeedsFlush = true;
 

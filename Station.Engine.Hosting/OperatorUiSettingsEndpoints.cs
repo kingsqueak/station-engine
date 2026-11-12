@@ -49,7 +49,6 @@ public static class OperatorUiSettingsEndpoints
                     req.DisplayMaxFrameRateHz,
                     req.DisplayDecimation,
                     req.WaterfallUpdatePeriod,
-                    req.WidebandSignalMarkersEnabled,
                     req.WaterfallColormap,
                     req.WaterfallScrollSpeed,
                     req.BandOverlayEnabled,
@@ -81,7 +80,7 @@ public static class OperatorUiSettingsEndpoints
 
         // SimpleHPSDR fork: the SimpleHPSDR browser app's screen settings (background
         // images, bottom pin, panadapter/waterfall split, toolbar, NR screen
-        // prefs, clock, theme) and the wideband signal markers are gone.
+        // prefs, clock, theme) are gone.
 
         // Shared operator identity (callsign + Maidenhead grid). The engine has
         // no QRZ session, so unlike the product host there is no QRZ home-

@@ -82,15 +82,6 @@ public static class StationEngineHostingExtensions
         services.AddSingleton<IProductTxAudioPort>(sp => sp.GetRequiredService<ProductAudioRingPort>());
         services.AddSingleton<ProductPluginAudioPort>();
         services.AddSingleton<ITxAudioPreviewProcessor, NullTxAudioPreviewProcessor>();
-        // KiwiSDR is an engine-owned remote receiver. Register the same concrete
-        // external-receiver ports used by the monolithic host so attach-mode
-        // clients can configure and open the Kiwi slice instead of receiving
-        // 404s from the standalone station engine.
-        // Keep the established simplehpsdr-prefs.db ownership so existing saved URLs,
-        // passwords, feature-profile exports, and restores remain intact.
-        // SimpleHPSDR fork: no KiwiSDR receiver; the external-receiver ports are the null ones.
-        services.AddSingleton<IExternalReceiverSource, NullExternalReceiverSource>();
-        services.AddSingleton<IExternalReceiverControlPort, NullExternalReceiverControlPort>();
         services.AddSingleton<IExternalRxAudioSource, NullExternalRxAudioSource>();
         services.AddSingleton<IExternalRadioSidecar, NullExternalRadioSidecar>();
         services.AddSingleton<IInitialTxAudioConfigSource, NullInitialTxAudioConfigSource>();
@@ -152,7 +143,6 @@ public static class StationEngineHostingExtensions
         // Digital workspace prefs (per-mode FT8/FT4/WSPR settings + the Auto-CQ
         // ack stamp). Same collections the desktop host uses, so the rows follow
         // the operator between hosts on the same machine.
-        services.AddSingleton<OperatorAckStore>();
 
         services.AddSingleton<TxIqRing>();
         services.AddSingleton<ITxIqSource>(sp => sp.GetRequiredService<TxIqRing>());
@@ -161,9 +151,6 @@ public static class StationEngineHostingExtensions
         services.AddSingleton<RxAudioMuteState>();
 
         services.AddSingleton<StreamingHub>();
-        // Public Listening engine feed (ADR-0010). Lazy and inert: nothing is
-        // constructed or produced unless a host resolves IPublicListenFeed.
-        SimpleHPSDR.Server.PublicListen.PublicListenFeedServiceCollectionExtensions.AddPublicListenFeed(services);
         services.AddSingleton<RadioService>();
         services.AddSingleton<RadioReclaimService>();
         services.AddSingleton<

@@ -85,7 +85,6 @@ internal sealed record StationEngineFeatureMatrix(
     bool Spots = false,
     bool Rotator = false,
     bool Hamclock = false,
-    bool Kiwi = false,
     bool Digimodes = false,
     bool Midi = false,
     bool Admin = false,

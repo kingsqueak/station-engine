@@ -245,7 +245,7 @@ public sealed class OfflinePreviewDspEngine : IDspEngine, ITxAudioPluginHost, IT
     }
     public void SetTxInjectedAudioBypass(bool bypass) => _tx.SetTxInjectedAudioBypass(bypass);
     public void SetTxRecordingBypass(bool bypass) => _tx.SetTxRecordingBypass(bypass);
-    public void SetTxRogerBeepBypass(bool bypass) => _tx.SetTxRogerBeepBypass(bypass);
+    public void SetTxToneBypass(bool bypass) => _tx.SetTxToneBypass(bypass);
 
     public void SetTxFilter(int lowHz, int highHz) => _tx.SetTxFilter(lowHz, highHz);
 

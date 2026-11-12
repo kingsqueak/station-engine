@@ -182,11 +182,11 @@ public sealed class TxAudioIngest : IDisposable
     private const int FreeDvTxTailDrainSlackMs = 120;   // headroom over the measured backlog
     private const int FreeDvTxTailCeilingMs = 1200;     // absolute runaway cap on the drain
     private const int FreeDvTxTailGuardMs = 160;        // post-drain FIFO flush hold
-    private const int RogerBeepDspFlushCeilingMs = 200;
-    private const int RogerBeepFlushSilentBlocks = 2;
-    private const float RogerBeepFlushIqThreshold = 0.001f; // -60 dBFS
-    private const int RogerBeepTransportDrainTimeoutMs = 500;
-    private const int RogerBeepTailGuardMs = 120;
+    private const int ToneTailDspFlushCeilingMs = 200;
+    private const int ToneTailFlushSilentBlocks = 2;
+    private const float ToneTailFlushIqThreshold = 0.001f; // -60 dBFS
+    private const int ToneTailTransportDrainTimeoutMs = 500;
+    private const int ToneTailGuardMs = 120;
     // Voice unkey tail. Only speech still inside TXA (EstimateVoiceTxDspLatencyMs)
     // and the host transport backlog may lengthen a release; the rest is a small
     // fixed margin, so the radio returns to receive without a felt hang.
@@ -748,7 +748,7 @@ public sealed class TxAudioIngest : IDisposable
         _fmBurst.Cancel();
         if (!_fmBurstBypassApplied) return;
         _fmBurstBypassApplied = false;
-        try { engine?.SetTxRogerBeepBypass(false); }
+        try { engine?.SetTxToneBypass(false); }
         catch (Exception ex) { _log.LogWarning(ex, "tx.fm.burst bypass restore threw"); }
     }
 
@@ -1056,7 +1056,7 @@ public sealed class TxAudioIngest : IDisposable
                 if (shouldAbort?.Invoke() == true) return VoiceTailGaveUp("aborted in DSP flush");
                 ClockTailBlock(engine, blockSize, iqOut, ref iqPeak, out float blockPeak, hasAmCarrier);
                 flushBlocks++;
-                quietBlocks = b >= minFlushBlocks && blockPeak <= RogerBeepFlushIqThreshold
+                quietBlocks = b >= minFlushBlocks && blockPeak <= ToneTailFlushIqThreshold
                     ? quietBlocks + 1
                     : 0;
                 if (quietBlocks >= VoiceTailQuietBlocks) break;
@@ -1071,7 +1071,7 @@ public sealed class TxAudioIngest : IDisposable
             int transportBudgetMs = Math.Clamp(
                 backlogSamples < 0 ? 5000
                     : backlogSamples / TxLatencyGovernor.SamplesPerMs + 250,
-                RogerBeepTransportDrainTimeoutMs, 5000);
+                ToneTailTransportDrainTimeoutMs, 5000);
             long transportStop = _stopwatchTicks()
                 + (long)(freq * transportBudgetMs / 1000.0);
             do
@@ -1301,9 +1301,9 @@ public sealed class TxAudioIngest : IDisposable
     }
 
     /// <summary>
-    /// Shared end of a synthesized release tail (roger beep, CW ID): clock
+    /// Shared end of a synthesized release tail (CW ID): clock
     /// silence through TXA until its delayed output decays (two quiet blocks
-    /// after TXA's latency, bounded by <see cref="RogerBeepDspFlushCeilingMs"/>
+    /// after TXA's latency, bounded by <see cref="ToneTailDspFlushCeilingMs"/>
     /// beyond it), let the P1/P2
     /// transport drain, then hold a short guard so the last IQ reaches the
     /// radio before the wire MOX bit drops. <paramref name="shouldAbort"/>
@@ -1331,7 +1331,7 @@ public sealed class TxAudioIngest : IDisposable
                 return new TxTailFlush(emittedBlocks, flushBlocks, DspFlushed: false, TransportDrained: false);
             emittedBlocks += ClockTailBlock(engine, blockSize, iqOut, ref iqPeak, out float blockPeak);
             flushBlocks++;
-            silentBlocks = b >= latencyBlocks && blockPeak <= RogerBeepFlushIqThreshold
+            silentBlocks = b >= latencyBlocks && blockPeak <= ToneTailFlushIqThreshold
                 ? silentBlocks + 1
                 : 0;
             deadline += periodTicks;
@@ -1339,15 +1339,15 @@ public sealed class TxAudioIngest : IDisposable
             {
                 deadline = System.Diagnostics.Stopwatch.GetTimestamp();
             }
-            if (silentBlocks >= RogerBeepFlushSilentBlocks) break;
+            if (silentBlocks >= ToneTailFlushSilentBlocks) break;
         }
-        bool dspFlushed = silentBlocks >= RogerBeepFlushSilentBlocks;
+        bool dspFlushed = silentBlocks >= ToneTailFlushSilentBlocks;
         if (shouldAbort?.Invoke() == true)
             return new TxTailFlush(emittedBlocks, flushBlocks, dspFlushed, TransportDrained: false);
 
         bool transportDrained = _drainTxTransport?.Invoke(
-            TimeSpan.FromMilliseconds(RogerBeepTransportDrainTimeoutMs)) ?? true;
-        SleepUnlessAborted(RogerBeepTailGuardMs, shouldAbort);
+            TimeSpan.FromMilliseconds(ToneTailTransportDrainTimeoutMs)) ?? true;
+        SleepUnlessAborted(ToneTailGuardMs, shouldAbort);
         return new TxTailFlush(emittedBlocks, flushBlocks, dspFlushed, transportDrained);
     }
 
@@ -1361,9 +1361,9 @@ public sealed class TxAudioIngest : IDisposable
     }
 
     /// <summary>Blocks a synthesized-tail flush may run past TXA's latency
-    /// waiting for quiet output (<see cref="RogerBeepDspFlushCeilingMs"/>).</summary>
+    /// waiting for quiet output (<see cref="ToneTailDspFlushCeilingMs"/>).</summary>
     private static int TailFlushCeilingBlocks(int blockSize) =>
-        Math.Max(1, TxRateHz * RogerBeepDspFlushCeilingMs / 1000 / blockSize);
+        Math.Max(1, TxRateHz * ToneTailDspFlushCeilingMs / 1000 / blockSize);
 
     private const int TailAbortPollMs = 10;
 
@@ -1433,7 +1433,7 @@ public sealed class TxAudioIngest : IDisposable
     /// Prime WDSP TXA with silence immediately after MOX-on, before the radio
     /// wire key is asserted. Some TXA backends retain output from the previous
     /// tail; this clocks that state through and discards it so the next over
-    /// starts with fresh mic audio, not the previous roger beep, CW ID or
+    /// starts with fresh mic audio, not the previous CW ID or
     /// speech. At least <see cref="KeyDownPrimeBlocks"/> blocks and TXA's
     /// latency, then until the output is quiet.
     /// </summary>
@@ -1498,10 +1498,10 @@ public sealed class TxAudioIngest : IDisposable
                     if (blockPeak > iqPeak) iqPeak = blockPeak;
                     blocks++;
                 }
-                quietBlocks = processed > latencyBlocks && blockPeak <= RogerBeepFlushIqThreshold
+                quietBlocks = processed > latencyBlocks && blockPeak <= ToneTailFlushIqThreshold
                     ? quietBlocks + 1
                     : 0;
-                if (processed >= KeyDownPrimeBlocks && quietBlocks >= RogerBeepFlushSilentBlocks)
+                if (processed >= KeyDownPrimeBlocks && quietBlocks >= ToneTailFlushSilentBlocks)
                     break;
             }
 
@@ -1509,7 +1509,7 @@ public sealed class TxAudioIngest : IDisposable
                 * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
             _log.LogInformation(
                 "tx.keyDownPrime beforeWireKey blocks={Blocks} latencyBlocks={LatencyBlocks} iqPeak={IqPeak:F4} quietAtEnd={QuietAtEnd} elapsedMs={Elapsed:F2}",
-                blocks, latencyBlocks, iqPeak, quietBlocks >= RogerBeepFlushSilentBlocks, primeMs);
+                blocks, latencyBlocks, iqPeak, quietBlocks >= ToneTailFlushSilentBlocks, primeMs);
             return blocks > 0;
         }
         catch (Exception ex)
@@ -2255,8 +2255,8 @@ public sealed class TxAudioIngest : IDisposable
                 if (_audioModem.Active)
                     _audioModem.ProcessTx(new Span<float>(_scratchMic, 0, blockSize));
                 // FM access tone burst: replaces (mutes) the mic for its
-                // duration, with the speech processors bypassed like the
-                // roger beep. Held off during the pre-key mute so the whole
+                // duration, with the speech processors bypassed (tone
+                // bypass). Held off during the pre-key mute so the whole
                 // burst goes out after the amp relay has settled.
                 else if (moxNow && _fmBurst.IsActive && CarriesCwId(source))
                 {
@@ -2267,7 +2267,7 @@ public sealed class TxAudioIngest : IDisposable
                     {
                         if (!_fmBurstBypassApplied)
                         {
-                            engine.SetTxRogerBeepBypass(true);
+                            engine.SetTxToneBypass(true);
                             _fmBurstBypassApplied = true;
                         }
                         _fmBurst.Render(new Span<float>(_scratchMic, 0, blockSize));

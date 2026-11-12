@@ -571,7 +571,6 @@ public partial class Program
         var bandPlan = app.Services.GetRequiredService<BandPlanService>();
         bandPlan.PlanChanged += () => hub.BroadcastBandPlanChanged(bandPlan.CurrentRegion.Id);
 
-        // SimpleHPSDR fork: Public Listening is never activated.
     }
 }
 

@@ -99,16 +99,6 @@ public interface IDspEngine : IDisposable
     /// <summary>Close a channel opened by <see cref="OpenRxDisplayChannel"/>.</summary>
     void CloseRxDisplayChannel(int channelId) => CloseChannel(channelId);
 
-    /// <summary>
-    /// Mark an RX channel (opened by <see cref="OpenChannel"/>) as not the
-    /// operator's: the operator's manual notches (<see cref="SetNotches"/>)
-    /// and FM receive settings (<see cref="SetFmConfig"/>) are never applied
-    /// to it, and what they already set at open is reset to stock. Used for
-    /// Public Listening guest receivers. Operator channels are unaffected;
-    /// the mark ends when the channel closes. Engines without those chains
-    /// may no-op.
-    /// </summary>
-    void IsolateChannelFromOperatorSettings(int channelId) { }
     void FeedIq(int channelId, ReadOnlySpan<double> interleavedIqSamples);
     void SetMode(int channelId, RxMode mode);
     void SetFilter(int channelId, int lowHz, int highHz);
@@ -445,9 +435,9 @@ public interface IDspEngine : IDisposable
     void SetTxRecordingBypass(bool bypass) { }
 
     /// <summary>Temporarily bypass speech-only TX processing while a synthesized
-    /// roger beep is clocked through TXA. Implementations must preserve the
+    /// tone (the FM access burst) is clocked through TXA. Implementations must preserve the
     /// independent mode-owned digital bypass state when this window closes.</summary>
-    void SetTxRogerBeepBypass(bool bypass) { }
+    void SetTxToneBypass(bool bypass) { }
 
     /// <summary>Set TXA bandpass (SetTXABandpassFreqs). <paramref name="lowHz"/>
     /// / <paramref name="highHz"/> are signed Hz around baseband — LSB-style

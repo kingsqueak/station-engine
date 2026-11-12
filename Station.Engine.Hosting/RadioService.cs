@@ -584,16 +584,11 @@ public sealed partial class RadioService : IDisposable
     // in which case P1 frames carry no RX audio (legacy behaviour).
     private readonly SimpleHPSDR.Protocol1.IRxAudioSource? _rxAudioSource;
 
-    // Optional non-hardware external slice receiver. When present its entry is
-    // appended to the projected receiver list (reserved index
-    // WireContract.KiwiReceiverIndex) and a change re-broadcasts state. Null in
-    // tests / hosts without the Kiwi feature wired.
-    private readonly IExternalReceiverSource _externalReceiverSource;
     private readonly int? _defaultConnectSampleRateHz;
 
     public bool ReceiveOnly { get; }
 
-    public RadioService(ILoggerFactory loggerFactory, DspSettingsStore dspSettingsStore, PaSettingsStore paStore, FilterPresetStore? filterPresetStore = null, SimpleHPSDR.Protocol1.ITxIqSource? txIqSource = null, PreferredRadioStore? preferredRadioStore = null, PsSettingsStore? psStore = null, RadioStateStore? radioStateStore = null, CwSettingsStore? cwSettingsStore = null, IInitialTxAudioConfigSource? initialTxAudioConfigSource = null, AntennaSettingsStore? antennaStore = null, AudioSettingsStore? audioStore = null, Nr3ModelStore? nr3ModelStore = null, Hl2GpioSettingsStore? hl2GpioStore = null, BandMemoryStore? bandMemoryStore = null, IExternalReceiverSource? externalReceiverSource = null, SimpleHPSDR.Protocol1.IRxAudioSource? rxAudioSource = null, RfFilterSettingsStore? rfFilterStore = null, IConfiguration? configuration = null, IRadioDiscovery? p1Discovery = null, TransverterSettingsStore? transverterSettingsStore = null, LayoutStore? layoutStore = null, IBandPlanService? bandPlan = null, StationReceiveOnlyPolicy? receiveOnlyPolicy = null)
+    public RadioService(ILoggerFactory loggerFactory, DspSettingsStore dspSettingsStore, PaSettingsStore paStore, FilterPresetStore? filterPresetStore = null, SimpleHPSDR.Protocol1.ITxIqSource? txIqSource = null, PreferredRadioStore? preferredRadioStore = null, PsSettingsStore? psStore = null, RadioStateStore? radioStateStore = null, CwSettingsStore? cwSettingsStore = null, IInitialTxAudioConfigSource? initialTxAudioConfigSource = null, AntennaSettingsStore? antennaStore = null, AudioSettingsStore? audioStore = null, Nr3ModelStore? nr3ModelStore = null, Hl2GpioSettingsStore? hl2GpioStore = null, BandMemoryStore? bandMemoryStore = null, SimpleHPSDR.Protocol1.IRxAudioSource? rxAudioSource = null, RfFilterSettingsStore? rfFilterStore = null, IConfiguration? configuration = null, IRadioDiscovery? p1Discovery = null, TransverterSettingsStore? transverterSettingsStore = null, LayoutStore? layoutStore = null, IBandPlanService? bandPlan = null, StationReceiveOnlyPolicy? receiveOnlyPolicy = null)
     {
         ReceiveOnly = receiveOnlyPolicy?.Enabled ?? false;
         _loggerFactory = loggerFactory;
@@ -647,8 +642,6 @@ public sealed partial class RadioService : IDisposable
             _layoutStore.ActiveTransverterEnabledChanged += OnActiveTransverterSelectionChanged;
         // External slice mutations re-project and re-broadcast state exactly
         // like a hardware DDC mutation.
-        _externalReceiverSource = externalReceiverSource ?? new NullExternalReceiverSource();
-        _externalReceiverSource.ReceiverChanged += () => StateChanged?.Invoke(Snapshot());
         _txIqSource = txIqSource;
         _rxAudioSource = rxAudioSource;
         // Seed the on-board CW keyer config from persisted settings so a
@@ -7923,12 +7916,6 @@ public sealed partial class RadioService : IDisposable
                 Agc: e.Agc, AgcTopDb: e.AgcTopDb, AutoAgcEnabled: e.AutoAgcEnabled, AgcOffsetDb: e.AgcOffsetDb,
                 Nr: NormalizeNrConfig(e.Nr with { NrMode = e.NrMode })));
         }
-        // Non-hardware KiwiSDR slice (reserved index KiwiReceiverIndex). Appended
-        // out of the contiguous DDC run — it is a remote receiver, not a DDC, so
-        // it never participates in the no-gap cascade above. Null when disabled.
-        var kiwi = _externalReceiverSource.GetReceiver();
-        if (kiwi is not null)
-            list.Add(kiwi);
         return list;
     }
 

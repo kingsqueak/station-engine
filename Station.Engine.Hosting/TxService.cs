@@ -191,7 +191,7 @@ public sealed class TxService
 
 
     /// <summary>Voice (phone) modulation modes: the modes whose TX chain carries
-    /// operator speech. Shared by the pre-key delay, roger beep and CW ID.</summary>
+    /// operator speech. Shared by the pre-key delay and CW ID.</summary>
     internal static bool IsVoiceTxMode(RxMode mode) =>
         mode is RxMode.LSB or RxMode.USB or RxMode.AM or RxMode.SAM or RxMode.DSB or RxMode.FM;
 
@@ -1029,7 +1029,7 @@ public sealed class TxService
         }
         catch (Exception ex) { _log.LogWarning(ex, "tx.tail.cwid.failed"); }
         // An emergency release is waiting for the transition lock: drop the
-        // wire now instead of running the voice tail or roger beep first.
+        // wire now instead of running the voice tail first.
         if (IsReleaseTailAbortRequested())
         {
             _log.LogWarning("tx.tail skipped: emergency release pending");
@@ -1516,7 +1516,7 @@ public sealed class TxService
 
     /// <summary>
     /// Dead-man release for the out-of-process product-plugin lease. Unlike a
-    /// normal operator release this deliberately skips voice/modem/roger-beep
+    /// normal operator release this deliberately skips voice/modem
     /// tails: liveness loss must drop the wire before one 20 ms audio block.
     /// Source ownership is still enforced, and an already-idle transmitter is
     /// a successful no-op.
@@ -1557,7 +1557,7 @@ public sealed class TxService
     /// <summary>
     /// Emergency convergence for an authenticated remote session whose
     /// essential transport disappeared while it held transmit authority.
-    /// Unlike an operator key-up this bypasses voice, modem, and roger-beep
+    /// Unlike an operator key-up this bypasses voice and modem
     /// tails and clears every host-driven transmit intent (MOX, TUN, and
     /// two-tone) regardless of the UI ownership tag used by the remote API.
     /// The normal transition lock makes this atomic with key-down, so a request

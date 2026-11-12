@@ -178,7 +178,7 @@ public static class StationEngineEndpoints
         // raw-ADC snapshots coming for a few seconds and returns the latest row.
         endpoints.MapGet("/api/wideband/tool", (DspPipelineService pipeline) =>
         {
-            if (!pipeline.PublicWidebandCapable)
+            if (!pipeline.WidebandCapable)
                 return Results.Conflict(new { error = "The wideband view needs a Protocol 2 radio." });
             pipeline.WidebandTool.Demand();
             return pipeline.WidebandTool.Snapshot() is { } row
@@ -268,10 +268,6 @@ public static class StationEngineEndpoints
         endpoints.MapEngineLogDiagnosticsEndpoint();
         endpoints.MapEngineRadioDiagnosticsEndpoint();
         endpoints.MapEngineOperatorDiagnosticsEndpoint();
-        // Public Listening for the Zeus Link product host (ADR-0010): private,
-        // token-gated loopback routes. The Desktop host keeps its in-process
-        // feed and never maps these.
-
         endpoints.Map(
             "/ws",
             context => AttachWebSocketAsync(
@@ -292,16 +288,11 @@ public static class StationEngineEndpoints
             return;
         }
 
-        // ?feed=listener is the product host's Public Listening feed: a
-        // restricted, token-gated loopback socket that is never an operator
-        // client (it never joins StreamingHub._clients). Any other feed value
-        // is refused rather than falling through to an operator session.
-        // SimpleHPSDR fork: no Public Listening, so every feed socket is refused.
-        if (PublicListen.PublicListenStationEndpoints.IsFeedSocketRequest(context.Request))
+        // Zeus's ?feed= sockets (Public Listening) don't exist in this fork:
+        // refuse them rather than fall through to an operator session.
+        if (context.Request.Query.ContainsKey("feed"))
         {
-            {
-                context.Response.StatusCode = StatusCodes.Status400BadRequest;
-            }
+            context.Response.StatusCode = StatusCodes.Status400BadRequest;
             return;
         }
 
@@ -330,7 +321,7 @@ public static class StationEngineEndpoints
         {
             context.Response.StatusCode = StatusCodes.Status400BadRequest;
             await context.Response.WriteAsync(
-                $"displayRxId must be an integer from 1 through {WireContract.MaxReceiverSlots - 1}",
+                $"displayRxId must be an integer from 1 through {WireContract.MaxReceivers - 1}",
                 context.RequestAborted).ConfigureAwait(false);
             return;
         }
@@ -403,7 +394,7 @@ public static class StationEngineEndpoints
                 CultureInfo.InvariantCulture,
                 out var parsed)
             || parsed < 1
-            || parsed >= WireContract.MaxReceiverSlots)
+            || parsed >= WireContract.MaxReceivers)
             return false;
 
         displayRxId = parsed;

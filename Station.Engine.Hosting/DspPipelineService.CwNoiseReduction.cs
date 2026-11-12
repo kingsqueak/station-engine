@@ -42,8 +42,7 @@ public partial class DspPipelineService
         }
     }
 
-    // Native close/open and guest rebuilding must not hold the operator control
-    // lock. Reconcile after releasing _guestLock, which also avoids lock inversion.
+    // Native close/open must not hold the operator control lock.
     private void ReconcileCwNoiseReductionAfterRerate(IDspEngine engine)
     {
         lock (_engineLock)

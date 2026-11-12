@@ -1110,25 +1110,11 @@ public static class WireContract
     /// enabled by the little-endian 16-bit mask at command bytes 7/8. Other
     /// boards retain their verified eight-DDC capacity.</summary>
     public const int Protocol2MaxDdc = 10;
-
-    /// <summary>Reserved receiver index for the non-hardware KiwiSDR slice. It
-    /// sits just above the hardware receiver range so RX10 remains available to
-    /// Protocol 3-capable radios. Frames for the Kiwi receiver are broadcast with
-    /// this value as their <c>RxId</c>; the frontend routes them through the same
-    /// per-RX render path as a hardware DDC and labels the entry from
-    /// <see cref="ReceiverDto.Name"/> ("Kiwi") instead of "RX{Index+1}".</summary>
-    public const int KiwiReceiverIndex = MaxReceivers;
-
-    /// <summary>Total receiver-index slots on the wire, including the optional
-    /// Kiwi software receiver at <see cref="KiwiReceiverIndex"/>.</summary>
-    public const int MaxReceiverSlots = KiwiReceiverIndex + 1;
 }
 
 /// <summary>Per-receiver (per-DDC) state for the multi-DDC model. Index 0 is
 /// RX1, index 1 is RX2, and indices ≥ 2 are additional DDCs (up to
-/// <see cref="WireContract.MaxReceivers"/> − 1). The optional Kiwi software
-/// receiver uses <see cref="WireContract.KiwiReceiverIndex"/> outside that
-/// hardware range.
+/// <see cref="WireContract.MaxReceivers"/> − 1).
 /// <para>The first usable dual-receive path mirrors the <see cref="StateDto"/>
 /// flat RX1 fields (<see cref="StateDto.VfoHz"/> etc.) into index 0 and the
 /// RX2 / VFO-B fields (<see cref="StateDto.VfoBHz"/> etc.) into index 1;
@@ -1156,10 +1142,8 @@ public sealed record ReceiverDto(
     // RX2 keypad controls.
     bool Muted = false,
     // Optional human-facing label. Null for hardware DDC receivers — the UI
-    // derives their label from the index ("RX{Index+1}"). Set to a name (e.g.
-    // "Kiwi") for non-hardware software receivers such as the KiwiSDR slice that
-    // occupy a reserved high index (WireContract.KiwiReceiverIndex). Defaulted so
-    // pre-name wire frames deserialize unchanged.
+    // derives their label from the index ("RX{Index+1}"). Defaulted so pre-name
+    // wire frames deserialize unchanged.
     string? Name = null,
     // Per-receiver split dial. TX receiver ownership remains independent:
     // TxReceiverIndex chooses the receiver whose mode/filter context is used,
@@ -2878,11 +2862,6 @@ public sealed record DisplaySettingsDto(
     double DisplayMaxFrameRateHz = 30.0,
     int DisplayDecimation = 1,
     int WaterfallUpdatePeriod = 1,
-    // Wideband signal markers (display-only): when on, the engine runs the
-    // deterministic wideband signal detector alongside the spectrum analyzer
-    // and the overlay is available to display clients. Default off — this is
-    // an opt-in operator aid layered on the wideband display.
-    bool WidebandSignalMarkersEnabled = false,
     string? WaterfallColormap = null,
     double? WaterfallScrollSpeed = null,
     // Custom waterfall palette ("custom" colormap) — Thetis's Low / Mid / High
@@ -2934,7 +2913,6 @@ public sealed record DisplaySettingsSetRequest(
     double? DisplayMaxFrameRateHz = null,
     int? DisplayDecimation = null,
     int? WaterfallUpdatePeriod = null,
-    bool? WidebandSignalMarkersEnabled = null,
     string? WaterfallColormap = null,
     double? WaterfallScrollSpeed = null,
     // Custom waterfall palette ("custom" colormap) — Thetis's Low / Mid / High
@@ -2958,14 +2936,6 @@ public sealed record DisplaySettingsSetRequest(
     // the stored choice unchanged.
     int? PanadapterRowPoints = null);
 
-// One detected wideband signal, as reported by the engine's deterministic
-// wideband signal detector. Frequencies are absolute Hz in the wideband ADC
-// baseband (0 .. sampleRate/2); levels are dB against the analyzer's
-// calibrated reference. Additive wire surface: polled over REST, never
-// embedded in the binary DisplayFrame stream.
-// Point-in-time snapshot of detected wideband signals plus the viewport they
-// were detected under, so a display client can project markers into pixels
-// and drop snapshots that went stale (transport off, markers toggled off).
 // Server-side mirror of the frontend Signal Intelligence weak-signal display
 // controls. The DSP math remains in simplehpsdr-web's signal-estimator; this DTO lets
 // the active operator profile and tuning follow the radio across browsers and

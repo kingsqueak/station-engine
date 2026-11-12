@@ -15,12 +15,10 @@ internal static class ReceiveOnlyRuntime
         bool local = context.Connection.RemoteIpAddress is { } address && IPAddress.IsLoopback(address);
         bool receiveMutation = HttpMethods.IsPost(request.Method)
             && (path.Equals("/api/vfo") || path.Equals("/api/connect") || path.Equals("/api/disconnect"));
-        bool privateFeed = path.StartsWithSegments("/api/station/public-listen")
-            || (path.Equals("/ws") && request.Query["feed"] == "listener");
         bool read = HttpMethods.IsGet(request.Method) && path.StartsWithSegments("/api");
         // The private engine accepts only the receive controls needed by its owner.
         // Generic operator sockets and settings cannot enable alternate radio transports.
-        if (!local || request.Headers.ContainsKey("Origin") || !(read || receiveMutation || privateFeed))
+        if (!local || request.Headers.ContainsKey("Origin") || !(read || receiveMutation))
         {
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
             await context.Response.WriteAsJsonAsync(new { error = "This station engine is receive-only." });

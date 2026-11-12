@@ -79,7 +79,6 @@ internal static class DatabaseBackupPolicy
             ["godseye_feature_settings"] =
                 [new([], ["GoogleMapsApiKey", "CesiumIonToken", "TomTomApiKey"], [])],
             ["godseye_layer_settings"] = [new([], ["ApiKey"], [])],
-            ["kiwi_settings"] = [new([], ["Password"], ["Url"])],
         };
 
     /// <summary>Secret JSON properties inside JSON documents, keyed by backup

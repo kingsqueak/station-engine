@@ -28,7 +28,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Station.AudioRing\Station.AudioRing.csproj" />
-    <ProjectReference Include="..\Station.AudioIpc.Spike\Station.AudioIpc.Spike.csproj" />
     <ProjectReference Include="..\SimpleHPSDR.Contracts\SimpleHPSDR.Contracts.csproj" />
     <ProjectReference Include="..\SimpleHPSDR.Protocol1\SimpleHPSDR.Protocol1.csproj" />
     <ProjectReference Include="..\SimpleHPSDR.Protocol2\SimpleHPSDR.Protocol2.csproj" />

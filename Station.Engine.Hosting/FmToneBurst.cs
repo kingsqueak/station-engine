@@ -15,8 +15,8 @@ namespace SimpleHPSDR.Server;
 /// is paced by the real TX audio clock and never keys the transmitter itself.
 ///
 /// <para>Level. The burst is injected at the mic, ahead of the WDSP panel
-/// (mic) gain, with the speech processors bypassed the same way as the roger
-/// beep (SetTxRogerBeepBypass: leveler / compressor / CFC / CESSB / phase
+/// (mic) gain, with the speech processors bypassed by the tone bypass
+/// (SetTxToneBypass: leveler / compressor / CFC / CESSB / phase
 /// rotator off). What remains before the FM modulator is the panel gain, the
 /// ALC (a limiter whose output target is 1.0 FS) and FM pre-emphasis. The
 /// sample amplitude is therefore <see cref="TargetAlcPeak"/> divided by the
@@ -31,8 +31,8 @@ namespace SimpleHPSDR.Server;
 /// 5 kHz deviation — typical 1750 Hz burst deviation, and the most the chain
 /// allows, since the ALC caps the level ahead of the post-limiter
 /// pre-emphasis. With pre-emphasis off (flat TX) it is 0.9 of the deviation
-/// (about 4.5 kHz). The roger beep uses a fixed 0.60 for a 1 kHz courtesy
-/// tone; a burst must be as strong as the chain permits to open a repeater.</para>
+/// (about 4.5 kHz). A burst must be as strong as the chain permits to open
+/// a repeater.</para>
 ///
 /// <para>Thread-safety: all members are called under TxAudioIngest's
 /// <c>_sync</c> (or before the ingest exists); not independently locked.</para>

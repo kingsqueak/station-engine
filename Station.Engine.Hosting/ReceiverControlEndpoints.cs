@@ -18,39 +18,17 @@ public static class ReceiverControlEndpoints
     {
         var log = endpoints.ServiceProvider.GetRequiredService<ILogger<object>>();
 
-        // Configure any receiver by index for full multi-DDC (RX1=0, RX2=1,
-        // RX3+=2..). The reserved external slot is routed through the product-
-        // neutral control port; standalone binds that port to a no-op.
+        // Configure any receiver by index for full multi-DDC (RX1=0, RX2=1, RX3+=2..).
         endpoints.MapPost("/api/receivers/{index:int}", (
             int index,
             ReceiverSetRequest req,
-            RadioService radio,
-            IExternalReceiverControlPort external) =>
+            RadioService radio) =>
         {
-            if (index < 0 || (index >= WireContract.MaxReceivers && index != WireContract.KiwiReceiverIndex))
+            if (index < 0 || index >= WireContract.MaxReceivers)
                 return Results.BadRequest(new
                 {
-                    error = $"receiver index out of range (0..{WireContract.KiwiReceiverIndex})",
+                    error = $"receiver index out of range (0..{WireContract.MaxReceivers - 1})",
                 });
-
-            if (index == WireContract.KiwiReceiverIndex)
-            {
-                log.LogInformation(
-                    "api.receivers.kiwi vfoHz={VfoHz} mode={Mode} low={Low} high={High}",
-                    req.VfoHz,
-                    req.Mode,
-                    req.FilterLowHz,
-                    req.FilterHighHz);
-                external.SetTuning(
-                    req.VfoHz,
-                    req.Mode,
-                    req.FilterLowHz,
-                    req.FilterHighHz,
-                    radio.Snapshot().CtunEnabled);
-                if (req.AfGainDb.HasValue)
-                    external.SetAfGainDb(req.AfGainDb.Value);
-                return Results.Ok(radio.Snapshot());
-            }
 
             if (req.Agc is { } agc && (!Enum.IsDefined(agc.Mode) || (agc.FixedGainDb is double fixedGain && !double.IsFinite(fixedGain))))
                 return Results.BadRequest(new { error = "invalid AGC configuration" });
@@ -85,24 +63,18 @@ public static class ReceiverControlEndpoints
         endpoints.MapPost("/api/receivers/{index:int}/mute", (
             int index,
             MuteSetRequest req,
-            RadioService radio,
-            IExternalReceiverControlPort external) =>
+            RadioService radio) =>
         {
-            if (index < 0 || (index >= WireContract.MaxReceivers && index != WireContract.KiwiReceiverIndex))
+            if (index < 0 || index >= WireContract.MaxReceivers)
                 return Results.BadRequest(new
                 {
-                    error = $"receiver index out of range (0..{WireContract.KiwiReceiverIndex})",
+                    error = $"receiver index out of range (0..{WireContract.MaxReceivers - 1})",
                 });
 
             log.LogInformation(
                 "api.receivers.mute index={Index} muted={Muted}",
                 index,
                 req.Muted);
-            if (index == WireContract.KiwiReceiverIndex)
-            {
-                external.SetMuted(req.Muted);
-                return Results.Ok(radio.Snapshot());
-            }
 
             return Results.Ok(radio.SetReceiverMuted(index, req.Muted));
         });
@@ -119,17 +91,14 @@ public static class ReceiverControlEndpoints
             int index,
             RadioLoSetRequest req,
             RadioService radio,
-            DspPipelineService pipeline,
-            IExternalReceiverControlPort external) =>
+            DspPipelineService pipeline) =>
         {
-            if (index < 0 || (index >= WireContract.MaxReceivers && index != WireContract.KiwiReceiverIndex))
+            if (index < 0 || index >= WireContract.MaxReceivers)
                 return Results.BadRequest(new
                 {
-                    error = $"receiver index out of range (0..{WireContract.KiwiReceiverIndex})",
+                    error = $"receiver index out of range (0..{WireContract.MaxReceivers - 1})",
                 });
-            bool validFrequency = index == WireContract.KiwiReceiverIndex
-                ? req.Hz is >= 0 and <= TransverterFrequencyConverter.MaximumRadioFrequencyHz
-                : radio.IsExternalFrequencyAvailable(req.Hz, allowZero: true);
+            bool validFrequency = radio.IsExternalFrequencyAvailable(req.Hz, allowZero: true);
             if (!validFrequency)
             {
                 log.LogInformation(
@@ -140,11 +109,6 @@ public static class ReceiverControlEndpoints
             }
 
             log.LogInformation("api.receivers.lo index={Index} hz={Hz}", index, req.Hz);
-            if (index == WireContract.KiwiReceiverIndex)
-            {
-                external.SetCenter(req.Hz);
-                return Results.Ok(radio.Snapshot());
-            }
             if (index <= 0)
                 return Results.Ok(radio.SetRadioLo(req.Hz));
 
@@ -192,8 +156,7 @@ public static class ReceiverControlEndpoints
         endpoints.MapPost("/api/rx/zoom", (
             SpectralZoomSetRequest req,
             RadioService radio,
-            DspPipelineService pipeline,
-            IExternalReceiverControlPort external) =>
+            DspPipelineService pipeline) =>
         {
             log.LogInformation(
                 "api.rx.zoom level={Level} centerHz={CenterHz}",

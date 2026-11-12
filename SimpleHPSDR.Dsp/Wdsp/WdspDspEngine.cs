@@ -463,7 +463,7 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
     // USB family positive) the same way RXA does through ApplyBandpassForMode.
     private RxaMode _txCurrentMode = RxaMode.USB;
     private bool _txDigitalBypass;
-    private bool _txRogerBeepBypass;
+    private bool _txToneBypass;
     private bool _txInjectedAudioBypass;
     private bool _txRecordingBypass;
     private double _txPanelGain = 1.0;
@@ -485,7 +485,7 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
     private readonly object _fmDevPeakLock = new();
     private double _fmDevPeakHoldHz;
     // Operator's Compressor on/off, last applied via SetTxLeveling. Digital TX
-    // and roger-beep bypasses force only the effective run bit off; this cache
+    // and tone bypasses force only the effective run bit off; this cache
     // preserves the operator's intent for exact voice-mode restore while the
     // configured compressor gain remains untouched. Seeded false to match the
     // TXA-open TxLevelingConfig default. Written/read under _txaLock.
@@ -749,11 +749,6 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
     // _notchDbUnavailable latches if the bundled libwdsp predates the notch-DB
     // exports (mirrors the SBNR guard) so we don't spam the worker with throws.
     private readonly object _notchLock = new();
-    // RX channels that are not the operator's (Public Listening guests): the
-    // operator's manual notches and FM receive settings are never applied to
-    // them. Written under _notchLock inside the native lifecycle section;
-    // removed when the channel closes.
-    private readonly ConcurrentDictionary<int, byte> _isolatedChannels = new();
     private readonly List<NotchDto> _manualNotches = new();
     private double _notchTuneFreqHz;
     private bool _notchDbUnavailable;
@@ -1131,29 +1126,8 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
     {
         if (!_channels.TryRemove(channelId, out var state)) return;
         Interlocked.CompareExchange(ref _primaryRxaChannelId, -1, channelId);
-        // Before the native slot can be reused by a new (operator) channel.
-        _isolatedChannels.TryRemove(channelId, out _);
         StopChannel(state);
     }
-
-    public void IsolateChannelFromOperatorSettings(int channelId)
-    {
-        if (_disposed != 0) return;
-        RunNativeLifecycleCriticalSection(() =>
-        {
-            if (!_channels.ContainsKey(channelId)) return;
-            lock (_notchLock)
-            {
-                _isolatedChannels[channelId] = 0;
-                ClearNotchesOnChannelLocked(channelId);
-            }
-            // Stock FM receive (no operator deviation / tone squelch / notch
-            // tone); the operator's later SetFmConfig skips this channel.
-            ApplyFmRx(channelId, FmConfig.Default.Normalized());
-        });
-    }
-
-    internal bool IsChannelIsolatedForTests(int channelId) => _isolatedChannels.ContainsKey(channelId);
 
     public void CloseRxDisplayChannel(int channelId) => CloseChannel(channelId);
 
@@ -1647,7 +1621,7 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
             ApplyNoiseReductionLocked(state.Id, nr, state);
             nrApplied = true;
         });
-        if (!nrApplied && !_isolatedChannels.ContainsKey(state.Id))
+        if (!nrApplied)
             ApplyNotchesToChannel(state.Id);
         ApplyReceiveEqualizer(state);
         ApplyAudioPeakFilter(state);
@@ -1951,7 +1925,6 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
                 // stable snapshot even if another SetNotches races in.
                 foreach (var id in _channels.Keys)
                 {
-                    if (_isolatedChannels.ContainsKey(id)) continue;
                     ApplyNotchesToChannelLocked(id);
                 }
             }
@@ -1972,7 +1945,6 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
                 {
                     foreach (var id in _channels.Keys)
                     {
-                        if (_isolatedChannels.ContainsKey(id)) continue;
                         NativeMethods.RXANBPSetTuneFrequency(id, loHz);
                     }
                 }
@@ -3639,14 +3611,14 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
         configuredEnabled
         && !IsDigitalTxMode(_txCurrentMode)
         && !_txDigitalBypass
-        && !_txRogerBeepBypass
+        && !_txToneBypass
         && !_txInjectedAudioBypass
         && !_txRecordingBypass
             ? 1
             : 0;
 
     // Caller holds _txaLock. The Leveler's single run decision: the operator's
-    // switch, parked while TUN/two-tone is keyed, during roger-beep / injected
+    // switch, parked while TUN/two-tone is keyed, during tone burst / injected
     // audio, and in DIGU/DIGL so the data tones leave at exactly the level the
     // app sends. FreeDV is deliberately NOT gated here (only the mode is
     // checked, not _txDigitalBypass): its spec profile relies on the Leveler
@@ -3657,7 +3629,7 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
             txa,
             _txLevelerEnabled
             && !_txLevelerForcedOff
-            && !_txRogerBeepBypass
+            && !_txToneBypass
             && !_txInjectedAudioBypass
             && !_txRecordingBypass
             && !IsDigitalTxMode(_txCurrentMode)
@@ -3988,7 +3960,6 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
             int? monitorId = _monitorChannelId;
             foreach (var id in _channels.Keys)
             {
-                if (_isolatedChannels.ContainsKey(id)) continue;
                 ApplyFmRx(id, clean, id == monitorId);
             }
         });
@@ -4216,13 +4187,13 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
         _log.LogInformation("wdsp.setTxInjectedAudioBypass bypass={Bypass}", bypass);
     }
 
-    public void SetTxRogerBeepBypass(bool bypass)
+    public void SetTxToneBypass(bool bypass)
     {
         if (_disposed != 0) return;
         lock (_txaLock)
         {
-            if (_txRogerBeepBypass == bypass) return;
-            _txRogerBeepBypass = bypass;
+            if (_txToneBypass == bypass) return;
+            _txToneBypass = bypass;
             if (_txaChannelId is int txa)
             {
                 ApplyTxPhaseRotatorLocked(txa, _txPhaseRotatorConfig);
@@ -4231,7 +4202,7 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
                 ApplyTxLevelerRunLocked(txa);
             }
         }
-        _log.LogInformation("wdsp.setTxRogerBeepBypass bypass={Bypass}", bypass);
+        _log.LogInformation("wdsp.setTxToneBypass bypass={Bypass}", bypass);
     }
 
     public void SetTxFilter(int lowHz, int highHz)
@@ -5278,7 +5249,7 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
             if (_txaChannelId is not int id) return 0;
             txa = id;
             skipTxAudioPlugins =
-                _txDigitalBypass || _txRogerBeepBypass || _txInjectedAudioBypass || _txRecordingBypass
+                _txDigitalBypass || _txToneBypass || _txInjectedAudioBypass || _txRecordingBypass
                 || IsDigitalTxMode(_txCurrentMode);
         }
 
@@ -5323,7 +5294,7 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
 
         // DEXP (downward expander / noise gate) runs in place on the mic block
         // right before TXA, like Thetis xdexp ahead of fexchange0. Digital,
-        // roger-beep and injected-audio bypass skip it so those paths stay
+        // tone and injected-audio bypass skip it so those paths stay
         // bit-identical; disabled DEXP costs one volatile read.
         ProcessDexpBlock(iin, skipTxAudioPlugins);
 

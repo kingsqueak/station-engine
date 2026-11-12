@@ -157,10 +157,10 @@ public sealed class CwEngine : BackgroundService
     /// </summary>
     internal Action? AfterMoxForTest;
 
-    /// <summary>Explicit receiver is outside 0..MaxReceivers-1 and is not the Kiwi index.</summary>
+    /// <summary>Explicit receiver is outside 0..MaxReceivers-1.</summary>
     internal const string ReceiverOutOfRangeReason = "receiver-out-of-range";
 
-    /// <summary>Kiwi index, or a named non-hardware slice. Not a local DDC.</summary>
+    /// <summary>A named non-hardware slice. Not a local DDC.</summary>
     internal const string ReceiverRemoteReason = "receiver-remote";
 
     /// <summary>Index is in range but that slice is not enabled.</summary>
@@ -1221,7 +1221,6 @@ public sealed class CwEngine : BackgroundService
     /// </summary>
     internal static string? ClassifyAccept(StateDto state, int receiver)
     {
-        if (receiver == WireContract.KiwiReceiverIndex) return ReceiverRemoteReason;
         if ((uint)receiver >= (uint)WireContract.MaxReceivers) return ReceiverOutOfRangeReason;
         var slice = FindHardwareSlice(state, receiver);
         if (slice is null || !slice.Enabled) return ReceiverUnavailableReason;
@@ -1239,7 +1238,6 @@ public sealed class CwEngine : BackgroundService
     /// </summary>
     internal static string? ClassifyQueued(StateDto state, int receiver)
     {
-        if (receiver == WireContract.KiwiReceiverIndex) return ReceiverRemoteReason;
         if ((uint)receiver >= (uint)WireContract.MaxReceivers) return ReceiverOutOfRangeReason;
         if (state.TxReceiverIndex != receiver) return ReceiverMovedReason;
         var slice = FindHardwareSlice(state, receiver);
