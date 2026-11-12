@@ -485,6 +485,52 @@ public sealed partial class RadioService : IDisposable
     private const int TickIntervalMs = 100;
 
     public event Action<StateDto>? StateChanged;
+
+    // Ordered delivery of StateChanged. State is replaced under _sync, but the
+    // listeners (DSP pipeline, TCI, CAT, ...) run after that lock is released,
+    // so two changes made at the same moment used to reach them in either
+    // order and the DSP could be left on the older one. Every raise now goes
+    // through PublishState: one thread delivers at a time, and it always
+    // delivers the newest state, so a listener never goes backwards.
+    private readonly object _statePublishSync = new();
+    private int _statePublishPending;
+    private long _statePublishHandOffs;
+    private const int StatePublishWaitMs = 50;
+    /// <summary>Times a thread left its change for the delivering thread
+    /// because it could not get the delivery gate in time (diagnostics).</summary>
+    internal long StatePublishHandOffs => Interlocked.Read(ref _statePublishHandOffs);
+
+    private void PublishState()
+    {
+        Volatile.Write(ref _statePublishPending, 1);
+        // A change made from inside a listener on this thread: the delivery
+        // loop below (further up this thread's stack) picks it up next.
+        if (Monitor.IsEntered(_statePublishSync)) return;
+        while (Volatile.Read(ref _statePublishPending) == 1)
+        {
+            // Listeners still run on the caller's thread, so a change is
+            // applied by the time the caller returns. The wait is bounded: if
+            // the delivering thread is itself waiting for a lock this thread
+            // holds, give up and let it deliver for us when it gets going
+            // (it re-checks the pending flag after it leaves the gate).
+            if (!Monitor.TryEnter(_statePublishSync, StatePublishWaitMs))
+            {
+                long n = Interlocked.Increment(ref _statePublishHandOffs);
+                if (n == 1 || n % 100 == 0)
+                    _log.LogWarning("radio.state publish handed off after {Ms} ms (total {Count})", StatePublishWaitMs, n);
+                return;
+            }
+            try
+            {
+                while (Interlocked.Exchange(ref _statePublishPending, 0) == 1)
+                    StateChanged?.Invoke(Snapshot());
+            }
+            finally
+            {
+                Monitor.Exit(_statePublishSync);
+            }
+        }
+    }
     // Installed by TxService. Invoked before a StateDto mutation commits so an
     // already-keyed transmission can reject an unsafe VFO/mode/filter/XIT
     // change before any StateChanged subscriber or protocol write sees it.
@@ -1749,7 +1795,7 @@ public sealed partial class RadioService : IDisposable
             _lastOverloadMs = long.MinValue;
             _lastAppliedEffectiveDb = -1;
         }
-        StateChanged?.Invoke(Snapshot());
+        PublishState();
 
         try
         {
@@ -4670,7 +4716,7 @@ public sealed partial class RadioService : IDisposable
             _stateDirty = true;
             FlushState();
         }
-        StateChanged?.Invoke(snap);
+        PublishState();
         return snap;
     }
 
@@ -4772,7 +4818,7 @@ public sealed partial class RadioService : IDisposable
         }
 
         if (_stateDirty) FlushState();
-        if (stateBroadcastNeeded) StateChanged?.Invoke(Snapshot());
+        if (stateBroadcastNeeded) PublishState();
         return status;
     }
 
@@ -4874,7 +4920,7 @@ public sealed partial class RadioService : IDisposable
             _stateDirty = true;
             FlushState();
         }
-        StateChanged?.Invoke(snap);
+        PublishState();
         return snap;
     }
 
@@ -4893,7 +4939,7 @@ public sealed partial class RadioService : IDisposable
             _stateDirty = true;
             FlushState();
         }
-        StateChanged?.Invoke(snap);
+        PublishState();
         return snap;
     }
 
@@ -4918,7 +4964,7 @@ public sealed partial class RadioService : IDisposable
             _stateDirty = true;
             FlushState();
         }
-        StateChanged?.Invoke(snap);
+        PublishState();
         return snap;
     }
 
@@ -5100,7 +5146,7 @@ public sealed partial class RadioService : IDisposable
 
         if (changedOffset)
         {
-            StateChanged?.Invoke(Snapshot());
+            PublishState();
             _log.LogDebug("auto-agc offset={Offset}dB noisefloor={Floor}dBm", newOffset, spectrumFloorDbm);
         }
     }
@@ -6095,7 +6141,7 @@ public sealed partial class RadioService : IDisposable
         ApplyG2AdcOptionsToP2Client(_p2Client, ConnectedBoardKind);
         ApplyAdcOptionsToP1Client(_activeClient, ConnectedBoardKind);
         FlushState();
-        StateChanged?.Invoke(Snapshot());
+        PublishState();
         return options;
     }
 
@@ -7737,7 +7783,7 @@ public sealed partial class RadioService : IDisposable
         // Persist only when ARS actually changed the shift — never per tune tick.
         if (arsChanged) PersistLiveFmConfig();
         PushHardwareCwTxFrequency(includeProtocol2: false);
-        StateChanged?.Invoke(next);
+        PublishState();
     }
 
     private void CompleteRejectedStateChange(TransmitSafetyRejectedException rejection)
@@ -8814,7 +8860,7 @@ public sealed partial class RadioService : IDisposable
         }
         if (changedWarning)
         {
-            StateChanged?.Invoke(Snapshot());
+            PublishState();
             // Debug-level — at 10 Hz this would flood logs if promoted.
             _log.LogDebug("auto-att offset={Offset}dB warn={Warn}", newOffset, newWarning);
         }
