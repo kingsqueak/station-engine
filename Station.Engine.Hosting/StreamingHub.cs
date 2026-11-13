@@ -1508,10 +1508,8 @@ public sealed class StreamingHub : IDisposable, IAsyncDisposable
 
         public void SetWantsNativeMic(bool want, uint generation = 0)
         {
-            // Authorization is intentionally evaluated on every enable edge.
-            // Zeus Link may attach its authenticated ProductAudioRingPort after
-            // this websocket connected, so a handshake-time bool would deny the
-            // session forever. Disable/cleanup never needs authorization.
+            // Authorization is evaluated on every enable edge.
+            // Disable/cleanup never needs authorization.
             if (want && !IsNativeMicStreamAuthorized())
             {
                 _log.LogWarning(

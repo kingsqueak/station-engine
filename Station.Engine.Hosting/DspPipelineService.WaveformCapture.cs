@@ -26,8 +26,7 @@ public partial class DspPipelineService
 
     private void ReconcileCaptureMonitor(IDspEngine engine, SimpleHPSDR.Contracts.StateDto state)
     {
-        bool enabled = state.TxMonitorEnabled || _monitorWaveform.IsCaptureActive
-            || (_productPluginAudio?.HasLeasedTxMicCapture ?? false);
+        bool enabled = state.TxMonitorEnabled || _monitorWaveform.IsCaptureActive;
         if (engine.IsTxMonitorOn == enabled) return;
         engine.SetTxMonitorEnabled(enabled);
     }

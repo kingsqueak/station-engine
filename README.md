@@ -54,8 +54,7 @@ The proprietary VST3 and Audio Unit bridge binaries are not part of the station
 engine and are not included; the published tree builds against
 `SimpleHPSDR.Plugins.VstHostStub` instead.
 
-`Station.AudioRing` is first-party code additionally published under the MIT
-license so it can be reused outside SimpleHPSDR. Third-party components carry their own
+Third-party components carry their own
 licences — see [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).
 
 The Zeus SDR client that drives this engine is a separate, proprietary program

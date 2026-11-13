@@ -72,81 +72,6 @@ public static class StationEngineEndpoints
             && IsLanApplianceHost(uri.Host);
     }
 
-    /// <summary>
-    /// Narrow origin allowlist for the raw native-microphone websocket feed.
-    /// Accepts the pinned remote browser surfaces, or — once a product has
-    /// genuinely completed the attach + lease handshake
-    /// (<see cref="ProductAudioRingPort.TryGetActiveProductEndpoint"/>) —
-    /// any plain-HTTP loopback origin, matching the desktop-webview CORS
-    /// policy above (<see cref="IsBrowserOriginAllowed"/>).
-    ///
-    /// This used to pin further to the product's own exact advertised port
-    /// (or a single pre-configured "dev origin" env var meant to cover a
-    /// local Vite server). That was brittle in practice: a local dev
-    /// server's port varies across worktrees and portOffsets, and any
-    /// mismatch denied the request with zero signal — indistinguishable,
-    /// from the operator's chair, from a genuinely dead microphone (the
-    /// 2026-08-05 friend/net PTT field failure). The leased product
-    /// attachment is the real trust boundary here: it can only exist
-    /// because a real local process completed the loopback-only attach/lease
-    /// handshake in <see cref="StationProtocolEndpoints"/>, so pinning the
-    /// browser tab's own port on top of that adds negligible security for
-    /// real brittleness cost.
-    /// </summary>
-    internal static bool IsNativeMicOriginAllowed(string origin, int? productPort)
-    {
-        if (productPort is not > 0) return false;
-        return Uri.TryCreate(origin, UriKind.Absolute, out var uri)
-            && uri.Scheme == Uri.UriSchemeHttp
-            && IsLoopbackHost(uri.Host);
-    }
-
-    private static Func<bool> CreateNativeMicStreamAuthorization(HttpContext context) =>
-        CreateNativeMicStreamAuthorization(
-            context.Connection.RemoteIpAddress,
-            context.Request.Headers.Origin,
-            context.RequestServices.GetService<ProductAudioRingPort>());
-
-    internal static Func<bool> CreateNativeMicStreamAuthorization(
-        IPAddress? remoteAddress,
-        StringValues origins,
-        ProductAudioRingPort? productAudio)
-    {
-        // Copy request-owned values now; the returned evaluator must never
-        // retain HttpContext or its mutable header collection after handshake.
-        bool isLoopback = false;
-        if (remoteAddress is not null)
-        {
-            if (remoteAddress.IsIPv4MappedToIPv6) remoteAddress = remoteAddress.MapToIPv4();
-            isLoopback = IPAddress.IsLoopback(remoteAddress);
-        }
-        var origin = origins.Count == 1 ? origins[0] : null;
-
-        return () =>
-        {
-            int? productPort = productAudio is not null
-                && productAudio.TryGetActiveProductEndpoint(out var advertisedPort)
-                    ? advertisedPort
-                    : null;
-            return isLoopback
-                && origin is not null
-                && IsNativeMicOriginAllowed(origin, productPort);
-        };
-    }
-
-    internal static bool IsTrustedNativeMicRequest(
-        IPAddress? remoteAddress,
-        StringValues origins,
-        int? productPort)
-    {
-        if (remoteAddress is null) return false;
-        if (remoteAddress.IsIPv4MappedToIPv6) remoteAddress = remoteAddress.MapToIPv4();
-        return IPAddress.IsLoopback(remoteAddress)
-            && origins.Count == 1
-            && origins[0] is { } origin
-            && IsNativeMicOriginAllowed(origin, productPort);
-    }
-
     public static IEndpointRouteBuilder MapStationEngineEndpoints(
         this IEndpointRouteBuilder endpoints,
         bool allowLanSameHost = false,
@@ -337,8 +262,10 @@ public static class StationEngineEndpoints
             socket,
             context.RequestAborted,
             displayRxId: displayRxId,
-            suppressAudio: suppressAudio,
-            nativeMicStreamAuthorization: CreateNativeMicStreamAuthorization(context)).ConfigureAwait(false);
+            // SimpleHPSDR: no native-mic authorization is passed, so a request for the
+            // raw microphone feed is always refused (it only ever served a leased
+            // Zeus Link product, which is gone).
+            suppressAudio: suppressAudio).ConfigureAwait(false);
     }
 
     private static bool IsLoopbackHost(string host) =>

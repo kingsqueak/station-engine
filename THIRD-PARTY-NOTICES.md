@@ -7,12 +7,6 @@ component, and model conveyed by the `station-engine` source export as audited
 on 2026-08-10. The corresponding upstream license and notice files are
 preserved verbatim in [`THIRD-PARTY-LICENSES`](THIRD-PARTY-LICENSES/).
 
-## First-party components
-
-`Station.AudioRing` is first-party code additionally available under the MIT
-license. Its full license text is preserved in
-`Station.AudioRing/LICENSE.md`.
-
 ## Inventory
 
 | Component | Version or pinned source | License | Why it is in the export | Preserved text |

@@ -224,12 +224,13 @@ public sealed class CompositeAudioModemPort : IAudioModemPort, IDisposable
 
     public CompositeAudioModemPort(
         RadioService radio,
-        RadeModemService rade,
-        ModeModemLeasePort classic)
+        RadeModemService rade)
     {
         _radio = radio;
         _rade = rade;
-        _classic = classic;
+        // SimpleHPSDR: the out-of-process classic FreeDV modem is gone; only
+        // RADE is real. Every non-RADE selection is "no modem".
+        _classic = new NullAudioModemPort();
         _radio.SetModemAvailability(() => Available);
     }
 

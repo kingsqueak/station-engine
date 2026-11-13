@@ -863,101 +863,10 @@ public partial class DspPipelineService : BackgroundService,
         return MathF.CopySign((float)limited, sample);
     }
 
-    // Local-playback monitor inject (e.g. the Recorder plugin playing a clip
-    // back locally). SPSC ring: producer = plugin playback thread via
-    // EnqueueMonitorAudio, consumer = Tick. Mixed into the RX audio block so a
-    // clip is audible on EVERY sink (browser WS + native) in any host mode —
-    // unlike the desktop-only preview path. Power-of-two capacity for masking.
-    private const int MonitorInjectCapacity = 1 << 14; // 16384 floats (~340 ms @ 48 kHz)
-    private const int MonitorInjectMask = MonitorInjectCapacity - 1;
-    private readonly float[] _monitorInject = new float[MonitorInjectCapacity];
-    private long _monInjW;
-    private long _monInjR;
-    private bool _monInjStartPending;
-    private bool _monInjStarted;
-
-    // Output samples per Tick at the 30 Hz cadence (~1600 @ 48 kHz). When RX
-    // produces no audio this tick (RX1 muted / no band audio) but a local clip
-    // is mid-playback through the monitor-inject ring, we synthesize a silent RX
-    // block this size, mix the queued playback into it, and publish — otherwise
-    // local WAV playback is inaudible while RX is silent (FIX 4). Sized to drain
-    // the ring at ~real time so playback stays glitch-free.
+    // Output samples per Tick at the 30 Hz cadence (~1600 @ 48 kHz): the size
+    // of the silent block published while receive audio is suppressed for TX.
     private static readonly int MonitorInjectSilentBlockSamples =
         Math.Min(AudioDrainCapacity, (int)Math.Round(AudioOutputRateHz * TickPeriod.TotalSeconds));
-
-    /// <summary>
-    /// Enqueue mono float32 samples to be mixed into the local RX audio output
-    /// (the operator's monitor) on the next ticks. Realtime-safe, lock-free.
-    /// Returns <c>false</c> (writing nothing) when the ring can't fit the block
-    /// — the caller should retry rather than drop, so the consumer (RX tick
-    /// clock) paces the producer and the playback stays glitch-free. Used by
-    /// <see cref="SimpleHPSDR.Plugins.Contracts.Audio.IAudioPlaybackSink.PlayLocal"/>.
-    /// </summary>
-    public bool EnqueueMonitorAudio(ReadOnlySpan<float> samples)
-    {
-        if (samples.Length == 0) return true;
-        long w = _monInjW;
-        long r = Volatile.Read(ref _monInjR);
-        if (MonitorInjectCapacity - (w - r) < samples.Length) return false; // full — caller retries
-        int start = (int)(w & MonitorInjectMask);
-        int first = Math.Min(samples.Length, MonitorInjectCapacity - start);
-        samples[..first].CopyTo(_monitorInject.AsSpan(start, first));
-        if (first < samples.Length)
-            samples[first..].CopyTo(_monitorInject.AsSpan(0, samples.Length - first));
-        Volatile.Write(ref _monInjW, w + samples.Length);
-        return true;
-    }
-
-    /// <summary>Samples still queued in the monitor-inject ring (for a player
-    /// to wait out the tail before declaring playback finished).</summary>
-    public long MonitorBacklog => Volatile.Read(ref _monInjW) - Volatile.Read(ref _monInjR);
-
-    // Mix any queued monitor-inject audio into the RX block (consumer side).
-    private void MixMonitorInject(Span<float> dest)
-    {
-        long w = Volatile.Read(ref _monInjW);
-        long r = _monInjR;
-        r = MixMonitorInject(_monitorInject, r, w, dest, ref _monInjStartPending, ref _monInjStarted);
-        Volatile.Write(ref _monInjR, r);
-    }
-
-    internal static void ResetMonitorInjectStartup(long backlog, ref bool startPending, ref bool started)
-    {
-        if (backlog > 0) return;
-        startPending = false;
-        started = false;
-    }
-
-    internal static long MixMonitorInject(
-        ReadOnlySpan<float> ring, long r, long w, Span<float> dest,
-        ref bool startPending, ref bool started)
-    {
-        long avail = w - r;
-        if (avail <= 0)
-        {
-            startPending = false;
-            started = false;
-            return r;
-        }
-        // Recorder blocks arrive every 20 ms, while output drains at 30 Hz.
-        // Starting with the first 960 samples would leave silence after them
-        // in a 1600-sample output frame. Retain that first block for one tick
-        // so the next producer block supplies the startup reserve instead.
-        if (!started && !startPending)
-        {
-            startPending = true;
-            return r;
-        }
-        int n = (int)Math.Min(avail, dest.Length);
-        // A short clip still flushes on the second tick. Put its leading
-        // silence before the first sample rather than inside the recording.
-        int offset = started ? 0 : dest.Length - n;
-        started = true;
-        startPending = false;
-        for (int i = 0; i < n; i++)
-            dest[offset + i] += ring[(int)((r + i) & (ring.Length - 1))];
-        return r + n;
-    }
 
     // _engineLock serialises CONCURRENT WRITERS to _engine / _channelId /
     // _sampleRateHz on the rare connect/disconnect path. After iter5 the
@@ -1767,9 +1676,6 @@ public partial class DspPipelineService : BackgroundService,
     private bool _resetDisplayPixelsForCurrentTx;
     private bool _p2DisplayDuplexForCurrentTx;
     private int _rxPostTxMuteBlocksRemaining;       // RXA transition-drain blocks after MOX↓
-    // Latched at MOX↓ (false for a PureSignal over): a leased product-plugin
-    // data tap may end WDSP's receive quarantine after the first drain block.
-    private volatile bool _rxPostTxDataTapEarlyResumeAllowed;
     private int _rxPostTxFadeInSamplesRemaining;    // final-output soft resume after post-TX drain
     private int _rxPostTxDisplayFramesRemaining;    // RXA analyzer transition frames after MOX↓
 
@@ -2029,8 +1935,6 @@ public partial class DspPipelineService : BackgroundService,
     // the same port gated by the TX receiver's mode, for TxAudioIngest only.
     private readonly IAudioModemPort _audioModem;
     private readonly TxGatedAudioModemPort _txAudioModem;
-    private readonly IProductTxAudioPort _productAudio;
-    private readonly ProductPluginAudioPort? _productPluginAudio;
 
     public DspPipelineService(
         RadioService radio,
@@ -2044,8 +1948,6 @@ public partial class DspPipelineService : BackgroundService,
         RxAudioMuteState? rxAudioMute = null,
         TxIqRing? txIqRing = null,
         IConfiguration? configuration = null,
-        IProductTxAudioPort? productAudio = null,
-        ProductPluginAudioPort? productPluginAudio = null,
         SMeterCalibrationStore? sMeterCalibrationStore = null,
         TxMonitorSettingsStore? txMonitorSettingsStore = null,
         DisplaySettingsStore? displaySettingsStore = null)
@@ -2064,9 +1966,6 @@ public partial class DspPipelineService : BackgroundService,
         _txIqRing = txIqRing;
         _audioModem = audioModem ?? new NullAudioModemPort();
         _txAudioModem = new TxGatedAudioModemPort(_audioModem, () => _txReceiverIsFreeDv);
-        _productAudio = productAudio ?? new NullProductTxAudioPort();
-        _productPluginAudio = productPluginAudio;
-        _productPluginAudio?.ConfigureLocalMonitorSink(EnqueueMonitorAudio);
         _rxAudioMute = rxAudioMute;
         // Materialise once at construction so the per-tick fan-out is an
         // array-index loop (no enumerator allocation, no LINQ on the hot path).
@@ -3561,25 +3460,6 @@ public partial class DspPipelineService : BackgroundService,
             if (Interlocked.CompareExchange(ref _rxPostTxMuteBlocksRemaining, next, remaining) != remaining)
                 continue;
 
-            if (next > 0
-                && _rxPostTxDataTapEarlyResumeAllowed
-                && (_productPluginAudio?.HasLeasedRxDataTap ?? false))
-            {
-                // A modem (product-plugin data tap) is listening for the other
-                // station's reply, which can start well inside the operator's
-                // post-TX speaker mute. Keep WDSP's receive quarantine for this
-                // ONE drain block only: it is the block that carries the T/R
-                // switching transient and keyed leakage the quarantine exists
-                // for (#2569 - AGC/AM leveler memory), and it is already zeros
-                // in the data tap because WDSP fed the demodulator silence.
-                // Resume receive DSP now so every later drain block reaches the
-                // data tap as real receive audio. The speaker path is unchanged:
-                // it stays muted for the whole drain and fades in at the end.
-                _rxPostTxDataTapEarlyResumeAllowed = false;
-                if (!_rxAudioSuppressedForTx)
-                    _engine?.CompletePostTxRxResume();
-            }
-
             if (next == 0)
             {
                 // This runs inline on the P1/P2 receive thread, so it must not
@@ -3721,7 +3601,6 @@ public partial class DspPipelineService : BackgroundService,
         // are rare operator-edge events (not the per-frame hot path).
         if (on)
         {
-            _rxPostTxDataTapEarlyResumeAllowed = false;
             Volatile.Write(ref _rxPostTxMuteBlocksRemaining, 0);
             Volatile.Write(ref _rxPostTxFadeInSamplesRemaining, 0);
             Volatile.Write(ref _rxPostTxDisplayFramesRemaining, 0);
@@ -3788,7 +3667,6 @@ public partial class DspPipelineService : BackgroundService,
                 // PureSignal keeps its full RX1 transition: the data-tap early
                 // resume applies only to half-duplex / DUP overs. Published
                 // before the drain counter the RX thread reads.
-                _rxPostTxDataTapEarlyResumeAllowed = !_stopRxForPureSignalForCurrentTx;
                 Volatile.Write(ref _rxPostTxMuteBlocksRemaining, postTxMuteBlocks);
                 Volatile.Write(ref _rxPostTxDisplayFramesRemaining, postTxMuteBlocks);
                 _rxAudioSuppressedForTx = false;
@@ -3967,7 +3845,7 @@ public partial class DspPipelineService : BackgroundService,
             txMonitorRequested = engine?.IsTxMonitorOn ?? false,
             rxSinkAttached = _rxSinkAttached,
             audioSinkCount = _audioSinks.Length,
-            monitorBacklogSamples = MonitorBacklog,
+            monitorBacklogSamples = 0L,
             audio,
             listenability = BuildRxListenabilityDiagnostics(rxMeters, audio, squelchConfig),
             display,
@@ -4907,7 +4785,7 @@ public partial class DspPipelineService : BackgroundService,
         bool squelchOpen = !squelch.Enabled || !squelch.Adaptive || _adaptiveSquelch.Open;
         bool squelchTailActive = IsAdaptiveSquelchTailActive(squelch, _adaptiveSquelch);
         double squelchGain = squelch.Enabled && squelch.Adaptive ? _adaptiveSquelch.Gain : 1.0;
-        long monitorBacklogSamples = MonitorBacklog;
+        long monitorBacklogSamples = 0;
         var leveler = _rxAudioLeveler;
         bool levelerValid = string.Equals(source, "rx", StringComparison.OrdinalIgnoreCase)
             && leveler.DiagnosticsValid;
@@ -9949,11 +9827,6 @@ public partial class DspPipelineService : BackgroundService,
         if (displayOnly)
             return true;
 
-        // Silent/muted receive paths skip the monitor mixer while its ring is
-        // empty. Observe idle here as well so the next clip gets its own
-        // startup reserve on those paths.
-        ResetMonitorInjectStartup(MonitorBacklog, ref _monInjStartPending, ref _monInjStarted);
-
         // Audio broadcast — when TX monitor is on, replace RX audio with the
         // monitor channel's demodulated TX audio so the operator hears the
         // chain output (post-bandpass / post-CFIR, demodulated back to mono)
@@ -9999,9 +9872,6 @@ public partial class DspPipelineService : BackgroundService,
         // WDSP itself quarantines receive DSP until CompletePostTxRxResume
         // (see MarkTxSuppressedAudioBlockPublished), which a leased data tap
         // brings forward to the end of the first drain block.
-        if (audioSampleCount > 0 && (!activelyKeyed || fullDuplexRxActive))
-            _productPluginAudio?.PublishRxDataAudio(
-                0, AudioOutputRateHz, audioBuf.AsSpan(0, audioSampleCount));
         // One FreeDV receiver owns the modem. Engage before any ProcessRx. The data tap above stays the raw WDSP block.
         EngageFreeDvOwner(state);
         // TX monitor normally replaces RX (including the per-receiver taps).
@@ -10070,10 +9940,6 @@ public partial class DspPipelineService : BackgroundService,
             int fadeRemaining = Volatile.Read(ref sec.FadeInSamplesRemaining);
             if (n > 0)
             {
-                // Data tap: raw WDSP output, ahead of the open fade below. Like
-                // the default secondary tap, it publishes every drained block.
-                _productPluginAudio?.PublishRxDataAudio(
-                    ri, AudioOutputRateHz, sec.AudioBuf.AsSpan(0, n));
                 // Decode the owner before the open fade and the monitor publish
                 // so the fade ramps speech, not the OFDM modem signal. The data
                 // tap above stays raw. A non-owner keeps today's fade-then-publish
@@ -10094,8 +9960,6 @@ public partial class DspPipelineService : BackgroundService,
                         SecondaryRxOpenFadeInSamples);
                     Volatile.Write(ref sec.FadeInSamplesRemaining, fadeNext);
                 }
-                _productPluginAudio?.PublishRxAudio(
-                    ri, AudioOutputRateHz, sec.AudioBuf.AsSpan(0, n));
                 if (streamLocalRx)
                     CaptureRxWaveform(engine, state, ri, sec.AudioBuf.AsSpan(0, n));
                 if (streamLocalRx)
@@ -10211,8 +10075,6 @@ public partial class DspPipelineService : BackgroundService,
                 // listener exactly as WDSP demodulated it (no RX suite, RX
                 // plugin, or RX leveler; the squelch resolves disabled above).
                 bool rxDigitalBypass = IsDigitalRxSimpleHPSDRMode(state.Mode);
-                if (!rxDigitalBypass && _productAudio.Active && audioSampleCount > 0)
-                    _productAudio.ProcessRx(audioBuf.AsSpan(0, audioSampleCount));
 
                 var rxAudioHandler = _rxAudioPluginHandler;
                 if (!rxDigitalBypass && rxAudioHandler is not null && audioSampleCount > 0)
@@ -10272,16 +10134,6 @@ public partial class DspPipelineService : BackgroundService,
                 if (!duplexRxUnderTxMonitor)
                     _sidetone?.RenderInto(audioBuf.AsSpan(0, audioSampleCount));
 
-                // Mix any queued local-playback monitor audio (e.g. the Recorder
-                // plugin playing a clip back while not transmitting) into the RX
-                // block, so it reaches every sink in browser and desktop modes
-                // alike. No-op (one volatile read) when nothing is queued.
-                // Skipped while master-muted: the RX frame must stay pure so the
-                // mute still silences it, and the recorder is instead drained onto
-                // the mute-exempt lane below. Not skipping here would sum recorder
-                // into the RX frame that the sink then drops => recorder inaudible.
-                if (!rxAudioMuted)
-                    MixMonitorInject(audioBuf.AsSpan(0, audioSampleCount));
                 // Preserve the established local-radio order: limit the fully
                 // processed local block first, then apply its post-TX fade.
                 LimitRxAudioBuffer(audioBuf.AsSpan(0, audioSampleCount));
@@ -10336,8 +10188,6 @@ public partial class DspPipelineService : BackgroundService,
                 {
                     PublishAudio(in audioFrame);
                 }
-                _productPluginAudio?.PublishRxAudio(
-                    0, AudioOutputRateHz, audioBuf.AsSpan(0, audioSampleCount));
                 RxAudioAvailable?.Invoke(0, AudioOutputRateHz, new ReadOnlyMemory<float>(audioBuf, 0, audioSampleCount));
                 if (suppressRxAudioForTx && liveLocalRxAudio)
                 {
@@ -10367,63 +10217,6 @@ public partial class DspPipelineService : BackgroundService,
                 nowMs,
                 state.Squelch ?? new SquelchConfig());
             MarkTxSuppressedAudioBlockPublished();
-        }
-        else if (ShouldPublishNormalRxAudio(txMonitorOn, suppressPublishedRxAudio, txMonitorMeterOnly) && !rxAudioMuted && MonitorBacklog > 0)
-        {
-            // FIX 4: RX produced no audio this tick (RX1 muted, or no band audio)
-            // yet a local clip is playing back through the monitor-inject ring.
-            // The audioSampleCount>0 path above — which mixes and publishes the
-            // monitor inject — was skipped, so the clip would be silent even
-            // though status says "playing". Synthesize a full-size silent RX
-            // block, mix the queued playback into it, and publish so the operator
-            // hears it on EVERY sink. STRICT no-op when the ring is empty (the
-            // MonitorBacklog>0 guard is a single volatile read), so normal /
-            // muted-RX behaviour is byte-identical when nothing is playing.
-            // Deliberately does NOT fire RxAudioAvailable: that tap feeds RX
-            // capture, which must stay byte-identical (no synthetic silence).
-            int monBlock = Math.Min(audioBuf.Length, MonitorInjectSilentBlockSamples);
-            Array.Clear(audioBuf, 0, monBlock);
-            MixMonitorInject(audioBuf.AsSpan(0, monBlock));
-            LimitRxAudioBuffer(audioBuf.AsSpan(0, monBlock));
-
-            var injectFrame = new AudioFrame(
-                Seq: ++_audioSeq,
-                TsUnixMs: nowMs,
-                RxId: 0,
-                Channels: 1,
-                SampleRateHz: (uint)AudioOutputRateHz,
-                SampleCount: (ushort)monBlock,
-                Samples: new ReadOnlyMemory<float>(audioBuf, 0, monBlock));
-            PublishAudio(in injectFrame);
-        }
-
-        // RX master mute + Recorder local playback. The RX-publish block above kept
-        // the RX frame PURE (recorder was not mixed in while muted), so the sinks
-        // dropped it and the radio is genuinely muted — RX and CW sidetone silenced
-        // on the PC output and both onboard speakers, exactly as before. Now drain
-        // the monitor-inject ring into a recorder-ONLY block and publish it on the
-        // mute-EXEMPT lane so the operator still hears their own playback on the PC
-        // output. This is the SOLE monitor-ring consumer while muted (the in-frame
-        // mix and the FIX-4 drain are both gated off by rxAudioMuted), so the ring
-        // is drained exactly once per tick — no double-drain, no starvation. Like
-        // FIX 4 it deliberately does NOT fire RxAudioAvailable: the RX-capture tap
-        // (TCI / Recorder RX capture) must stay recorder-free and byte-identical.
-        if (rxAudioMuted && ShouldPublishNormalRxAudio(txMonitorOn, suppressPublishedRxAudio, txMonitorMeterOnly) && MonitorBacklog > 0)
-        {
-            int monBlock = Math.Min(audioBuf.Length, MonitorInjectSilentBlockSamples);
-            Array.Clear(audioBuf, 0, monBlock);
-            MixMonitorInject(audioBuf.AsSpan(0, monBlock));
-            LimitRxAudioBuffer(audioBuf.AsSpan(0, monBlock));
-
-            var exemptFrame = new AudioFrame(
-                Seq: ++_audioSeq,
-                TsUnixMs: nowMs,
-                RxId: 0,
-                Channels: 1,
-                SampleRateHz: (uint)AudioOutputRateHz,
-                SampleCount: (ushort)monBlock,
-                Samples: new ReadOnlyMemory<float>(audioBuf, 0, monBlock));
-            PublishExemptAudio(in exemptFrame);
         }
 
         if (txMonitorOn)
@@ -10461,10 +10254,6 @@ public partial class DspPipelineService : BackgroundService,
                 // taps; null subscriber list = no cost. Fire it before Kiwi is
                 // added to the operator monitor so the air tap stays TX-only.
                 CaptureMonitorWaveform(engine, state, audioBuf.AsSpan(0, monCount));
-                // Recorder capture follows the final TX chain, before local
-                // monitor volume and receive mixing. Its lease keeps this
-                // demodulator running silently when the operator's MON is off.
-                _productPluginAudio?.PublishTxMic(AudioOutputRateHz, audioBuf.AsSpan(0, monCount));
                 TxMonitorAudioAvailable?.Invoke(0, AudioOutputRateHz, new ReadOnlyMemory<float>(audioBuf, 0, monCount));
                 // Monitor volume is an operator playback preference, not a
                 // TX-chain control. Apply it only after diagnostics and the

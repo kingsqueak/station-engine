@@ -59,23 +59,8 @@ public static class StationAccessTokenAuthorization
     private static bool RequiresAuthorization(HttpRequest request)
     {
         return request.Path.StartsWithSegments(
-                   "/api/station/product-audio",
+                   "/api/station/rade",
                    StringComparison.OrdinalIgnoreCase)
-            || request.Path.StartsWithSegments(
-                "/api/station/rx-audio",
-                StringComparison.OrdinalIgnoreCase)
-            || request.Path.StartsWithSegments(
-                "/api/station/tx-audio",
-                StringComparison.OrdinalIgnoreCase)
-            || request.Path.StartsWithSegments(
-                "/api/station/mode-modem",
-                StringComparison.OrdinalIgnoreCase)
-            || request.Path.StartsWithSegments(
-                "/api/station/rade",
-                StringComparison.OrdinalIgnoreCase)
-            || request.Path.StartsWithSegments(
-                "/api/station/key",
-                StringComparison.OrdinalIgnoreCase)
             || request.Path.StartsWithSegments(
                 "/api/wspr/decoder",
                 StringComparison.OrdinalIgnoreCase)

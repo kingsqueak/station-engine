@@ -3,7 +3,6 @@
 using System.Reflection;
 using System.Net;
 using System.Text.Json;
-using Station.AudioRing;
 using SimpleHPSDR.Contracts;
 using SimpleHPSDR.Dsp.Wdsp;
 
@@ -36,143 +35,6 @@ public static class StationProtocolEndpoints
             var dsp = services.GetRequiredService<DspPipelineService>();
             var wisdom = services.GetRequiredService<WdspWisdomInitializer>();
             return Results.Ok(dsp.SnapshotDiagnostics(wisdom));
-        });
-
-        endpoints.MapPost("/api/station/product-audio/attach", async (HttpContext context) =>
-        {
-            // Product attachment is an originless native-process seam. A web
-            // page must never be able to manufacture the endpoint trust used
-            // by the native microphone bridge, even if it can reach loopback
-            // and happens to possess a station token.
-            if (!IsLoopback(context) || context.Request.Headers.Origin.Count != 0)
-                return Results.StatusCode(StatusCodes.Status403Forbidden);
-
-            var port = context.RequestServices.GetService<ProductAudioRingPort>();
-            if (port is null)
-                return Results.NotFound();
-
-            ProductAudioAttachRequest? request;
-            try
-            {
-                request = await context.Request.ReadFromJsonAsync<ProductAudioAttachRequest>(
-                    context.RequestAborted).ConfigureAwait(false);
-            }
-            catch (Exception ex) when (ex is JsonException or InvalidOperationException or NotSupportedException)
-            {
-                return Results.BadRequest(new { error = "invalid JSON attachment request" });
-            }
-
-            if (request is null)
-                return Results.BadRequest(new { error = "attachment request is required" });
-            return port.TryCreateAttachment(request, out var response, out var error)
-                ? Results.Ok(response)
-                : Results.Conflict(new { error });
-        });
-
-        endpoints.MapGet("/api/station/product-endpoint", (HttpContext context) =>
-        {
-            if (!IsLoopback(context))
-                return Results.StatusCode(StatusCodes.Status403Forbidden);
-            var port = context.RequestServices.GetService<ProductAudioRingPort>();
-            return port is not null && port.TryGetProductEndpoint(out var productPort)
-                ? Results.Ok(new { port = productPort })
-                : Results.NotFound();
-        });
-
-        endpoints.MapGet("/api/station/product-audio/lease/{leaseId}", async (
-            HttpContext context,
-            string leaseId) =>
-        {
-            if (!IsLoopback(context) || context.Request.Headers.Origin.Count != 0)
-            {
-                context.Response.StatusCode = StatusCodes.Status403Forbidden;
-                return;
-            }
-
-            var port = context.RequestServices.GetService<ProductAudioRingPort>();
-            if (port is null)
-            {
-                context.Response.StatusCode = StatusCodes.Status404NotFound;
-                return;
-            }
-
-            await port.HoldLeaseAsync(leaseId, context).ConfigureAwait(false);
-        });
-
-        endpoints.MapPost("/api/station/rx-audio/attach", async (HttpContext context) =>
-        {
-            if (!IsLoopback(context))
-                return Results.StatusCode(StatusCodes.Status403Forbidden);
-            var port = context.RequestServices.GetService<ProductPluginAudioPort>();
-            if (port is null) return Results.NotFound();
-            ProductPluginCaptureAttachRequest? request;
-            try
-            {
-                request = await context.Request.ReadFromJsonAsync<ProductPluginCaptureAttachRequest>(
-                    context.RequestAborted).ConfigureAwait(false);
-            }
-            catch (Exception ex) when (ex is JsonException or InvalidOperationException or NotSupportedException)
-            {
-                return Results.BadRequest(new { error = "invalid JSON capture attachment request" });
-            }
-            if (request is null) return Results.BadRequest(new { error = "attachment request is required" });
-            return port.TryCreateCaptureAttachment(request, out var response, out var error)
-                ? Results.Ok(response)
-                : Results.Conflict(new { error });
-        });
-
-        endpoints.MapGet("/api/station/rx-audio/lease/{leaseId}", HoldProductPluginLeaseAsync);
-
-        endpoints.MapPost("/api/station/tx-audio/attach", async (HttpContext context) =>
-        {
-            if (!IsLoopback(context))
-                return Results.StatusCode(StatusCodes.Status403Forbidden);
-            var port = context.RequestServices.GetService<ProductPluginAudioPort>();
-            if (port is null) return Results.NotFound();
-            ProductPluginInjectionAttachRequest? request;
-            try
-            {
-                request = await context.Request.ReadFromJsonAsync<ProductPluginInjectionAttachRequest>(
-                    context.RequestAborted).ConfigureAwait(false);
-            }
-            catch (Exception ex) when (ex is JsonException or InvalidOperationException or NotSupportedException)
-            {
-                return Results.BadRequest(new { error = "invalid JSON injection attachment request" });
-            }
-            if (request is null) return Results.BadRequest(new { error = "attachment request is required" });
-            return port.TryCreateInjectionAttachment(request, out var response, out var error)
-                ? Results.Ok(response)
-                : Results.Conflict(new { error });
-        });
-
-        endpoints.MapGet("/api/station/tx-audio/lease/{leaseId}", HoldProductPluginLeaseAsync);
-
-        endpoints.MapPost("/api/station/mode-modem/attach", async (HttpContext context) =>
-        {
-            if (!IsLoopback(context))
-                return Results.StatusCode(StatusCodes.Status403Forbidden);
-            var port = context.RequestServices.GetService<ModeModemLeasePort>();
-            if (port is null) return Results.NotFound();
-            var request = await ReadRequestAsync<ModeModemAttachRequest>(context).ConfigureAwait(false);
-            if (request is null) return Results.BadRequest(new { error = "attachment request is required" });
-            return port.TryCreateAttachment(request, out var response, out var error)
-                ? Results.Ok(response)
-                : Results.Conflict(new { error });
-        });
-
-        endpoints.MapGet("/api/station/mode-modem/lease/{leaseId}", HoldModeModemLeaseAsync);
-
-        endpoints.MapPost("/api/station/mode-modem/event", async (HttpContext context) =>
-        {
-            if (!IsLoopback(context))
-                return Results.StatusCode(StatusCodes.Status403Forbidden);
-            var port = context.RequestServices.GetService<ModeModemLeasePort>();
-            if (port is null) return Results.NotFound();
-            var request = await ReadRequestAsync<ModeModemEventRequest>(context).ConfigureAwait(false);
-            if (request is null) return Results.BadRequest(new { error = "mode-modem event is required" });
-            return port.PostEvent(request, out var error)
-                ? Results.Ok()
-                : Results.Conflict(new { error });
         });
 
         endpoints.MapGet("/api/station/rade/status", (HttpContext context) =>
@@ -226,75 +88,6 @@ public static class StationProtocolEndpoints
             if (request is null) return Results.BadRequest(new { error = "RADE mic config is required" });
             port.SetRadeMicConfig(request);
             return Results.Ok(port.RadeStatus());
-        });
-
-        endpoints.MapPost("/api/station/key/arm", async (HttpContext context) =>
-        {
-            if (!IsLoopback(context))
-                return Results.StatusCode(StatusCodes.Status403Forbidden);
-            var port = context.RequestServices.GetService<ProductPluginAudioPort>();
-            var tx = context.RequestServices.GetService<TxService>();
-            if (port is null || tx is null) return Results.NotFound();
-            var request = await ReadRequestAsync<ProductPluginArmRequest>(context).ConfigureAwait(false);
-            if (request is null) return Results.BadRequest(new { error = "arm request is required" });
-            return port.TrySetArm(request, tx, out var response, out var error)
-                ? Results.Ok(response)
-                : Results.Conflict(new { error });
-        });
-
-        endpoints.MapPost("/api/station/key/request", async (HttpContext context) =>
-        {
-            if (!IsLoopback(context))
-                return Results.StatusCode(StatusCodes.Status403Forbidden);
-            var port = context.RequestServices.GetService<ProductPluginAudioPort>();
-            var tx = context.RequestServices.GetService<TxService>();
-            if (port is null || tx is null) return Results.NotFound();
-            var request = await ReadRequestAsync<ProductPluginKeyRequest>(context).ConfigureAwait(false);
-            if (request is null) return Results.BadRequest(new { error = "key request is required" });
-            return port.TryRequestKey(request, tx, out var response, out var error)
-                ? Results.Ok(response)
-                : Results.Conflict(new { error });
-        });
-
-        endpoints.MapPost("/api/station/key/release", async (HttpContext context) =>
-        {
-            if (!IsLoopback(context))
-                return Results.StatusCode(StatusCodes.Status403Forbidden);
-            var port = context.RequestServices.GetService<ProductPluginAudioPort>();
-            var tx = context.RequestServices.GetService<TxService>();
-            if (port is null || tx is null) return Results.NotFound();
-            var request = await ReadRequestAsync<ProductPluginKeyRequest>(context).ConfigureAwait(false);
-            if (request is null) return Results.BadRequest(new { error = "key release request is required" });
-            return port.TryReleaseKey(request, tx, out var response, out var error)
-                ? Results.Ok(response)
-                : Results.Conflict(new { error });
-        });
-
-        // Loopback seam that lets a product plugin engage the operator-facing TX
-        // Monitor. The recorder uses it for over-air playback so a transmitted
-        // recording is heard through the same processed on-air preview path as
-        // live mic. Clear meter-only only when starting a new audible monitor;
-        // preserve an already-enabled preview and report the state BEFORE the
-        // change so the caller restores it when the transmission ends. RF-safe:
-        // TX Monitor is a receive-side demod of the transmit IQ and never alters
-        // what is transmitted.
-        endpoints.MapPost("/api/station/tx-monitor", async (HttpContext context) =>
-        {
-            if (!IsLoopback(context))
-                return Results.StatusCode(StatusCodes.Status403Forbidden);
-            var radio = context.RequestServices.GetService<RadioService>();
-            if (radio is null) return Results.NotFound();
-            var request = await ReadRequestAsync<StationTxMonitorRequest>(context).ConfigureAwait(false);
-            if (request is null) return Results.BadRequest(new { error = "tx-monitor request is required" });
-            var pipe = context.RequestServices.GetService<DspPipelineService>();
-            bool previousEnabled = radio.Snapshot().TxMonitorEnabled;
-            // An existing preview belongs to its current operator/feature. Keep
-            // its audible or meter-only routing and do not claim ownership.
-            if (previousEnabled == request.Enabled)
-                return Results.Ok(new { previousEnabled, enabled = previousEnabled });
-            pipe?.SetTxMonitorMeterOnly(false);
-            var state = radio.SetTxMonitor(new TxMonitorSetRequest(request.Enabled));
-            return Results.Ok(new { previousEnabled, enabled = state.TxMonitorEnabled });
         });
 
         endpoints.MapPost("/api/station/tx/lease", (HttpContext context) =>
@@ -374,38 +167,6 @@ public static class StationProtocolEndpoints
     private static bool IsLoopback(HttpContext context) =>
         context.Connection.RemoteIpAddress is { } address && IPAddress.IsLoopback(address);
 
-    private static async Task HoldProductPluginLeaseAsync(HttpContext context, string leaseId)
-    {
-        if (!IsLoopback(context))
-        {
-            context.Response.StatusCode = StatusCodes.Status403Forbidden;
-            return;
-        }
-        var port = context.RequestServices.GetService<ProductPluginAudioPort>();
-        if (port is null)
-        {
-            context.Response.StatusCode = StatusCodes.Status404NotFound;
-            return;
-        }
-        await port.HoldLeaseAsync(leaseId, context).ConfigureAwait(false);
-    }
-
-    private static async Task HoldModeModemLeaseAsync(HttpContext context, string leaseId)
-    {
-        if (!IsLoopback(context))
-        {
-            context.Response.StatusCode = StatusCodes.Status403Forbidden;
-            return;
-        }
-        var port = context.RequestServices.GetService<ModeModemLeasePort>();
-        if (port is null)
-        {
-            context.Response.StatusCode = StatusCodes.Status404NotFound;
-            return;
-        }
-        await port.HoldLeaseAsync(leaseId, context).ConfigureAwait(false);
-    }
-
     private static async Task<T?> ReadRequestAsync<T>(HttpContext context) where T : class
     {
         try
@@ -419,6 +180,3 @@ public static class StationProtocolEndpoints
         }
     }
 }
-
-/// <summary>Loopback TX-monitor toggle request body (product plugin → engine).</summary>
-internal sealed record StationTxMonitorRequest(bool Enabled);

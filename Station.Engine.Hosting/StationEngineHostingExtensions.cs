@@ -64,23 +64,10 @@ public static class StationEngineHostingExtensions
         services.AddSingleton<EngineClientDiagnosticSink>();
         services.AddSingleton<IClientDiagnosticSink>(sp =>
             sp.GetRequiredService<EngineClientDiagnosticSink>());
-        // Engine-owned mode-modem lease (standalone engine only; the desktop
-        // host keeps its in-process modem bridge). The TX-service lookup is
-        // lazy because TxService -> DspPipelineService -> IAudioModemPort
-        // would otherwise form a construction cycle; it is resolved only on
-        // the lease-teardown path when a modem-owned key must drop.
-        services.AddSingleton<ModeModemLeasePort>(sp =>
-            new ModeModemLeasePort(
-                sp.GetRequiredService<RadioService>(),
-                sp.GetRequiredService<ILogger<ModeModemLeasePort>>(),
-                () => sp.GetService<TxService>()));
         services.AddSingleton<RadeModemService>();
         services.AddSingleton<CompositeAudioModemPort>();
         services.AddSingleton<IAudioModemPort>(sp =>
             sp.GetRequiredService<CompositeAudioModemPort>());
-        services.AddSingleton<ProductAudioRingPort>();
-        services.AddSingleton<IProductTxAudioPort>(sp => sp.GetRequiredService<ProductAudioRingPort>());
-        services.AddSingleton<ProductPluginAudioPort>();
         services.AddSingleton<ITxAudioPreviewProcessor, NullTxAudioPreviewProcessor>();
         services.AddSingleton<IInitialTxAudioConfigSource, NullInitialTxAudioConfigSource>();
 

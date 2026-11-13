@@ -81,7 +81,6 @@ public sealed class TxService
     // the release history. Guarded by _sync.
     private long _keyedAtTicks;
     private readonly TransmitHistory _history = new();
-    private long _productPluginMoxGeneration;
     // Opaque, process-local identity of the authenticated remote session that
     // owns the current TX intent. Null for every local/hardware/plugin source.
     // Guarded by _sync and only mutated while _transitionSync is held.
@@ -107,73 +106,6 @@ public sealed class TxService
     /// Read by <see cref="TxAudioIngest"/> and <see cref="TxTuneDriver"/> on
     /// their producer threads.</summary>
     public long PreKeyOpenAtTicks => Interlocked.Read(ref _preKeyOpenAtTicks);
-
-    /// <summary>Apply or clear the engine-owned, lease-scoped product injection
-    /// drive cap. This never mutates or persists the operator's DrivePct.</summary>
-    internal void SetProductPluginDriveCap(long generation, int? percent) =>
-        _radio.SetProductPluginDriveCap(generation, percent);
-
-    internal void ClearProductPluginDriveCap(long generation) =>
-        _radio.ClearProductPluginDriveCap(generation);
-
-    private ProductPluginTxChannelConstraint? _productPluginTxChannelConstraint;
-    private bool _productPluginChannelTripInProgress;
-
-    internal bool TrySetProductPluginMox(
-        long generation,
-        out string? error,
-        ProductPluginTxChannelConstraint? channelConstraint = null)
-    {
-        lock (_transitionSync)
-        {
-            // Install before taking the admission snapshot. A concurrent radio
-            // mutation either completes before that snapshot or meets the
-            // constraint in the pre-mutation callback, including pre-key DSP work.
-            Volatile.Write(ref _productPluginTxChannelConstraint, channelConstraint);
-            _radio.SetProductPluginNativeFrequencyHold(channelConstraint?.DialFrequencyHz);
-            if (!TrySetMox(true, MoxSource.ProductPlugin, out error))
-            {
-                ClearProductPluginTxChannelConstraint();
-                return false;
-            }
-            bool ownsKey;
-            lock (_sync)
-            {
-                ownsKey = _moxOn && _moxOwner == MoxSource.ProductPlugin;
-                if (ownsKey) _productPluginMoxGeneration = generation;
-            }
-            if (!ownsKey)
-            {
-                error = "the product-plugin key was preempted during admission";
-                ClearProductPluginTxChannelConstraint();
-                return false;
-            }
-            return true;
-        }
-    }
-
-    private void ClearProductPluginTxChannelConstraint()
-    {
-        Volatile.Write(ref _productPluginTxChannelConstraint, null);
-        _radio.SetProductPluginNativeFrequencyHold(null);
-    }
-
-    internal bool TryReleaseProductPluginMox(long generation, out string? error)
-    {
-        lock (_transitionSync)
-        {
-            lock (_sync)
-            {
-                if (_moxOwner != MoxSource.ProductPlugin
-                    || _productPluginMoxGeneration != generation)
-                {
-                    error = null;
-                    return true;
-                }
-            }
-            return TryReleaseMoxImmediately(MoxSource.ProductPlugin, out error);
-        }
-    }
 
     private static bool IsCwMode(RxMode mode) => mode is RxMode.CWU or RxMode.CWL;
 
@@ -607,14 +539,6 @@ public sealed class TxService
             }
         }
         var state = _radio.Snapshot();
-        var channel = Volatile.Read(ref _productPluginTxChannelConstraint);
-        if (source == MoxSource.ProductPlugin
-            && channel is not null
-            && !channel.Matches(state, _radio.IsTransverterActive))
-        {
-            error = channel.OperatorText;
-            return false;
-        }
         var decision = _safety.EvaluateKeyOn(
             intent,
             CaptureSafetySnapshot(state, active, source));
@@ -710,23 +634,6 @@ public sealed class TxService
         if (current.Status == ConnectionStatus.Connected
             && proposed.Status != ConnectionStatus.Connected)
             return;
-        var channel = Volatile.Read(ref _productPluginTxChannelConstraint);
-        if (channel is not null && !channel.Matches(proposed, _radio.IsTransverterActive))
-        {
-            // Teardown can republish generator state while a newly saved
-            // transverter setting is invalid. Only the thread already doing
-            // that teardown may pass this reentrant cleanup edge.
-            if (Monitor.IsEntered(_transitionSync) && _productPluginChannelTripInProgress) return;
-            long generation;
-            lock (_sync)
-                generation = _moxOn && _moxOwner == MoxSource.ProductPlugin
-                    ? _productPluginMoxGeneration : 0;
-            // Reject before committing the proposed state. Convergence must
-            // run after RadioService releases its lock: DSP callbacks hold
-            // their engine lock while reading radio snapshots.
-            throw new TransmitSafetyRejectedException(channel.OperatorText,
-                generation == 0 ? null : () => TripProductChannelIfCurrent(channel, generation));
-        }
         if (!SafetyRelevantStateChanged(current, proposed)) return;
         // CAT may restore the receive dial after the radio wire has dropped
         // while post-wire DSP teardown is still serialized by _transitionSync.
@@ -790,26 +697,6 @@ public sealed class TxService
             else
                 _radio.RefreshHardwareCwArmPermission();
         }
-    }
-
-    private void TripProductChannelIfCurrent(ProductPluginTxChannelConstraint channel, long generation)
-    {
-        // A radio setter may run inside a DSP callback while another transition
-        // waits for DSP. The rejected edit is already blocked; never wait here.
-        if (!Monitor.TryEnter(_transitionSync)) return;
-        try
-        {
-            lock (_sync)
-            {
-                if (!_moxOn || _moxOwner != MoxSource.ProductPlugin
-                    || _productPluginMoxGeneration != generation
-                    || !ReferenceEquals(_productPluginTxChannelConstraint, channel)) return;
-            }
-            _productPluginChannelTripInProgress = true;
-            try { TryTripForAlert(AlertKind.OutOfBand, channel.OperatorText); }
-            finally { _productPluginChannelTripInProgress = false; }
-        }
-        finally { Monitor.Exit(_transitionSync); }
     }
 
     private static bool SafetyRelevantStateChanged(StateDto current, StateDto proposed) =>
@@ -905,7 +792,6 @@ public sealed class TxService
 
     private void ClearHostIntent(long revision)
     {
-        ClearProductPluginTxChannelConstraint();
         bool? changed;
         lock (_sync)
         {
@@ -916,7 +802,6 @@ public sealed class TxService
             _moxStartedAt = null;
             _tunStartedAt = null;
             _moxOwner = null;
-            _productPluginMoxGeneration = 0;
             _remoteTxLeaseId = null;
             _tunOwner = null;
             IsTwoToneOn = false;
