@@ -114,7 +114,7 @@ public sealed class CwIdService : IDisposable
             () => DateTimeOffset.Now, null)
     {
         _keyAndSend = callsign =>
-            (tx.TrySendInstantCwId(this, callsign, null, out var error), error);
+            (tx.TrySendInstantCwId(this, callsign, out var error), error);
         tx.TxActiveChanged += OnTxActiveChanged;
         _unsubscribe = () => tx.TxActiveChanged -= OnTxActiveChanged;
         _onTheTenTimer = new Timer(_ => OnTheTenTick(), null, OnTheTenTickMs, OnTheTenTickMs);

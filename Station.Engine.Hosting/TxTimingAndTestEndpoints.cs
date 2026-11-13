@@ -104,9 +104,7 @@ public static class TxTimingAndTestEndpoints
             // the MOX side-effect — Thetis parity, setup.cs:11162-11165. Returns the
             // post-mutate snapshot via Snapshot(); on a connect-interlock failure
             // the request is rejected with 400.
-            var ok = RemoteTxLease.TryGet(context, out var leaseId)
-                ? tx.TrySetRemoteTwoTone(req, leaseId, out var err)
-                : tx.TrySetTwoTone(req, out err);
+            var ok = tx.TrySetTwoTone(req, out var err);
             if (!ok)
                 return Results.BadRequest(new { error = err });
             return Results.Ok(r.Snapshot());

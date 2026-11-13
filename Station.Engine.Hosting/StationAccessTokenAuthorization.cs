@@ -8,8 +8,7 @@ using System.Text;
 namespace SimpleHPSDR.Server;
 
 /// <summary>
-/// Requires the launcher-provided station token on private station audio and
-/// product-plugin keying APIs.
+/// Requires the launcher-provided station token on the private station APIs.
 /// </summary>
 public static class StationAccessTokenAuthorization
 {
@@ -65,21 +64,13 @@ public static class StationAccessTokenAuthorization
                 "/api/wspr/decoder",
                 StringComparison.OrdinalIgnoreCase)
             || request.Path.StartsWithSegments(
-                "/api/station/tx/safe-idle",
-                StringComparison.OrdinalIgnoreCase)
-            || request.Path.StartsWithSegments(
-                "/api/station/tx/lease",
-                StringComparison.OrdinalIgnoreCase)
-            || request.Path.StartsWithSegments(
                 "/api/tdoa/contribution",
                 StringComparison.OrdinalIgnoreCase);
     }
 
 
     private static bool IsContributionPath(PathString path) =>
-        path.StartsWithSegments("/api/tdoa/contribution", StringComparison.OrdinalIgnoreCase)
-        || path.StartsWithSegments("/api/station/tx/safe-idle", StringComparison.OrdinalIgnoreCase)
-        || path.StartsWithSegments("/api/station/tx/lease", StringComparison.OrdinalIgnoreCase);
+        path.StartsWithSegments("/api/tdoa/contribution", StringComparison.OrdinalIgnoreCase);
 
     private static bool HasExpectedBearerToken(HttpRequest request, byte[] expectedHash)
     {

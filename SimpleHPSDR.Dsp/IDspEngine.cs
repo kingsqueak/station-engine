@@ -431,10 +431,6 @@ public interface IDspEngine : IDisposable
     /// restoration; leave blankers, manual notches and other RX stages alone.</summary>
     void SetRxCwNoiseReductionBypass(int channelId, bool bypass) { }
 
-    /// <summary>Temporarily bypass speech-only TX processing for a linear
-    /// product-plugin injection source. The engine must restore the operator's
-    /// configured stages when the source releases its lease.</summary>
-    void SetTxInjectedAudioBypass(bool bypass) { }
 
     /// <summary>Temporarily bypass the TX audio suite and microphone gain for
     /// recording playback. Retain modulation, filtering and output protection.</summary>

@@ -475,7 +475,6 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
     private RxaMode _txCurrentMode = RxaMode.USB;
     private bool _txDigitalBypass;
     private bool _txToneBypass;
-    private bool _txInjectedAudioBypass;
     private bool _txRecordingBypass;
     private double _txPanelGain = 1.0;
     // Operator configs last applied to TXA. Digital TX modes gate the effective
@@ -3744,7 +3743,6 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
         && !IsDigitalTxMode(_txCurrentMode)
         && !_txDigitalBypass
         && !_txToneBypass
-        && !_txInjectedAudioBypass
         && !_txRecordingBypass
             ? 1
             : 0;
@@ -3762,7 +3760,6 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
             _txLevelerEnabled
             && !_txLevelerForcedOff
             && !_txToneBypass
-            && !_txInjectedAudioBypass
             && !_txRecordingBypass
             && !IsDigitalTxMode(_txCurrentMode)
                 ? 1
@@ -4299,24 +4296,6 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
                 ApplyTxLevelerRunLocked(txa);
             }
         }
-    }
-
-    public void SetTxInjectedAudioBypass(bool bypass)
-    {
-        if (_disposed != 0) return;
-        lock (_txaLock)
-        {
-            if (_txInjectedAudioBypass == bypass) return;
-            _txInjectedAudioBypass = bypass;
-            if (_txaChannelId is int txa)
-            {
-                ApplyTxPhaseRotatorLocked(txa, _txPhaseRotatorConfig);
-                ApplyCfcMasterRunLocked(txa, _cfcConfig);
-                ApplyTxCompressorAndCessbRuns(txa);
-                ApplyTxLevelerRunLocked(txa);
-            }
-        }
-        _log.LogInformation("wdsp.setTxInjectedAudioBypass bypass={Bypass}", bypass);
     }
 
     public void SetTxToneBypass(bool bypass)
@@ -5416,7 +5395,7 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
             if (_txaChannelId is not int id) return 0;
             txa = id;
             skipTxAudioPlugins =
-                _txDigitalBypass || _txToneBypass || _txInjectedAudioBypass || _txRecordingBypass
+                _txDigitalBypass || _txToneBypass || _txRecordingBypass
                 || IsDigitalTxMode(_txCurrentMode);
         }
 

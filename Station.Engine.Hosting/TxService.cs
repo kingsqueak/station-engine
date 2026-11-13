@@ -81,14 +81,6 @@ public sealed class TxService
     // the release history. Guarded by _sync.
     private long _keyedAtTicks;
     private readonly TransmitHistory _history = new();
-    // Opaque, process-local identity of the authenticated remote session that
-    // owns the current TX intent. Null for every local/hardware/plugin source.
-    // Guarded by _sync and only mutated while _transitionSync is held.
-    private string? _remoteTxLeaseId;
-    // Only live transport generations are admitted. Disconnect removes the
-    // generation, so delayed work stays invalid without retaining tombstones.
-    private readonly HashSet<string> _activeRemoteTxLeases = new(StringComparer.Ordinal);
-    internal const int MaxRemoteTxLeases = 64;
     private MoxSource? _tunOwner;
     private MoxSource? _pendingTunOwner;
     private bool _paCalibrationLeaseActive;
@@ -347,9 +339,8 @@ public sealed class TxService
     public event Action<bool>? TxActiveChanged;
 
     /// <summary>
-    /// Raised before a source attempts a rising transmit edge. The leased
-    /// product-plugin port uses this pre-admission seam to relinquish its key
-    /// before an operator, hardware, TUNE, CAT, or TCI request is evaluated.
+    /// Raised before a source attempts a rising transmit edge, before the
+    /// request is evaluated. The HL2 I/O board service listens to it.
     /// </summary>
     internal event Action<MoxSource>? TransmitRequested;
 
@@ -802,7 +793,6 @@ public sealed class TxService
             _moxStartedAt = null;
             _tunStartedAt = null;
             _moxOwner = null;
-            _remoteTxLeaseId = null;
             _tunOwner = null;
             IsTwoToneOn = false;
             Interlocked.Exchange(ref _preKeyOpenAtTicks, 0);
@@ -1139,18 +1129,18 @@ public sealed class TxService
 
     private int _instantCwIdRequestActive;
 
-    internal bool TrySendInstantCwId(CwIdService cwId, string? rawCallsign, string? remoteLeaseId, out string? error)
+    internal bool TrySendInstantCwId(CwIdService cwId, string? rawCallsign, out string? error)
     {
         if (Interlocked.CompareExchange(ref _instantCwIdRequestActive, 1, 0) != 0)
         {
             error = "A CW ID is already being sent.";
             return false;
         }
-        try { return SendInstantCwIdCore(cwId, rawCallsign, remoteLeaseId, out error); }
+        try { return SendInstantCwIdCore(cwId, rawCallsign, out error); }
         finally { Volatile.Write(ref _instantCwIdRequestActive, 0); }
     }
 
-    private bool SendInstantCwIdCore(CwIdService cwId, string? rawCallsign, string? remoteLeaseId, out string? error)
+    private bool SendInstantCwIdCore(CwIdService cwId, string? rawCallsign, out string? error)
     {
         if (!CwIdService.TryNormalizeCallsign(rawCallsign, out var callsign))
         {
@@ -1159,7 +1149,6 @@ public sealed class TxService
         }
         lock (_transitionSync)
         {
-            if (remoteLeaseId is not null && !ValidateRemoteLease(remoteLeaseId, out error)) return false;
             lock (_sync)
             {
                 if (_activeIntent is not null)
@@ -1185,10 +1174,7 @@ public sealed class TxService
             }
             try
             {
-                bool keyed = remoteLeaseId is null
-                    ? TrySetMox(true, MoxSource.UI, out error)
-                    : TrySetRemoteMox(true, remoteLeaseId, MoxSource.UI, out error);
-                if (!keyed) return false;
+                if (!TrySetMox(true, MoxSource.UI, out error)) return false;
                 if (!IsMoxOn || MoxOwner != MoxSource.UI || IsReleaseTailAbortRequested())
                 {
                     error = "The instant CW ID transmission was interrupted.";
@@ -1400,9 +1386,8 @@ public sealed class TxService
     }
 
     /// <summary>
-    /// Dead-man release for the out-of-process product-plugin lease. Unlike a
-    /// normal operator release this deliberately skips voice/modem
-    /// tails: liveness loss must drop the wire before one 20 ms audio block.
+    /// Immediate release, used when an instant CW ID ends. Unlike a normal
+    /// operator release this deliberately skips voice/modem tails.
     /// Source ownership is still enforced, and an already-idle transmitter is
     /// a successful no-op.
     /// </summary>
@@ -1437,189 +1422,6 @@ public sealed class TxService
             error = null;
             return true;
         }
-    }
-
-    /// <summary>
-    /// Emergency convergence for an authenticated remote session whose
-    /// essential transport disappeared while it held transmit authority.
-    /// Unlike an operator key-up this bypasses voice and modem
-    /// tails and clears every host-driven transmit intent (MOX, TUN, and
-    /// two-tone) regardless of the UI ownership tag used by the remote API.
-    /// The normal transition lock makes this atomic with key-down, so a request
-    /// already in flight either completes before this convergence or observes
-    /// the caller's revoked session authority before it can enter afterward.
-    /// </summary>
-    internal bool ForceRemoteDisconnectSafeIdle(string leaseId)
-    {
-        if (string.IsNullOrWhiteSpace(leaseId)) return false;
-        RequestReleaseTailAbort();
-        lock (_transitionSync)
-        {
-            ClearReleaseTailAbort();
-            bool wasActive;
-            lock (_sync)
-            {
-                _activeRemoteTxLeases.Remove(leaseId);
-            }
-            // Purge/cancel lease-tagged producers before another source can
-            // take ownership after this serialized transition returns.
-            NotifyRemoteTxLeaseRevoked(leaseId);
-            lock (_sync)
-            {
-                if (!string.Equals(_remoteTxLeaseId, leaseId, StringComparison.Ordinal))
-                    return false;
-                wasActive = _activeIntent is not null || _moxOn || _tunOn || IsTwoToneOn;
-            }
-
-            PrepareTxMonitorForTransmitStart(clearTransmitIntent: true);
-            ConvergeToSafeIdle(faultLatched: false, reason: "remote-disconnect");
-            if (wasActive)
-                _log.LogWarning("tx.remote.disconnect forced safe idle");
-            BroadcastMoxState(moxOn: false, tunOn: false);
-            return true;
-        }
-    }
-
-    internal event Action<string>? RemoteTxLeaseRevoked;
-
-    private void NotifyRemoteTxLeaseRevoked(string leaseId)
-    {
-        var subscribers = RemoteTxLeaseRevoked;
-        if (subscribers is null) return;
-        foreach (Action<string> subscriber in subscribers.GetInvocationList())
-        {
-            try { subscriber(leaseId); }
-            catch (Exception ex)
-            {
-                // Producer cleanup is defense-in-depth. One faulty subscriber
-                // must never prevent the wire/DSP emergency convergence below.
-                _log.LogError(ex, "tx.remote.disconnect producer revoke hook failed");
-            }
-        }
-    }
-
-    internal bool RegisterRemoteTxLease(string leaseId)
-    {
-        if (!RemoteTxLease.IsValid(leaseId)) return false;
-        lock (_transitionSync)
-        lock (_sync)
-        {
-            if (_activeRemoteTxLeases.Contains(leaseId)) return true;
-            if (_activeRemoteTxLeases.Count >= MaxRemoteTxLeases) return false;
-            return _activeRemoteTxLeases.Add(leaseId);
-        }
-    }
-
-    internal int RegisteredRemoteTxLeaseCount
-    {
-        get { lock (_sync) return _activeRemoteTxLeases.Count; }
-    }
-
-    internal bool TryRunRemoteLeaseOperation(
-        string leaseId,
-        Action operation,
-        out string? error)
-    {
-        lock (_transitionSync)
-        {
-            if (!ValidateRemoteLease(leaseId, out error)) return false;
-            operation();
-            return true;
-        }
-    }
-
-    internal bool TrySetRemoteMox(
-        bool on,
-        string leaseId,
-        MoxSource source,
-        out string? error)
-    {
-        lock (_transitionSync)
-        {
-            // Validation must share the transition lock with the mutation.
-            // Otherwise disconnect can revoke the lease between validation
-            // and key-down, allowing delayed work to re-key the station.
-            if (!ValidateRemoteLease(leaseId, out error)) return false;
-            if (!CanRemoteLeaseMutateCurrentIntent(leaseId, on, out error)) return false;
-            var success = TrySetMox(on, source, out error);
-            if (success && on)
-                lock (_sync) _remoteTxLeaseId = leaseId;
-            return success;
-        }
-    }
-
-    internal bool TrySetRemoteTun(bool on, string leaseId, out string? error)
-    {
-        lock (_transitionSync)
-        {
-            if (!ValidateRemoteLease(leaseId, out error)) return false;
-            if (!CanRemoteLeaseMutateCurrentIntent(leaseId, on, out error)) return false;
-            var success = TrySetTun(on, MoxSource.UI, out error);
-            if (success && on)
-                lock (_sync) _remoteTxLeaseId = leaseId;
-            return success;
-        }
-    }
-
-    internal bool TrySetRemoteTwoTone(TwoToneSetRequest request, string leaseId, out string? error)
-    {
-        lock (_transitionSync)
-        {
-            if (!ValidateRemoteLease(leaseId, out error)) return false;
-            if (!CanRemoteLeaseMutateCurrentIntent(leaseId, request.Enabled, out error)) return false;
-            var success = TrySetTwoTone(request, out error);
-            if (success && request.Enabled)
-                lock (_sync) _remoteTxLeaseId = leaseId;
-            return success;
-        }
-    }
-
-    internal bool IsRemoteLeaseOwner(string leaseId, MoxSource? source = null)
-    {
-        lock (_sync)
-            return string.Equals(_remoteTxLeaseId, leaseId, StringComparison.Ordinal)
-                && (source is null || _moxOwner == source);
-    }
-
-    private bool CanRemoteLeaseMutateCurrentIntent(
-        string leaseId,
-        bool keyDown,
-        out string? error)
-    {
-        lock (_sync)
-        {
-            if (_activeIntent is null)
-            {
-                error = null;
-                return true;
-            }
-            if (string.Equals(_remoteTxLeaseId, leaseId, StringComparison.Ordinal))
-            {
-                error = null;
-                return true;
-            }
-            error = keyDown
-                ? "TX is owned by another local or remote source"
-                : "this remote session does not own the active transmission";
-            return false;
-        }
-    }
-
-    private bool ValidateRemoteLease(string leaseId, out string? error)
-    {
-        lock (_sync)
-        {
-            if (!string.IsNullOrWhiteSpace(leaseId)
-                && _activeRemoteTxLeases.Contains(leaseId))
-            {
-                error = null;
-                return true;
-            }
-        }
-        error = string.IsNullOrWhiteSpace(leaseId)
-            ? "remote TX lease is required"
-            : "remote TX lease is not active";
-        return false;
     }
 
     /// <summary>

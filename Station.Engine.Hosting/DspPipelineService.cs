@@ -5928,9 +5928,6 @@ public partial class DspPipelineService : BackgroundService,
     {
         lock (_engineLock)
         {
-        // A queued pre-key snapshot must not retune the TX DUC or restore an
-        // older sideband while a fixed-channel audio lease owns transmission.
-        s = _radio.ReconcileProductPluginTxState(s);
         _fullDuplexRxConfigured = s.FullDuplexMultiRxEnabled;
         // FreeDV spec-profile override (see the AGC/TX-leveling pushes below):
         // gates those engine pushes to linear-friendly values while the operator's

@@ -227,7 +227,6 @@ public sealed class SyntheticDspEngine : IDspEngine
     // the same buffering shape.
     public void SetTxMode(RxMode mode) { }
     public void SetTxDigitalBypass(bool bypass) { }
-    public void SetTxInjectedAudioBypass(bool bypass) { }
     public void SetTxToneBypass(bool bypass) { }
     public void SetTxFilter(int lowHz, int highHz) { }
     public void SetRxBandpassWindow(int channelId, BandpassWindow window) { }

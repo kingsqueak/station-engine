@@ -98,12 +98,10 @@ public static class TxControlEndpoints
     {
         var log = endpoints.ServiceProvider.GetRequiredService<ILogger<object>>();
 
-        endpoints.MapPost("/api/tx/mox", (MoxSetRequest req, TxService tx, HttpContext context) =>
+        endpoints.MapPost("/api/tx/mox", (MoxSetRequest req, TxService tx) =>
         {
             log.LogInformation("api.tx.mox on={On}", req.On);
-            var ok = RemoteTxLease.TryGet(context, out var leaseId)
-                ? tx.TrySetRemoteMox(req.On, leaseId, MoxSource.UI, out var err)
-                : tx.TrySetMox(req.On, out err);
+            var ok = tx.TrySetMox(req.On, out var err);
             if (!ok) return Results.Conflict(new { error = err });
             return Results.Ok(new { moxOn = tx.IsMoxOn });
         });
@@ -115,13 +113,8 @@ public static class TxControlEndpoints
         // the engine clamps to 5..50. Empty text is allowed — produces no
         // symbols and resolves to Idle without keying. The engine does not
         // select the TX receiver.
-        endpoints.MapPost("/api/cw/send", (CwSendRequest req, CwEngine cw, HttpContext context) =>
-        {
-            var leaseId = RemoteTxLease.TryGet(context, out var remoteLease)
-                ? remoteLease
-                : null;
-            return EnqueueCwSend(req, cw, leaseId);
-        });
+        endpoints.MapPost("/api/cw/send", (CwSendRequest req, CwEngine cw) =>
+            EnqueueCwSend(req, cw));
 
         // Hard abort. An empty body is the historical global abort: it drops
         // the queue, cancels the in-flight playback, and returns the new
@@ -162,13 +155,10 @@ public static class TxControlEndpoints
         // schedule (start with OnTheTen) key the radio.
         endpoints.MapGet("/api/cwid", (CwIdService cwId) => Results.Ok(cwId.Status()));
 
-        endpoints.MapPost("/api/cwid/instant", (CwIdStartRequest req, CwIdService cwId, TxService tx, HttpContext context) =>
-        {
-            var leaseId = RemoteTxLease.TryGet(context, out var remoteLease) ? remoteLease : null;
-            return tx.TrySendInstantCwId(cwId, req.Callsign, leaseId, out var error)
+        endpoints.MapPost("/api/cwid/instant", (CwIdStartRequest req, CwIdService cwId, TxService tx) =>
+            tx.TrySendInstantCwId(cwId, req.Callsign, out var error)
                 ? Results.Ok(cwId.Status())
-                : Results.Conflict(new { error });
-        });
+                : Results.Conflict(new { error }));
 
         endpoints.MapPost("/api/cwid/start", (CwIdStartRequest req, CwIdService cwId) =>
             cwId.Start(req.Callsign, req.OnTheTen, out var error)
@@ -340,17 +330,12 @@ public static class TxControlEndpoints
             TunSetRequest req,
             TxService tx,
             [Microsoft.AspNetCore.Mvc.FromServices] TuneCarrierCommandCoordinator coordinator,
-            HttpContext context,
             CancellationToken cancellationToken) =>
         {
-            var remoteLeaseId = RemoteTxLease.TryGet(context, out var leaseId)
-                ? leaseId
-                : null;
             var result = await coordinator.SetAsync(
                     req.On,
                     tx,
-                    cancellationToken,
-                    remoteLeaseId)
+                    cancellationToken)
                 .ConfigureAwait(false);
             if (!result.Success)
             {
@@ -550,17 +535,15 @@ public static class TxControlEndpoints
     }
 
     /// <summary>
-    /// Queue one CW send. <paramref name="remoteTxLeaseId"/> is the lease
-    /// already resolved by the route. A <c>receiver-*</c> refusal is HTTP 409;
+    /// Queue one CW send. A <c>receiver-*</c> refusal is HTTP 409;
     /// a queued send and an abort-seq mismatch (<c>halted</c>) stay HTTP 202.
     /// </summary>
-    internal static IResult EnqueueCwSend(CwSendRequest req, CwEngine cw, string? remoteTxLeaseId)
+    internal static IResult EnqueueCwSend(CwSendRequest req, CwEngine cw)
     {
         var refusal = cw.TryEnqueueSend(
             req.Text ?? string.Empty,
             req.Wpm,
             default,
-            remoteTxLeaseId,
             req.ExpectedAbortSeq,
             req.Receiver,
             req.JobId);

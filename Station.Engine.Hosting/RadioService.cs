@@ -203,14 +203,6 @@ public sealed partial class RadioService : IDisposable
     // edge is crossed or a PA setting is edited, we recompute without needing
     // to wait for the next SetDrive call.
     private int _drivePct;
-    // Engine-owned, non-persisted cap for a keyed product-plugin injection
-    // lease. -1 means inactive. The operator's DrivePct remains untouched, so
-    // lease loss, engine restart, or process death cannot persist the temporary
-    // reduction. ProductPluginAudioPort owns the apply/clear lifecycle.
-    private int _productPluginDriveCapPct = -1;
-    private long _productPluginDriveCapGeneration;
-    private readonly object _productPluginDriveCapGate = new();
-    internal Action<long>? ProductPluginDriveCapClearAttemptedForTest { get; set; }
     // On-board CW keyer config, forwarded to the connected client and
     // re-pushed on reconnect. Seeded from CwSettingsStore in the ctor; updated
     // at runtime via SetCwKeyerConfig from the CW settings endpoint. Default
@@ -2039,39 +2031,14 @@ public sealed partial class RadioService : IDisposable
 
     internal bool IsTransverterActive => ActiveTransverterSettings().Enabled;
 
-    private long _productPluginNativeFrequencyHz;
-    private readonly object _productPluginFrequencyConfigSync = new();
+    // Serialises writes to the three clock-calibration settings.
+    private readonly object _frequencyCorrectionSync = new();
 
-    // Constrained native-channel TX must not translate its NCO using a
-    // transverter setting concurrently saved before its change callback runs.
-    // Held from admission through wire unkey; never persisted.
-    internal void SetProductPluginNativeFrequencyHold(long? frequencyHz)
-    {
-        if (frequencyHz is null)
-        {
-            // Clearing follows wire unkey and never competes with calibration
-            // admission. Do not acquire the config lock here: an ordinary TX
-            // trip can already hold radio state while calibration waits for it.
-            lock (_sync) Interlocked.Exchange(ref _productPluginNativeFrequencyHz, 0);
-            return;
-        }
-        lock (_productPluginFrequencyConfigSync)
-        lock (_sync) Interlocked.Exchange(ref _productPluginNativeFrequencyHz, frequencyHz.Value);
-    }
-
-    internal StateDto ReconcileProductPluginTxState(StateDto state) =>
-        Interlocked.Read(ref _productPluginNativeFrequencyHz) > 0 ? Snapshot() : state;
-
-    // SimpleHPSDR P1 shares its primary host frequency slot with TX. Serialize the final write with the
-    // channel hold, so a delayed RX setter cannot overwrite the admitted TX
-    // carrier after key-on. P2 has a separate DUC and reconciles its snapshot.
+    // SimpleHPSDR P1 shares its primary host frequency slot with TX.
     internal void PushPrimaryRadioFrequency(long frequencyHz)
     {
         lock (_sync)
-        {
-            long held = Interlocked.Read(ref _productPluginNativeFrequencyHz);
-            ActiveClient?.SetVfoAHz(held > 0 && _mox ? held : ToHardwareFrequencyHz(frequencyHz));
-        }
+            ActiveClient?.SetVfoAHz(ToHardwareFrequencyHz(frequencyHz));
     }
 
     internal bool TryResolveTransverterBand(long rfHz, out TransverterBandDto band)
@@ -2091,8 +2058,6 @@ public sealed partial class RadioService : IDisposable
     internal long ToHardwareFrequencyHz(long rfHz)
     {
         if (ReceiveOnly) return Math.Clamp(rfHz, 0L, StationReceiveOnlyPolicy.MaximumFrequencyHz);
-        if (Interlocked.Read(ref _productPluginNativeFrequencyHz) > 0)
-            return Math.Clamp(rfHz, 0L, TransverterFrequencyConverter.MaximumRadioFrequencyHz);
         var settings = ActiveTransverterSettings();
         if (!settings.Enabled)
             return Math.Clamp(rfHz, 0L, TransverterFrequencyConverter.MaximumRadioFrequencyHz);
@@ -2185,22 +2150,12 @@ public sealed partial class RadioService : IDisposable
 
     private void RevalidateTransverterChange(StateDto state)
     {
-        bool constrained = Interlocked.Read(ref _productPluginNativeFrequencyHz) > 0;
         try { TransmitSafetyStateChanging?.Invoke(state, state); }
         catch (TransmitSafetyRejectedException ex)
         {
             ex.CompleteAfterStateUnlock();
-            // The settings were already saved before their change notification.
-            // Once the fixed-channel key is fully down, finish applying those
-            // settings to RX. A contested/pending transition still throws.
-            if (!constrained || !CanApplyTransverterAfterChannelTrip()) throw;
+            throw;
         }
-    }
-
-    private bool CanApplyTransverterAfterChannelTrip()
-    {
-        lock (_sync)
-            return _productPluginNativeFrequencyHz == 0 && !_mox && !_tunActive;
     }
 
     /// <summary>
@@ -5190,8 +5145,6 @@ public sealed partial class RadioService : IDisposable
             }
         }
         if (on) AlignLoForTx();
-        if (on && Interlocked.Read(ref _productPluginNativeFrequencyHz) > 0)
-            PushPrimaryRadioFrequency(Interlocked.Read(ref _productPluginNativeFrequencyHz));
         ActiveClient?.SetMox(on);
         MoxChanged?.Invoke(on);
         if (!on) RestoreLoAfterTx();
@@ -5204,42 +5157,6 @@ public sealed partial class RadioService : IDisposable
     // CAT bridge, tests) gets the same range guarantee.
     public void SetDrive(int percent)
         => SetDriveCore(percent, persist: true);
-
-    internal int? ProductPluginDriveCapPct
-    {
-        get
-        {
-            int value = Volatile.Read(ref _productPluginDriveCapPct);
-            return value < 0 ? null : value;
-        }
-    }
-
-    internal void SetProductPluginDriveCap(long generation, int? percent)
-    {
-        lock (_productPluginDriveCapGate)
-        {
-            if (generation < _productPluginDriveCapGeneration) return;
-            int ceiling = Math.Clamp(Snapshot().DriveMaxPct, 1, 100);
-            int value = percent is int requested ? Math.Clamp(requested, 0, ceiling) : -1;
-            _productPluginDriveCapGeneration = generation;
-            if (Interlocked.Exchange(ref _productPluginDriveCapPct, value) != value)
-                RecomputePaAndPush();
-        }
-    }
-
-    internal void ClearProductPluginDriveCap(long generation)
-    {
-        lock (_productPluginDriveCapGate)
-        {
-            if (_productPluginDriveCapGeneration == generation)
-            {
-                _productPluginDriveCapGeneration = 0;
-                if (Interlocked.Exchange(ref _productPluginDriveCapPct, -1) != -1)
-                    RecomputePaAndPush();
-            }
-        }
-        ProductPluginDriveCapClearAttemptedForTest?.Invoke(generation);
-    }
 
     internal bool SetDriveIfCurrent(int percent, int expectedCurrent)
         => SetDriveCore(percent, persist: false, expectedCurrent, abortIfTxActive: true);
@@ -6266,9 +6183,8 @@ public sealed partial class RadioService : IDisposable
     /// </summary>
     public External10MHzReferenceSettings SetExternal10MHzReference(bool? enabled, double? correctionFactor)
     {
-        lock (_productPluginFrequencyConfigSync)
+        lock (_frequencyCorrectionSync)
         {
-            ThrowIfFixedChannelHoldsFrequency();
             var current = GetExternal10MHzReference();
             var applied = new External10MHzReferenceSettings(
                 enabled ?? current.Enabled,
@@ -6291,12 +6207,8 @@ public sealed partial class RadioService : IDisposable
     /// </summary>
     public double SetFrequencyCorrectionFactor(double factor)
     {
-        // Clock calibration changes the NCO even though no dial/mode state
-        // changes. Serialize the entire write-through with fixed-channel
-        // admission, and refuse before touching storage or either protocol.
-        lock (_productPluginFrequencyConfigSync)
+        lock (_frequencyCorrectionSync)
         {
-            ThrowIfFixedChannelHoldsFrequency();
             return SetFrequencyCorrectionFactorCore(factor);
         }
     }
@@ -6309,21 +6221,11 @@ public sealed partial class RadioService : IDisposable
     /// </summary>
     public double? TrySetFrequencyCorrectionFactor(double factor, long expectedGeneration)
     {
-        lock (_productPluginFrequencyConfigSync)
+        lock (_frequencyCorrectionSync)
         {
-            ThrowIfFixedChannelHoldsFrequency();
             if (FrequencyCorrectionGeneration != expectedGeneration) return null;
             return SetFrequencyCorrectionFactorCore(factor);
         }
-    }
-
-    // Caller holds _productPluginFrequencyConfigSync. Clock calibration moves
-    // the NCO, so it must not change under a fixed-channel transmission.
-    private void ThrowIfFixedChannelHoldsFrequency()
-    {
-        if (Interlocked.Read(ref _productPluginNativeFrequencyHz) > 0)
-            throw new TransmitSafetyRejectedException(
-                "Frequency calibration cannot change during a fixed-channel audio transmission.");
     }
 
     private double SetFrequencyCorrectionFactorCore(double factor)
@@ -6388,12 +6290,6 @@ public sealed partial class RadioService : IDisposable
             Interlocked.Exchange(ref _tunePct, tune);
             return s with { DrivePct = drive, DriveMaxPct = maximum, TunePct = tune };
         });
-        lock (_productPluginDriveCapGate)
-        {
-            int productCap = Volatile.Read(ref _productPluginDriveCapPct);
-            if (productCap > maximum)
-                Interlocked.Exchange(ref _productPluginDriveCapPct, maximum);
-        }
         // Reduce live RF before touching storage, then persist this infrequent
         // hardware-protection setting before acknowledging the change so an
         // abrupt exit cannot restore an older, higher ceiling on next launch.
@@ -6451,9 +6347,6 @@ public sealed partial class RadioService : IDisposable
         bool tunSwrFoldback = tunActive && Volatile.Read(ref _tunSwrFoldbackActive) != 0;
         if (tunSwrFoldback)
             activePct = Math.Min(activePct, TunSwrFoldbackPercent(cfg.Global.PaMaxPowerWatts));
-        int productCap = Volatile.Read(ref _productPluginDriveCapPct);
-        if (!tunActive && productCap >= 0)
-            activePct = Math.Min(activePct, productCap);
         if (txThroughTransverter && txXvtrBand.MaxPowerDbm is null)
             activePct = Math.Min(activePct, txXvtrBand.Power);
         // Per-board drive encoding. HL2 pairs its 4-bit 0.5 dB step with an
