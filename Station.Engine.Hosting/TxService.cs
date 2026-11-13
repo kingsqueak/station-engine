@@ -555,6 +555,8 @@ public sealed class TxService
         return false;
     }
 
+    private const long SweepBelowBandMarginHz = 500_000;
+
     internal bool ValidateAnalyzerSweep(long startHz, long endHz, int points, out string? error)
     {
         StateDto state = _radio.Snapshot();
@@ -572,12 +574,29 @@ public sealed class TxService
             error = "Analyzer sweep blocked: waiting for HL2 IO Board band and mode synchronization. Try again in a moment.";
             return false;
         }
+        // The board's amplifier band outputs and antenna port stay where the
+        // dial put them, so with the board fitted the sweep may run on the
+        // dial's band and the gaps around it, but not into another band.
+        bool boardFitted = _safety.Hl2IoBoardFitted;
+        string? dialBand = BandUtils.FreqToBand(RadioFrequencyResolver.TxFrequencyHz(state));
 
         TransmitIntent? active;
         lock (_sync) active = _activeIntent;
         for (int i = 0; i < points; i++)
         {
             long hz = startHz + (long)Math.Round((endHz - startHz) * i / (double)(points - 1));
+            // FreqToBand gives everything up to the next band's lower edge to
+            // the band below, so a point a little under the dial's band reads
+            // as the one beneath it. Half a megahertz under the edge is still
+            // "around this band": the band's own filter passes it.
+            if (boardFitted && BandUtils.FreqToBand(hz) is { } pointBand && pointBand != dialBand
+                && BandUtils.FreqToBand(hz + SweepBelowBandMarginHz) != dialBand)
+            {
+                error = $"Analyzer sweep blocked at {hz / 1_000_000.0:F6} MHz: with the HL2 IO Board fitted, "
+                    + "the sweep can't run into another band. The board's amplifier and antenna "
+                    + "outputs follow the dial: tune to the band you want to sweep and keep the sweep to it.";
+                return false;
+            }
             var candidate = state with { VfoHz = hz };
             TransmitSafetyDecision decision = _safety.EvaluateSweepPoint(
                 TransmitIntent.Tun,

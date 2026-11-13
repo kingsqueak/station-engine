@@ -132,6 +132,7 @@ public sealed partial class RadioService
             publish |= projected.AttenDb != _state.AttenDb || projected.AttOffsetDb != _state.AttOffsetDb || projected.AdcOverloadWarning != _state.AdcOverloadWarning;
             _state = projected;
         }
-        if (publish) StateChanged?.Invoke(Snapshot());
+        // Through the ordered delivery like every other change (review 2026-11-13).
+        if (publish) PublishState();
     }
 }

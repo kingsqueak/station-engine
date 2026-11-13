@@ -167,6 +167,9 @@ internal sealed class EngineTransmitSafetyModule
         }
     }
 
+    /// <summary>True while a connected HL2 has its IO Board fitted and in use.</summary>
+    public bool Hl2IoBoardFitted { get { lock (_sync) return _hl2IoBoardRequired; } }
+
     public bool Hl2IoBoardNeedsSync(StateDto state)
     {
         lock (_sync)
@@ -205,7 +208,8 @@ internal sealed class EngineTransmitSafetyModule
     /// SimpleHPSDR: one point of an antenna sweep, checked before the sweep starts.
     /// The dial does not move for it, so the HL2 IO Board can't be "in step"
     /// with the point's frequency and that comparison is left out; the caller
-    /// checks the board against the real dial instead. A board fault still
+    /// checks the board against the real dial and keeps the sweep out of
+    /// other bands instead. A board fault still
     /// blocks, and every other rule (band plan, connection, board) applies.
     /// </summary>
     public TransmitSafetyDecision EvaluateSweepPoint(TransmitIntent intent, TransmitSafetySnapshot snapshot)

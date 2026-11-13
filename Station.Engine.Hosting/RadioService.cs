@@ -493,6 +493,7 @@ public sealed partial class RadioService : IDisposable
         // A change made from inside a listener on this thread: the delivery
         // loop below (further up this thread's stack) picks it up next.
         if (Monitor.IsEntered(_statePublishSync)) return;
+        System.Runtime.ExceptionServices.ExceptionDispatchInfo? failure = null;
         while (Volatile.Read(ref _statePublishPending) == 1)
         {
             // Listeners still run on the caller's thread, so a change is
@@ -507,16 +508,23 @@ public sealed partial class RadioService : IDisposable
                     _log.LogWarning("radio.state publish handed off after {Ms} ms (total {Count})", StatePublishWaitMs, n);
                 return;
             }
+            // A listener that throws must not stop the delivery: a thread
+            // that handed its change over is relying on this loop. Keep
+            // going, then let the first exception reach this caller.
             try
             {
                 while (Interlocked.Exchange(ref _statePublishPending, 0) == 1)
-                    StateChanged?.Invoke(Snapshot());
+                {
+                    try { StateChanged?.Invoke(Snapshot()); }
+                    catch (Exception ex) { failure ??= System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex); }
+                }
             }
             finally
             {
                 Monitor.Exit(_statePublishSync);
             }
         }
+        failure?.Throw();
     }
     // Installed by TxService. Invoked before a StateDto mutation commits so an
     // already-keyed transmission can reject an unsafe VFO/mode/filter/XIT

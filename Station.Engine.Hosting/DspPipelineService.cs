@@ -5966,6 +5966,11 @@ public partial class DspPipelineService : BackgroundService,
             && ctunShiftForRetune != _appliedCtunOffsetHz;
         if (!alignRetune && !retuneStillScheduled)
         {
+            // An older retune still waiting for its block boundary goes out
+            // first, with its shift, so it can't arrive after this newer
+            // centre and leave the radio on the old one.
+            if (Interlocked.Exchange(ref _alignedRetuneDeadlineTicks, 0) != 0)
+                Volatile.Read(ref _engine)?.FlushAlignedRetune(_alignedRetuneChannel);
             p2?.SetVfoAHz(loHw);
             if (p2 is not null) _lastSentP2LoHw = loHw;
         }
@@ -6182,6 +6187,9 @@ public partial class DspPipelineService : BackgroundService,
             }
             else
             {
+                // Anything older still waiting goes out before this one.
+                if (Interlocked.Exchange(ref _alignedRetuneDeadlineTicks, 0) != 0)
+                    engine.FlushAlignedRetune(_alignedRetuneChannel);
                 client.SetVfoAHz(loHw);
                 engine.SetCtunShift(channel, ctunShiftHz);
             }

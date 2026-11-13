@@ -1984,10 +1984,14 @@ public sealed class TxAudioIngest : IDisposable
         // edge tracker for keyed TX.
         if (moxNow && !_lastSeenMox)
         {
-            lock (_sync) _lastSeenMox = true;
-            // New over: judge quiet against this over's own speech level.
-            _micOverPeakRms = 0f;
-            Volatile.Write(ref _micQuietBlocks, 0);
+            lock (_sync)
+            {
+                _lastSeenMox = true;
+                // New over: judge quiet against this over's own speech level.
+                // Inside the lock the tracker itself runs under.
+                _micOverPeakRms = 0f;
+                Volatile.Write(ref _micQuietBlocks, 0);
+            }
         }
 
         int blockSize = engine?.TxBlockSamples ?? 0;

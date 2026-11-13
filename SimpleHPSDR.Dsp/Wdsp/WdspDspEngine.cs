@@ -326,6 +326,9 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
         public int BlockPhaseReset;                 // set when the channel restarts
         public (int ShiftHz, int LeadFrames, Action Send)? RetuneRequested;
         public (long ApplyAtCount, int ShiftHz)? RetuneInFlight;
+        // Counts every new shift decision (a schedule or an immediate change),
+        // so a flush that had to send outside the gate can tell it was overtaken.
+        public long RetuneEpoch;
         public int BlockFrames => Math.Max(1, SampleRateHz / DspRate * RxaDspSize / RxaInSize);
         // Thetis "AGC Top" max-gain setting in dB. 90 matches the Thetis
         // default (radio.cs:1021 rx_agc_max_gain); the /api/agcGain endpoint can
@@ -1438,16 +1441,21 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
             sendNow = state.RetuneRequested?.Send;
             state.RetuneRequested = null;
             state.RetuneInFlight = null;
+            state.RetuneEpoch++;
         }
         try { sendNow?.Invoke(); } catch { }
         lock (state.FilterProfileGate)
         {
             RunNativeLifecycleCriticalSection(() =>
             {
-                NativeMethods.SetRXAShiftFreq(channelId, shiftHz);
-                NativeMethods.RXANBPSetShiftFrequency(channelId, shiftHz);
-                NativeMethods.SetRXAShiftRun(channelId, shiftHz != 0 ? 1 : 0);
-                state.CtunShiftHz = shiftHz;
+                // Under the gate the worker applies its scheduled shift under,
+                // so this newer value can't be overwritten by an older one
+                // the worker had already picked up.
+                lock (state.RetuneGate)
+                {
+                    state.RetuneInFlight = null;
+                    ApplyShiftCore(state, shiftHz);
+                }
             });
         }
         ConfigureMaxBinDetector(state);
@@ -1470,47 +1478,64 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
         double frameMs = RxaInSize * 1000.0 / state.SampleRateHz;
         int leadFrames = Math.Clamp((int)Math.Round(leadMs / frameMs), 0, state.BlockFrames - 1);
         lock (state.RetuneGate)
+        {
             state.RetuneRequested = (shiftHz, leadFrames, sendRadioCommand);
+            state.RetuneEpoch++;
+        }
         return true;
     }
 
     /// <summary>Carry out anything still waiting from
     /// <see cref="TryScheduleAlignedRetune"/> now (no IQ is flowing, or the
-    /// caller is about to change the same things itself).</summary>
+    /// caller is about to change the same things itself). Safe from any
+    /// thread: the native calls run under the lifecycle lock, and a channel
+    /// that has been stopped only gets its radio command sent.</summary>
     public void FlushAlignedRetune(int channelId)
     {
         if (!_channels.TryGetValue(channelId, out var state)) return;
-        FlushAlignedRetune(state);
+        // Nearly always there is nothing waiting (the worker has done it):
+        // then take no lock and touch nothing, so the receive worker isn't
+        // disturbed. The timeout flush runs after every retune.
+        lock (state.RetuneGate)
+            if (state.RetuneRequested is null && state.RetuneInFlight is null) return;
+        lock (state.FilterProfileGate)
+            RunNativeLifecycleCriticalSection(() => FlushAlignedRetune(state, native: !state.Stopped));
+        if (!state.Stopped) ConfigureMaxBinDetector(state);
     }
 
-    private static void FlushAlignedRetune(ChannelState state)
+    // Sends a waiting radio command and applies the shift that belongs to it.
+    // From the channel's own worker (alive, so the channel is open) or under
+    // the lifecycle lock.
+    private static void FlushAlignedRetune(ChannelState state, bool native = true)
     {
         (int ShiftHz, int LeadFrames, Action Send)? requested;
-        (long ApplyAtCount, int ShiftHz)? inFlight;
+        long epoch;
         lock (state.RetuneGate)
         {
             requested = state.RetuneRequested;
-            inFlight = state.RetuneInFlight;
+            if (state.RetuneInFlight is { } f && native) ApplyShiftCore(state, f.ShiftHz);
             state.RetuneRequested = null;
             state.RetuneInFlight = null;
+            epoch = state.RetuneEpoch;
         }
-        if (inFlight is { } f) ApplyShiftNative(state, f.ShiftHz);
-        if (requested is { } r)
+        if (requested is not { } r) return;
+        try { r.Send(); } catch { }
+        if (!native) return;
+        lock (state.RetuneGate)
         {
-            try { r.Send(); } catch { }
-            ApplyShiftNative(state, r.ShiftHz);
+            // A newer schedule or immediate change made while the command
+            // was going out owns the shift now.
+            if (state.RetuneEpoch == epoch) ApplyShiftCore(state, r.ShiftHz);
         }
     }
 
-    // The native half of SetCtunShift, callable from the channel's own worker
-    // (which is alive, so the channel is open).
-    private static void ApplyShiftNative(ChannelState state, int shiftHz)
+    // The native half of SetCtunShift. Caller holds RetuneGate.
+    private static void ApplyShiftCore(ChannelState state, int shiftHz)
     {
         NativeMethods.SetRXAShiftFreq(state.Id, shiftHz);
         NativeMethods.RXANBPSetShiftFrequency(state.Id, shiftHz);
         NativeMethods.SetRXAShiftRun(state.Id, shiftHz != 0 ? 1 : 0);
         state.CtunShiftHz = shiftHz;
-        ConfigureMaxBinDetector(state);
     }
 
     // Worker thread, just before a frame is exchanged.
@@ -1522,17 +1547,22 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
             state.ExchangeCount = 0;
             // The block grid moved: finish anything in progress at once.
             if (state.RetuneInFlight is not null || state.RetuneRequested is not null)
+            {
                 FlushAlignedRetune(state);
+                ConfigureMaxBinDetector(state);
+            }
         }
         if (state.RetuneInFlight is null) return;
-        int shift;
         lock (state.RetuneGate)
         {
             if (state.RetuneInFlight is not { } f || state.ExchangeCount < f.ApplyAtCount) return;
-            shift = f.ShiftHz;
             state.RetuneInFlight = null;
+            // Applied under the gate: an immediate SetCtunShift takes the
+            // same gate, so it can't land between the check and the apply
+            // and then be overwritten by this older value.
+            ApplyShiftCore(state, f.ShiftHz);
         }
-        ApplyShiftNative(state, shift);
+        ConfigureMaxBinDetector(state);
     }
 
     // Worker thread, just after a frame is exchanged.
@@ -4874,6 +4904,9 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
                 NativeMethods.SetPSControl(id, 1, 0, 0, 0);
                 Volatile.Write(ref _psLastResetTicks, System.Diagnostics.Stopwatch.GetTimestamp());
                 _psLoadedWaitingForTx = false;
+                // A correction still queued belongs to the band it was asked
+                // for; don't let it load at some later arm.
+                _psRestorePending = null;
                 _psEnabled = false;
                 _psObservedPeak.Reset();
                 // PS and CESSB are independent, but re-assert the operator's
@@ -5929,6 +5962,18 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
         try
         {
             state.Stopped = true;
+            // A retune still waiting for its block boundary: the radio must
+            // get the new centre even though this channel will never reach it
+            // (a sample-rate change straight after a pan).
+            Action? waitingRetune;
+            lock (state.RetuneGate)
+            {
+                waitingRetune = state.RetuneRequested?.Send;
+                state.RetuneRequested = null;
+                state.RetuneInFlight = null;
+                state.RetuneEpoch++;
+            }
+            try { waitingRetune?.Invoke(); } catch { }
             state.InQueue.CompleteAdding();
             state.Cts.Cancel();
             if (!state.Worker.Join(TimeSpan.FromSeconds(2)))

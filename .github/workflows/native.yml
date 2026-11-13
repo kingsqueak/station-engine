@@ -45,9 +45,21 @@ jobs:
           '
       - name: Check exports and links
         run: |
-          nm -D --defined-only out/libwdsp.so | grep -E " (GetWDSPVersion|PSSaveCorr|PSRestoreCorr|SetPSControl)$"
+          set -eo pipefail
+          syms=$(nm -D --defined-only out/libwdsp.so)
+          for sym in GetWDSPVersion PSSaveCorr PSRestoreCorr SetPSControl; do
+            if ! grep -E " $sym\$" <<<"$syms"; then
+              echo "missing export: $sym"
+              exit 1
+            fi
+          done
           objdump -p out/libwdsp.so | grep -E "NEEDED|RUNPATH"
-          ! objdump -p out/libwdsp.so | grep NEEDED | grep -v -E "libfftw3f?\.so\.3|libc\.so|libm\.so|ld-linux|libpthread"
+          unexpected=$(objdump -p out/libwdsp.so | grep NEEDED | grep -v -E "libfftw3f?\.so\.3|libc\.so|libm\.so|ld-linux|libpthread" || true)
+          if [ -n "$unexpected" ]; then
+            echo "unexpected NEEDED entries:"
+            echo "$unexpected"
+            exit 1
+          fi
           objdump -T out/libwdsp.so | grep -oE 'GLIBC_[0-9.]+' | sort -Vu | tail -1
           sha256sum out/libwdsp.so
       - uses: actions/upload-artifact@v4
@@ -127,7 +139,7 @@ jobs:
         run: |
           nm -D --defined-only out/libminiaudio.so | grep -c " simplehpsdr_ma_"
           nm -D --defined-only out/libsimplehpsdr_rade.so | grep -c " simplehpsdr_rade_"
-          ! nm -D out/*.so | grep -i zeus
+          if nm -D out/*.so | grep -i zeus; then echo "unexpected zeus symbol"; exit 1; fi
           objdump -T out/*.so | grep -oE 'GLIBC_[0-9.]+' | sort -Vu | tail -1
       - uses: actions/upload-artifact@v4
         with:
