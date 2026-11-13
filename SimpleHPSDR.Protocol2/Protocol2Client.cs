@@ -6467,26 +6467,24 @@ public sealed partial class Protocol2Client : IDisposable, IAsyncDisposable
 
             if (_psBlockFill >= PsFeedbackBlockSize)
             {
-                // Copy out — caller may reuse the buffers immediately.
-                var txI = new float[PsFeedbackBlockSize];
-                var txQ = new float[PsFeedbackBlockSize];
-                var rxI = new float[PsFeedbackBlockSize];
-                var rxQ = new float[PsFeedbackBlockSize];
-                Array.Copy(_psTxI, txI, PsFeedbackBlockSize);
-                Array.Copy(_psTxQ, txQ, PsFeedbackBlockSize);
-                Array.Copy(_psRxI, rxI, PsFeedbackBlockSize);
-                Array.Copy(_psRxQ, rxQ, PsFeedbackBlockSize);
-                var psFrame = new PsFeedbackFrame(txI, txQ, rxI, rxQ, _psBlockStartSeq);
-                // iter5: prefer the synchronous sink when attached.
+                // iter5: prefer the synchronous sink when attached. It consumes
+                // the block before returning (IRxPacketSink contract), so it
+                // gets the accumulation buffers themselves: no copy. With
+                // PureSignal armed this stream runs during receive too, and
+                // copying every block cost about 3 MB/s of garbage.
                 var psSinkSnap = Volatile.Read(ref _rxSink);
                 if (psSinkSnap != null)
                 {
+                    var psFrame = new PsFeedbackFrame(_psTxI, _psTxQ, _psRxI, _psRxQ, _psBlockStartSeq);
                     try { psSinkSnap.OnPsFeedbackFrame(in psFrame); }
                     catch (Exception ex) { _log.LogError(ex, "p2.rx.sink_threw kind=psfb"); }
                 }
                 else
                 {
-                    _psFeedbackFrames.Writer.TryWrite(psFrame);
+                    // Queued for a reader: copy out, the buffers are reused.
+                    _psFeedbackFrames.Writer.TryWrite(new PsFeedbackFrame(
+                        (float[])_psTxI.Clone(), (float[])_psTxQ.Clone(),
+                        (float[])_psRxI.Clone(), (float[])_psRxQ.Clone(), _psBlockStartSeq));
                 }
                 _psBlockFill = 0;
             }

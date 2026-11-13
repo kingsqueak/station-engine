@@ -5040,18 +5040,15 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
         }
         if (txa is not int id) return;
 
-        // psccF takes float[] (not Span). Allocate fresh — caller may reuse
-        // its buffers immediately after this returns.
-        var bufTxI = txI.ToArray();
-        var bufTxQ = txQ.ToArray();
-        var bufRxI = rxI.ToArray();
-        var bufRxQ = rxQ.ToArray();
-
+        // psccF reads the spans in place (pinned for the call) and copies them
+        // into calcc's own buffers, so no copies here: with PureSignal armed
+        // the feedback stream runs during receive too, and copying every block
+        // cost about 3 MB/s of garbage.
         lock (_psLock)
         {
             // mox/solidmox args are ignored by psccF (calcc.c:846); SetPSMox
             // is the source of truth and is driven from SetMox above.
-            NativeMethods.psccF(id, PsFeedbackBlockSize, bufTxI, bufTxQ, bufRxI, bufRxQ, 0, 0);
+            NativeMethods.psccF(id, PsFeedbackBlockSize, txI, txQ, rxI, rxQ, 0, 0);
             // Capture the peak envelope magnitude of the exact TX-reference
             // block calcc just binned against hw_peak. This is the live
             // quantity the operator readout needs; GetPSMaxTX only reflects it
@@ -5060,8 +5057,8 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
             for (int i = 0; i < PsFeedbackBlockSize; i++)
             {
                 double magnitudeSquared =
-                    (double)bufTxI[i] * bufTxI[i] +
-                    (double)bufTxQ[i] * bufTxQ[i];
+                    (double)txI[i] * txI[i] +
+                    (double)txQ[i] * txQ[i];
                 if (magnitudeSquared > maxTxSquared) maxTxSquared = magnitudeSquared;
             }
             _psObservedPeak.Observe(Math.Sqrt(maxTxSquared), keyed, Environment.TickCount64);
@@ -5095,8 +5092,8 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
                 Span<double> psSpectrumIq = stackalloc double[2 * PsFeedbackBlockSize];
                 for (int i = 0; i < PsFeedbackBlockSize; i++)
                 {
-                    psSpectrumIq[2 * i] = bufRxI[i];
-                    psSpectrumIq[2 * i + 1] = -bufRxQ[i];
+                    psSpectrumIq[2 * i] = rxI[i];
+                    psSpectrumIq[2 * i + 1] = -rxQ[i];
                 }
                 lock (_psFbDispLock)
                 {

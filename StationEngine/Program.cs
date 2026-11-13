@@ -240,6 +240,8 @@ public partial class Program
         }
         if (options.SupervisePid is { } ownerPid)
             builder.Services.AddSingleton<IHostedService>(services => new ReceiveOnlyOwnerMonitor(ownerPid, services.GetRequiredService<IHostApplicationLifetime>()));
+        if (GcStatsLogger.Enabled)
+            builder.Services.AddHostedService<GcStatsLogger>();
         var httpContextAccessor = new HttpContextAccessor();
         builder.Services.AddSingleton<IHttpContextAccessor>(httpContextAccessor);
         builder.Services.AddCors(cors => cors.AddPolicy(

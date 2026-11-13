@@ -62,12 +62,43 @@ public sealed class PreferredRadioStore : IDisposable
         _log.LogInformation("PreferredRadioStore initialized at {Path}", dbPath);
     }
 
+    // SimpleHPSDR fork: the single row, cached. The getters (the Orion MkII
+    // variant above all) are read from RadioService.Snapshot(), the DSP tick
+    // and the radio-speaker sink many times a second; each FindAll was a
+    // LiteDB query (~4 MB/s of garbage in plain receive). Only read-only
+    // getters use the cached row; writers fetch their own copy, and every
+    // write clears the cache. Callers hold _sync.
+    private PreferredRadioEntry? _current;
+    private bool _currentValid;
+
+    private PreferredRadioEntry? Current()
+    {
+        if (!_currentValid)
+        {
+            _current = _entries.FindAll().FirstOrDefault();
+            _currentValid = true;
+        }
+        return _current;
+    }
+
+    private void InsertEntry(PreferredRadioEntry entry)
+    {
+        _currentValid = false;
+        _entries.Insert(entry);
+    }
+
+    private void UpdateEntry(PreferredRadioEntry entry)
+    {
+        _currentValid = false;
+        _entries.Update(entry);
+    }
+
     // null = "Auto" — no operator override, effective board tracks Connected.
     public HpsdrBoardKind? Get()
     {
         lock (_sync)
         {
-            var e = _entries.FindAll().FirstOrDefault();
+            var e = Current();
             if (e is null) return null;
             // A stored "Unknown" is indistinguishable from "Auto" and would
             // just seed junk PA defaults; treat it as Auto.
@@ -82,7 +113,7 @@ public sealed class PreferredRadioStore : IDisposable
     {
         lock (_sync)
         {
-            var e = _entries.FindAll().FirstOrDefault();
+            var e = Current();
             return e?.OverrideDetection ?? false;
         }
     }
@@ -99,7 +130,7 @@ public sealed class PreferredRadioStore : IDisposable
                 var existing = _entries.FindAll().FirstOrDefault();
                 if (existing is null)
                 {
-                    _entries.Insert(new PreferredRadioEntry
+                    InsertEntry(new PreferredRadioEntry
                     {
                         Board = HpsdrBoardKind.Unknown,
                         OverrideDetection = false,
@@ -119,7 +150,7 @@ public sealed class PreferredRadioStore : IDisposable
                         existing.OverrideDetection = false;
                     }
                     existing.UpdatedUtc = DateTime.UtcNow;
-                    _entries.Update(existing);
+                    UpdateEntry(existing);
                 }
             }
             else
@@ -127,7 +158,7 @@ public sealed class PreferredRadioStore : IDisposable
                 var existing = _entries.FindAll().FirstOrDefault();
                 if (existing is null)
                 {
-                    _entries.Insert(new PreferredRadioEntry
+                    InsertEntry(new PreferredRadioEntry
                     {
                         Board = board.Value,
                         OverrideDetection = overrideDetection ?? false,
@@ -143,7 +174,7 @@ public sealed class PreferredRadioStore : IDisposable
                         existing.OverrideDetection = overrideDetection.Value;
                     }
                     existing.UpdatedUtc = DateTime.UtcNow;
-                    _entries.Update(existing);
+                    UpdateEntry(existing);
                 }
             }
         }
@@ -159,7 +190,7 @@ public sealed class PreferredRadioStore : IDisposable
             {
                 existing.OverrideDetection = enabled;
                 existing.UpdatedUtc = DateTime.UtcNow;
-                _entries.Update(existing);
+                UpdateEntry(existing);
                 Changed?.Invoke();
             }
         }
@@ -176,7 +207,7 @@ public sealed class PreferredRadioStore : IDisposable
     {
         lock (_sync)
         {
-            var e = _entries.FindAll().FirstOrDefault();
+            var e = Current();
             return e?.OrionMkIIVariant ?? OrionMkIIVariant.G2;
         }
     }
@@ -190,7 +221,7 @@ public sealed class PreferredRadioStore : IDisposable
     {
         lock (_sync)
         {
-            var e = _entries.FindAll().FirstOrDefault();
+            var e = Current();
             if (e is null || e.OrionMkIIVariantChosen is false)
                 return false;
             return e.OrionMkIIVariantChosen is true
@@ -213,7 +244,7 @@ public sealed class PreferredRadioStore : IDisposable
             var existing = _entries.FindAll().FirstOrDefault();
             if (existing is null)
             {
-                _entries.Insert(new PreferredRadioEntry
+                InsertEntry(new PreferredRadioEntry
                 {
                     Board = HpsdrBoardKind.Unknown,
                     OverrideDetection = false,
@@ -227,7 +258,7 @@ public sealed class PreferredRadioStore : IDisposable
                 existing.OrionMkIIVariant = variant;
                 existing.OrionMkIIVariantChosen = true;
                 existing.UpdatedUtc = DateTime.UtcNow;
-                _entries.Update(existing);
+                UpdateEntry(existing);
             }
         }
         Changed?.Invoke();
@@ -244,7 +275,7 @@ public sealed class PreferredRadioStore : IDisposable
     {
         lock (_sync)
         {
-            var e = _entries.FindAll().FirstOrDefault();
+            var e = Current();
             return e?.EnableHl2BandVolts ?? false;
         }
     }
@@ -261,7 +292,7 @@ public sealed class PreferredRadioStore : IDisposable
             var existing = _entries.FindAll().FirstOrDefault();
             if (existing is null)
             {
-                _entries.Insert(new PreferredRadioEntry
+                InsertEntry(new PreferredRadioEntry
                 {
                     Board = HpsdrBoardKind.Unknown,
                     OverrideDetection = false,
@@ -274,7 +305,7 @@ public sealed class PreferredRadioStore : IDisposable
             {
                 existing.EnableHl2BandVolts = enabled;
                 existing.UpdatedUtc = DateTime.UtcNow;
-                _entries.Update(existing);
+                UpdateEntry(existing);
             }
         }
         Changed?.Invoke();
@@ -288,7 +319,7 @@ public sealed class PreferredRadioStore : IDisposable
     {
         lock (_sync)
         {
-            var e = _entries.FindAll().FirstOrDefault();
+            var e = Current();
             return Math.Clamp(e?.G2FrontPanelCatPort ?? 0, 0, ushort.MaxValue);
         }
     }
@@ -301,7 +332,7 @@ public sealed class PreferredRadioStore : IDisposable
             var existing = _entries.FindAll().FirstOrDefault();
             if (existing is null)
             {
-                _entries.Insert(new PreferredRadioEntry
+                InsertEntry(new PreferredRadioEntry
                 {
                     Board = HpsdrBoardKind.Unknown,
                     OverrideDetection = false,
@@ -314,7 +345,7 @@ public sealed class PreferredRadioStore : IDisposable
             {
                 existing.G2FrontPanelCatPort = clamped;
                 existing.UpdatedUtc = DateTime.UtcNow;
-                _entries.Update(existing);
+                UpdateEntry(existing);
             }
         }
         Changed?.Invoke();
@@ -329,7 +360,7 @@ public sealed class PreferredRadioStore : IDisposable
     {
         lock (_sync)
         {
-            var e = _entries.FindAll().FirstOrDefault();
+            var e = Current();
             return e?.G2AdcDitherEnabled ?? true;
         }
     }
@@ -342,7 +373,7 @@ public sealed class PreferredRadioStore : IDisposable
     {
         lock (_sync)
         {
-            var e = _entries.FindAll().FirstOrDefault();
+            var e = Current();
             return e?.G2AdcRandomEnabled ?? true;
         }
     }
@@ -377,7 +408,7 @@ public sealed class PreferredRadioStore : IDisposable
     {
         lock (_sync)
         {
-            var e = _entries.FindAll().FirstOrDefault();
+            var e = Current();
             return Math.Clamp(e?.G2Rx1AttenuatorDb ?? 0, 0, 31);
         }
     }
@@ -395,7 +426,7 @@ public sealed class PreferredRadioStore : IDisposable
                 : null;
             if (existing is null)
             {
-                _entries.Insert(new PreferredRadioEntry
+                InsertEntry(new PreferredRadioEntry
                 {
                     Board = HpsdrBoardKind.Unknown,
                     OverrideDetection = false,
@@ -420,7 +451,7 @@ public sealed class PreferredRadioStore : IDisposable
                 if (clampedRx1Atten.HasValue)
                     existing.G2Rx1AttenuatorDb = clampedRx1Atten.Value;
                 existing.UpdatedUtc = DateTime.UtcNow;
-                _entries.Update(existing);
+                UpdateEntry(existing);
             }
         }
         Changed?.Invoke();
@@ -441,7 +472,7 @@ public sealed class PreferredRadioStore : IDisposable
     {
         lock (_sync)
         {
-            var e = _entries.FindAll().FirstOrDefault();
+            var e = Current();
             // LiteDB hydrates double-valued fields to 0.0 for older rows
             // that pre-date this field; treat that case as "unset" so
             // operators upgrading from a pre-#325 build don't see their
@@ -471,7 +502,7 @@ public sealed class PreferredRadioStore : IDisposable
     {
         lock (_sync)
         {
-            var e = _entries.FindAll().FirstOrDefault();
+            var e = Current();
             if (e is null) return External10MHzReferenceSettings.Default;
             // 0.0 is how LiteDB hydrates rows that pre-date this field.
             double factor = e.External10MHzCorrectionFactor == 0.0
@@ -516,13 +547,13 @@ public sealed class PreferredRadioStore : IDisposable
                     UpdatedUtc = DateTime.UtcNow,
                 };
                 apply(created);
-                _entries.Insert(created);
+                InsertEntry(created);
             }
             else
             {
                 apply(existing);
                 existing.UpdatedUtc = DateTime.UtcNow;
-                _entries.Update(existing);
+                UpdateEntry(existing);
             }
         }
         Changed?.Invoke();

@@ -1407,9 +1407,11 @@ internal static partial class NativeMethods
     // receiver.c:636. mox/solidmox are dead args — pass 0/0.
     [LibraryImport(LibraryName)]
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    // Spans are pinned for the call; psccF copies them into calcc's own
+    // buffers before returning, so nothing is kept.
     internal static partial void psccF(int channel, int size,
-                                       float[] Itxbuff, float[] Qtxbuff,
-                                       float[] Irxbuff, float[] Qrxbuff,
+                                       ReadOnlySpan<float> Itxbuff, ReadOnlySpan<float> Qtxbuff,
+                                       ReadOnlySpan<float> Irxbuff, ReadOnlySpan<float> Qrxbuff,
                                        int mox, int solidmox);
 
     [LibraryImport(LibraryName, StringMarshalling = StringMarshalling.Utf8)]
