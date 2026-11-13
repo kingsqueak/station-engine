@@ -1871,9 +1871,6 @@ public sealed class TxAudioIngest : IDisposable
                     _droppedFrames++;
                     return;
                 }
-                // Friend PTT hears the same selected live source that MOX would
-                // transmit, but this pre-MOX feed never keys the radio.
-                _hub.BroadcastNativeMicPcm(f32lePayload.Span);
             }
         }
 

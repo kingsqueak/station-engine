@@ -262,9 +262,6 @@ public static class StationEngineEndpoints
             socket,
             context.RequestAborted,
             displayRxId: displayRxId,
-            // SimpleHPSDR: no native-mic authorization is passed, so a request for the
-            // raw microphone feed is always refused (it only ever served a leased
-            // Zeus Link product, which is gone).
             suppressAudio: suppressAudio).ConfigureAwait(false);
     }
 

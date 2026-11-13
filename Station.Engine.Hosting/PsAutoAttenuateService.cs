@@ -645,7 +645,12 @@ public sealed class PsAutoAttenuateService : BackgroundService
         // Clear the clock on other states so a long collection wait cannot
         // cause an immediate reset when the next healthy calculation starts.
         var calState = stallPsm.CalState;
-        if (!s.PsAuto || s.PsSingle || _psHeld
+        // SimpleHPSDR: not while sending CW. A keyed carrier regularly leaves calcc
+        // waiting in LCALC for more than five seconds (seen on 3 of 7 keyboard
+        // sends at normal feedback, 2026-11-13); resetting it there only throws
+        // away the correction the next voice over would have started from.
+        bool cwTx = RadioFrequencyResolver.TxReceiver(s).Mode is RxMode.CWU or RxMode.CWL;
+        if (!s.PsAuto || s.PsSingle || _psHeld || cwTx
             || stallPsm.CalibrationAttempts <= 0 || calState != 6)
         {
             _lastWedgeCal = -1;
