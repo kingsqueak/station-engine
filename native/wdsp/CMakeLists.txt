@@ -98,6 +98,11 @@ endif()
 if(MSVC)
     target_compile_options(wdsp PRIVATE /O2 /fp:precise /W3 /wd4244 /wd4267)
     target_compile_definitions(wdsp PRIVATE _CRT_SECURE_NO_WARNINGS)
+    # ClangCL (VS 2026's clang) makes this an error by default: int* passed to the
+    # Interlocked* LONG* parameters, both 32-bit on Windows. Same as the GCC/Clang branch.
+    if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+        target_compile_options(wdsp PRIVATE -Wno-incompatible-pointer-types)
+    endif()
 else()
     target_compile_options(wdsp PRIVATE
         -O3
