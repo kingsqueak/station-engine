@@ -57,6 +57,40 @@ install_name_tool \
   SimpleHPSDR.Dsp/runtimes/osx-arm64/native/libwdsp.dylib
 ```
 
+## macOS x64 (cross-built on an Apple silicon Mac)
+
+WDSP links the committed x86_64 FFTW in `runtimes/osx-x64/native/` (macOS 12.0
+minimum); only the header comes from Homebrew. pkg-config and the FFTW CMake
+package are switched off so Homebrew's arm64 FFTW is not picked up:
+
+```sh
+F=$(mktemp -d); mkdir -p $F/include $F/lib
+cp "$(brew --prefix fftw)/include/fftw3.h" $F/include/
+cp SimpleHPSDR.Dsp/runtimes/osx-x64/native/libfftw3.3.dylib $F/lib/libfftw3.dylib
+cp SimpleHPSDR.Dsp/runtimes/osx-x64/native/libfftw3f.3.dylib $F/lib/libfftw3f.dylib
+cmake -S native/wdsp -B native/build-x64 -G Ninja -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_OSX_ARCHITECTURES=x86_64 -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0 \
+  -DWDSP_WITH_NR3=ON -DWDSP_WITH_NR4=ON \
+  -DPKG_CONFIG_EXECUTABLE=/usr/bin/false -DCMAKE_DISABLE_FIND_PACKAGE_FFTW3=ON \
+  -DFFTW_ROOT=$F -DFFTW3F_LIBRARY=$F/lib/libfftw3f.dylib
+cmake --build native/build-x64 --parallel
+install_name_tool \
+  -change @rpath/libfftw3.3.dylib @loader_path/libfftw3.3.dylib \
+  -change @rpath/libfftw3f.3.dylib @loader_path/libfftw3f.3.dylib \
+  -delete_rpath $F/lib native/build-x64/libwdsp.dylib
+codesign -f -s - native/build-x64/libwdsp.dylib
+cp native/build-x64/libwdsp.dylib SimpleHPSDR.Dsp/runtimes/osx-x64/native/libwdsp.dylib
+```
+
+## WDSP for Linux and Windows in CI
+
+The `Native libraries` workflow (`.github/workflows/native.yml`) builds WDSP for
+linux-x64 and linux-arm64 (Debian bookworm, `$ORIGIN` runpath, the committed
+FFTW 3.3.10 beside it) and win-x64 and win-arm64 (the Visual Studio ClangCL and
+vcpkg recipe below) whenever `native/wdsp`, `native/rnnoise` or
+`native/libspecbleach` changes. Copy the `wdsp-<rid>` artifacts into
+`SimpleHPSDR.Dsp/runtimes/<rid>/native/`. The recipes below remain the manual way.
+
 ## Linux x64
 
 The release recipe uses the distribution FFTW development package:
