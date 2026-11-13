@@ -5368,7 +5368,8 @@ public sealed partial class RadioService : IDisposable
     public int TxMoxTailDelayMs => Volatile.Read(ref _txMoxTailDelayMs);
 
     // ---- RX resume delay after TX ----------------------------------------
-    internal const int DefaultPostTxRxMuteDelayMs = 200;
+    // One 33 ms receive block: enough to hide the T/R switch click (was 200 before .35).
+    internal const int DefaultPostTxRxMuteDelayMs = 33;
     internal const int MaxPostTxRxMuteDelayMs = 5000;
 
     /// <summary>

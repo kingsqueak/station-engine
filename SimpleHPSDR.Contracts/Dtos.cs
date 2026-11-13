@@ -1420,9 +1420,8 @@ public sealed record StateDto(
     // ---- RX resume delay after TX ----
     // Milliseconds to keep RX audio/display muted after MOX falls before the
     // receive chain fades back in. This is the operator-facing release timing
-    // knob for post-TX splash/clicks; default 200 ms preserves the fixed mute
-    // window SimpleHPSDR used before exposing the setting.
-    int TxPostTxRxMuteDelayMs = 200,
+    // knob for post-TX splash/clicks; default 33 ms (one receive block).
+    int TxPostTxRxMuteDelayMs = 33,
 
     // ---- TX timeout (PA protection) ----
     // Maximum length of a single MOX or TUN transmission in seconds. When

@@ -211,9 +211,9 @@ public sealed class RadioStateEntry
     public int TxMoxPreKeyDelayMs { get; set; }
     // TX tail (MOX hang) delay ms (0..5000). Default 0 = no delay. Issue #1294.
     public int TxMoxTailDelayMs { get; set; }
-    // Post-TX RX resume mute delay ms (0..5000). Default preserves the legacy
-    // fixed post-TX mute window that hid receiver splash on key-up.
-    public int TxPostTxRxMuteDelayMs { get; set; } = 200;
+    // Post-TX RX resume mute delay ms (0..5000). Default one 33 ms receive
+    // block, enough to hide the T/R switch click (200 before .35).
+    public int TxPostTxRxMuteDelayMs { get; set; } = RadioService.DefaultPostTxRxMuteDelayMs;
     // TX timeout seconds. 0 = disabled (no guard); otherwise 30..600. Default
     // 120 = the historical FR-6 limit, so legacy rows missing this field
     // hydrate with the same guard that has always been in force. Issue #1270.
