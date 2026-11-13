@@ -203,6 +203,16 @@ public sealed class PsAutoAttenuateService : BackgroundService
     // iqc predistorter keeps the converged curve. P2 automode only. Re-armed on
     // the next PS-arm edge.
     private bool _psHeld;
+    // SimpleHPSDR: PureSignal stands still while CW is being sent. The CW carrier is
+    // built outside WDSP's transmit chain and goes straight to the radio, so the
+    // correction is never applied to it; calcc fitting on a keyed carrier only
+    // moved HW peak and the attenuator, tripped the stall and wedge watchdogs
+    // (the wedge reset fired on 3 of 7 keyboard sends, 2026-11-13) and replaced
+    // the voice correction with one learnt from key edges. While held, calcc is
+    // parked with SetPsHold and the correction it had is kept for the next
+    // voice over. 2-TONE does run through the transmit chain, so it is not held
+    // even when the mode is CW.
+    private bool _cwHeld;
     private int _convergeBaselineCal = -1;
     private long _convergeHealthyStartMs;
     private static readonly TimeSpan ConvergeHoldTime = TimeSpan.FromMilliseconds(2500);
@@ -276,7 +286,10 @@ public sealed class PsAutoAttenuateService : BackgroundService
                 // Snapshot is a struct copy on RadioService's cached state;
                 // ~free.
                 var s = _radio.Snapshot();
-                var wantActive = s.PsEnabled && (_tx.IsMoxOn || _tx.IsTwoToneOn);
+                // SimpleHPSDR: also in a CW mode, so a CW key-down is seen within one
+                // fast tick and calcc is parked before it can fit on the carrier.
+                var wantActive = s.PsEnabled && (_tx.IsMoxOn || _tx.IsTwoToneOn
+                    || RadioFrequencyResolver.TxReceiver(s).Mode is RxMode.CWU or RxMode.CWL);
                 var wantPeriod = wantActive ? Tick : IdleTick;
                 if (wantPeriod != currentPeriod)
                 {
@@ -529,6 +542,7 @@ public sealed class PsAutoAttenuateService : BackgroundService
             _lastAutoCalTickMs = 0;
             // Fresh arm → re-converge then lock. SetPsEnabled(true) set runcal=1.
             _psHeld = false;
+            _cwHeld = false;
             _convergeBaselineCal = -1;
             _convergeHealthyStartMs = 0;
             _log.LogInformation("psAutoAttn.armed baseline attn={Db} (synced to radio)", _currentAttnDb);
@@ -546,7 +560,24 @@ public sealed class PsAutoAttenuateService : BackgroundService
             ResetC10CollectStall();
             ResetHermesIISingleCalRecovery();
             ClearStallFlag();
+            // Disarming stops calcc itself and arming restarts it.
+            _cwHeld = false;
             LogGate("skip=PsEnabled-off");
+            return;
+        }
+
+        bool cwKeyed = _tx.IsMoxOn && !_tx.IsTwoToneOn
+            && RadioFrequencyResolver.TxReceiver(s).Mode is RxMode.CWU or RxMode.CWL;
+        if (cwKeyed != _cwHeld && _pipe.CurrentEngine is { } holdEngine)
+        {
+            holdEngine.SetPsHold(cwKeyed);
+            _cwHeld = cwKeyed;
+            _log.LogInformation("psAutoAttn.cw hold={Hold}", cwKeyed);
+        }
+        if (cwKeyed)
+        {
+            ClearStallFlag();
+            LogGate("skip=cw");
             return;
         }
         if (!_tx.IsMoxOn && !_tx.IsTwoToneOn)
@@ -645,12 +676,7 @@ public sealed class PsAutoAttenuateService : BackgroundService
         // Clear the clock on other states so a long collection wait cannot
         // cause an immediate reset when the next healthy calculation starts.
         var calState = stallPsm.CalState;
-        // SimpleHPSDR: not while sending CW. A keyed carrier regularly leaves calcc
-        // waiting in LCALC for more than five seconds (seen on 3 of 7 keyboard
-        // sends at normal feedback, 2026-11-13); resetting it there only throws
-        // away the correction the next voice over would have started from.
-        bool cwTx = RadioFrequencyResolver.TxReceiver(s).Mode is RxMode.CWU or RxMode.CWL;
-        if (!s.PsAuto || s.PsSingle || _psHeld || cwTx
+        if (!s.PsAuto || s.PsSingle || _psHeld
             || stallPsm.CalibrationAttempts <= 0 || calState != 6)
         {
             _lastWedgeCal = -1;
