@@ -1,6 +1,6 @@
 # Builds the native libraries SimpleHPSDR names itself (miniaudio, RADE, ASIO)
-# for Linux and Windows. macOS ones are built on a Mac (see NATIVE-BUILD.md).
-# WDSP, codec2 and FFTW don't change here and keep their committed binaries.
+# and WDSP for Linux and Windows. macOS ones are built on a Mac (see NATIVE-BUILD.md).
+# codec2 and FFTW don't change here and keep their committed binaries.
 # The artifacts are copied into SimpleHPSDR.Dsp/runtimes/<rid>/native by hand.
 name: Native libraries
 
@@ -11,9 +11,83 @@ on:
       - 'native/miniaudio/**'
       - 'native/radae/**'
       - 'native/asio/**'
+      - 'native/wdsp/**'
+      - 'native/rnnoise/**'
+      - 'native/libspecbleach/**'
       - '.github/workflows/native.yml'
 
 jobs:
+  # WDSP links the committed FFTW (libfftw3.so.3 / libfftw3f.so.3, FFTW 3.3.10,
+  # the same as bookworm's) and finds it beside itself through $ORIGIN.
+  wdsp-linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { rid: linux-x64, runner: ubuntu-24.04 }
+          - { rid: linux-arm64, runner: ubuntu-24.04-arm }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build in Debian bookworm
+        run: |
+          docker run --rm -v "$PWD:/w" -w /w debian:bookworm bash -euo pipefail -c '
+            apt-get update -qq
+            apt-get install -y -qq build-essential cmake ninja-build pkg-config libfftw3-dev patchelf >/dev/null
+            cmake -S native/wdsp -B /tmp/wdsp -G Ninja -DCMAKE_BUILD_TYPE=Release \
+              -DWDSP_WITH_NR3=ON -DWDSP_WITH_NR4=ON
+            cmake --build /tmp/wdsp --parallel
+            mkdir -p out
+            cp /tmp/wdsp/libwdsp.so out/
+            strip --strip-unneeded out/libwdsp.so
+            patchelf --set-rpath "\$ORIGIN" out/libwdsp.so
+            chown -R '"$(id -u):$(id -g)"' out
+          '
+      - name: Check exports and links
+        run: |
+          nm -D --defined-only out/libwdsp.so | grep -E " (GetWDSPVersion|PSSaveCorr|PSRestoreCorr|SetPSControl)$"
+          objdump -p out/libwdsp.so | grep -E "NEEDED|RUNPATH"
+          ! objdump -p out/libwdsp.so | grep NEEDED | grep -v -E "libfftw3f?\.so\.3|libc\.so|libm\.so|ld-linux|libpthread"
+          objdump -T out/libwdsp.so | grep -oE 'GLIBC_[0-9.]+' | sort -Vu | tail -1
+          sha256sum out/libwdsp.so
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wdsp-${{ matrix.rid }}
+          path: out/libwdsp.so
+
+  # Visual Studio with ClangCL and vcpkg FFTW linked in statically (NATIVE-BUILD.md):
+  # static-md triplet on x64, static CRT on arm64 (cross-built on the x64 runner).
+  wdsp-windows:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { rid: win-x64, arch: x64, triplet: x64-windows-static-md, crt: MultiThreadedDLL }
+          - { rid: win-arm64, arch: ARM64, triplet: arm64-windows-static, crt: MultiThreaded }
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install "fftw3:${{ matrix.triplet }}"
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          cmake -S native/wdsp -B build -A ${{ matrix.arch }} -T ClangCL `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT\scripts\buildsystems\vcpkg.cmake" `
+            -DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }} `
+            -DCMAKE_MSVC_RUNTIME_LIBRARY=${{ matrix.crt }} -DWDSP_WITH_NR3=ON -DWDSP_WITH_NR4=ON
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          cmake --build build --config Release --parallel
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          New-Item -ItemType Directory -Force out | Out-Null
+          Copy-Item build/Release/wdsp.dll out/
+          Get-FileHash out/wdsp.dll -Algorithm SHA256 | Format-List
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wdsp-${{ matrix.rid }}
+          path: out/wdsp.dll
+
   linux:
     strategy:
       fail-fast: false
