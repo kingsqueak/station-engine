@@ -179,14 +179,14 @@ internal sealed class EngineTransmitSafetyModule
         lock (_sync) _hl2IoBoardInhibit = reason;
     }
 
-    private TransmitSafetyDecision? Hl2IoBoardDecision(TransmitSafetySnapshot snapshot)
+    private TransmitSafetyDecision? Hl2IoBoardDecision(TransmitSafetySnapshot snapshot, bool sweepPoint = false)
     {
         lock (_sync)
         {
             if (snapshot.Board != HpsdrBoardKind.HermesLite2) return null;
             if (_hl2IoBoardInhibit is { } reason)
                 return TransmitSafetyDecision.Deny(TransmitSafetyReasonCode.ExternalHardwareFault, reason);
-            if (Hl2IoBoardNeedsSync(snapshot.State))
+            if (!sweepPoint && Hl2IoBoardNeedsSync(snapshot.State))
                 return TransmitSafetyDecision.Deny(TransmitSafetyReasonCode.ExternalHardwareFault,
                     "TX blocked: waiting for HL2 IO Board band and mode synchronization");
             return null;
@@ -199,8 +199,21 @@ internal sealed class EngineTransmitSafetyModule
     public ProtectionEvidenceState ThermalEvidence => ProtectionEvidenceState.Unavailable;
 
     public TransmitSafetyDecision EvaluateKeyOn(TransmitIntent intent, TransmitSafetySnapshot snapshot)
+        => EvaluateKeyOn(intent, snapshot, sweepPoint: false);
+
+    /// <summary>
+    /// SimpleHPSDR: one point of an antenna sweep, checked before the sweep starts.
+    /// The dial does not move for it, so the HL2 IO Board can't be "in step"
+    /// with the point's frequency and that comparison is left out; the caller
+    /// checks the board against the real dial instead. A board fault still
+    /// blocks, and every other rule (band plan, connection, board) applies.
+    /// </summary>
+    public TransmitSafetyDecision EvaluateSweepPoint(TransmitIntent intent, TransmitSafetySnapshot snapshot)
+        => EvaluateKeyOn(intent, snapshot, sweepPoint: true);
+
+    private TransmitSafetyDecision EvaluateKeyOn(TransmitIntent intent, TransmitSafetySnapshot snapshot, bool sweepPoint)
     {
-        if (Hl2IoBoardDecision(snapshot) is { } inhibit) return inhibit;
+        if (Hl2IoBoardDecision(snapshot, sweepPoint) is { } inhibit) return inhibit;
         var envelope = TxEmissionEnvelopeResolver.Resolve(intent, snapshot.State, snapshot.Source);
 
         if (!snapshot.Connected)

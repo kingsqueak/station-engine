@@ -564,13 +564,22 @@ public sealed class TxService
             return false;
         }
 
+        // SimpleHPSDR: an HL2 IO Board follows the dial, which doesn't move during a
+        // sweep. Checking each sweep frequency against it refused every sweep
+        // on an HL2 with the board fitted; check it once against the dial.
+        if (_safety.Hl2IoBoardNeedsSync(state))
+        {
+            error = "Analyzer sweep blocked: waiting for HL2 IO Board band and mode synchronization. Try again in a moment.";
+            return false;
+        }
+
         TransmitIntent? active;
         lock (_sync) active = _activeIntent;
         for (int i = 0; i < points; i++)
         {
             long hz = startHz + (long)Math.Round((endHz - startHz) * i / (double)(points - 1));
             var candidate = state with { VfoHz = hz };
-            TransmitSafetyDecision decision = _safety.EvaluateKeyOn(
+            TransmitSafetyDecision decision = _safety.EvaluateSweepPoint(
                 TransmitIntent.Tun,
                 CaptureSafetySnapshot(candidate, active, MoxSource.Analyzer));
             if (!decision.Allowed)
