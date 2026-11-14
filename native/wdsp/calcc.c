@@ -1091,19 +1091,34 @@ void destroy_calcc (CALCC a)
 {
 	IQC b = txa[a->channel].iqc.p;
 
-	ns_free(a->util.m_spline_restore); a->util.m_spline_restore = NULL;
-	ns_free(a->util.c_spline_restore); a->util.c_spline_restore = NULL;
-	ns_free(a->util.s_spline_restore); a->util.s_spline_restore = NULL;
-	ns_free(a->util.m_spline_save);    a->util.m_spline_save = NULL;
-	ns_free(a->util.c_spline_save);    a->util.c_spline_save = NULL;
-	ns_free(a->util.s_spline_save);    a->util.s_spline_save = NULL;
-
+	// SimpleHPSDR: stop the correction thread before freeing anything it may
+	// still hold. A restore issued before the first transmission leaves the
+	// thread inside SetTXAiqcStart, waiting for the TX channel to run, with
+	// util.*_restore already handed to iqc; freeing them here first made
+	// destroy_iqc free them a second time. busy is cleared on every pass in
+	// case the thread sets it after the first clear.
+	int exited = 0;
 	for (int i = 0; i < 4; i++)
 		while (WaitForSingleObject(a->SemsPSCorr[i], 0) == WAIT_OBJECT_0);
-	InterlockedBitTestAndReset(&b->busy, 0);
 	ReleaseSemaphore(a->SemsPSCorr[4], 1, 0);
-	WaitForSingleObject(a->hCorrChangeExited, 500);
+	for (int i = 0; i < 300 && !exited; i++)
+	{
+		InterlockedBitTestAndReset(&b->busy, 0);
+		exited = WaitForSingleObject(a->hCorrChangeExited, 10) == WAIT_OBJECT_0;
+	}
 	CloseHandle(a->hCorrChangeExited);
+
+	// If the thread never answered, what these point to may belong to iqc:
+	// leave them rather than risk a double free.
+	if (exited)
+	{
+		ns_free(a->util.m_spline_restore); a->util.m_spline_restore = NULL;
+		ns_free(a->util.c_spline_restore); a->util.c_spline_restore = NULL;
+		ns_free(a->util.s_spline_restore); a->util.s_spline_restore = NULL;
+		ns_free(a->util.m_spline_save);    a->util.m_spline_save = NULL;
+		ns_free(a->util.c_spline_save);    a->util.c_spline_save = NULL;
+		ns_free(a->util.s_spline_save);    a->util.s_spline_save = NULL;
+	}
 
 	ns_free(a->m_spline); a->m_spline = NULL;
 	ns_free(a->c_spline); a->c_spline = NULL;

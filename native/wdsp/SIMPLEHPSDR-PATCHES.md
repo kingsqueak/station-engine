@@ -101,6 +101,11 @@ change, because no IQ is flowing then.
   staging buffers inside the now-private struct, allocate and release with the
   calibrator, and retain the realized `SetPSTXDelay` value. Do not import the
   mirror's separate global compatibility-buffer implementation.
+- `calcc.c` `destroy_calcc`: the correction thread is stopped before the
+  `util.*_restore` / `util.*_save` splines are freed (busy cleared on every
+  pass of the wait). A restore issued before the first transmission leaves the
+  thread in `SetTXAiqcStart` with those splines already owned by iqc; freeing
+  them first made `destroy_iqc` free them again (crash at engine shutdown).
 - `fm_tone.{c,h}`, `fmmod.{c,h}`, `fmd.{c,h}`, `emph.{c,h}`, `tests/fm_tests.c`:
   SimpleHPSDR FM extension. TX: `SetTXACTCSSLevel`, DCS encode (`SetTXADCSRun`,
   `SetTXADCSCode`; Golay (23,12) codewords pinned against published vectors),
