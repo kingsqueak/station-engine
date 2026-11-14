@@ -1023,6 +1023,7 @@ public sealed partial class RadioService : IDisposable
             DriveMaxPct: startupDriveMaxPct,
             AmpOn: startupAmpOn,
             TuneMaxPct: startupTuneMaxPct,
+            AmpKeyPin: Math.Clamp(rsSnap?.AmpKeyPin ?? 0, 0, 7),
             TunePct: Volatile.Read(ref _tunePct),
             TxMoxPreKeyDelayMs: Volatile.Read(ref _txMoxPreKeyDelayMs),
             TxMoxTailDelayMs: Volatile.Read(ref _txMoxTailDelayMs),
@@ -6381,6 +6382,40 @@ public sealed partial class RadioService : IDisposable
         return Snapshot();
     }
 
+    /// <summary>SimpleHPSDR: which output keys the amplifier (StateDto.AmpKeyPin).
+    /// Refused (null) while transmitting.</summary>
+    public StateDto? SetAmpKeyPin(int pin)
+    {
+        int chosen = Math.Clamp(pin, 0, 7);
+        bool keyed = false;
+        Mutate(s =>
+        {
+            if (_mox || _tunActive) { keyed = true; return null; }
+            return s.AmpKeyPin == chosen ? null : s with { AmpKeyPin = chosen };
+        }, out bool applied);
+        if (keyed) return null;
+        if (applied)
+        {
+            _log.LogInformation("amp.keypin pin={Pin}", chosen);
+            RecomputePaAndPush();
+            FlushState();
+        }
+        return Snapshot();
+    }
+
+    // The amplifier's key output belongs to the switch alone: on in the TX
+    // mask while the amplifier is on, and out of every mask otherwise, whatever
+    // the per-band output table says for that pin.
+    private static (byte Tx, byte Rx, byte Tune) WithAmpKey(StateDto s, byte tx, byte rx, byte tune)
+    {
+        if (s.AmpKeyPin is < 1 or > 7) return (tx, rx, tune);
+        byte bit = (byte)(1 << (s.AmpKeyPin - 1));
+        byte clear = (byte)~bit;
+        tx = (byte)(tx & clear);
+        if (s.AmpOn) tx |= bit;
+        return (tx, (byte)(rx & clear), (byte)(tune & clear));
+    }
+
     // The newly selected set's Drive and Tune for where the dial is now. No
     // stored value leaves the (already lowered) slider alone. Guarded like
     // every recall: it yields to keying and to a slider moved meanwhile.
@@ -6501,7 +6536,8 @@ public sealed partial class RadioService : IDisposable
             ocBandCfg.Band, ocBandCfg.OcTx, ocBandCfg.OcRx, ocBandCfg.OcTune, ocBandCfg.OcDxTx, ocBandCfg.OcDxRx);
 
         ActiveClient?.SetDriveOutput(driveOutput);
-        ActiveClient?.SetOcMasks(ocBandCfg.OcTx, ocBandCfg.OcRx, ocBandCfg.OcTune);
+        var (ocTx, ocRx, ocTune) = WithAmpKey(stateSnap, ocBandCfg.OcTx, ocBandCfg.OcRx, ocBandCfg.OcTune);
+        ActiveClient?.SetOcMasks(ocTx, ocRx, ocTune);
         ActiveClient?.SetPaEnabled(paEnabled);
         ActiveClient?.SetXvtrEnabled(xvtrOutputEnabled);
 
@@ -6550,9 +6586,9 @@ public sealed partial class RadioService : IDisposable
 
         PaSnapshotChanged?.Invoke(new PaRuntimeSnapshot(
             DriveByte: driveByte,
-            OcTxMask: ocBandCfg.OcTx,
-            OcRxMask: ocBandCfg.OcRx,
-            OcTuneMask: ocBandCfg.OcTune,
+            OcTxMask: ocTx,
+            OcRxMask: ocRx,
+            OcTuneMask: ocTune,
             PaEnabled: paEnabled,
             // Anvelina-PRO3 DX OC masks (issue #407) — always emitted in
             // the snapshot so DspPipelineService can forward them to the
@@ -8030,6 +8066,7 @@ public sealed partial class RadioService : IDisposable
                 DriveMaxPct = snap.DriveMaxPct,
                 TuneMaxPct = snap.TuneMaxPct,
                 AmpOn = snap.AmpOn,
+                AmpKeyPin = snap.AmpKeyPin,
                 TunePct = snap.TunePct,
                 TxMoxPreKeyDelayMs = snap.TxMoxPreKeyDelayMs,
                 TxMoxTailDelayMs = snap.TxMoxTailDelayMs,

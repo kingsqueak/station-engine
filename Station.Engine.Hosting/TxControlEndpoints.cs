@@ -371,6 +371,17 @@ public static class TxControlEndpoints
             });
         });
 
+        endpoints.MapPost("/api/tx/amp-key-pin", (AmpKeyPinSetRequest req, RadioService r) =>
+        {
+            log.LogInformation("api.tx.amp-key-pin pin={Pin}", req.Pin);
+            if (req.Pin < 0 || req.Pin > 7)
+                return Results.BadRequest(new { error = "pin must be 0..7" });
+            var state = r.SetAmpKeyPin(req.Pin);
+            if (state is null)
+                return Results.Conflict(new { error = "The amplifier's output can't change while transmitting." });
+            return Results.Ok(new { ampKeyPin = state.AmpKeyPin });
+        });
+
         endpoints.MapPost("/api/tx/tune-max", (TuneMaxSetRequest req, RadioService r) =>
         {
             log.LogInformation("api.tx.tune-max percent={Pct}", req.Percent);

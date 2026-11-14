@@ -1392,6 +1392,12 @@ public sealed record StateDto(
     // 100. Each state keeps its own Drive and Tune memories.
     bool AmpOn = false,
     int TuneMaxPct = 100,
+    // SimpleHPSDR: one of the radio's open-collector outputs (1..7) wired to
+    // the amplifier's key input, or 0 for none. It is on while transmitting
+    // with AmpOn and never otherwise, so switching the amplifier off in the
+    // app really stops it keying. (A PTT OUT jack can't do that: the radio's
+    // firmware drives it on every transmission.)
+    int AmpKeyPin = 0,
     // Independent TUN drive slider 0..100. Same persistence pattern as
     // DrivePct. Default 10 mirrors RadioService._tunePct seed — a 0 default
     // would make pressing TUN appear to do nothing on first key.
@@ -2006,6 +2012,9 @@ public sealed record TuneMaxSetRequest(int Percent);
 
 /// <summary>SimpleHPSDR: whether an external amplifier is in line (StateDto.AmpOn).</summary>
 public sealed record AmpSetRequest(bool On);
+
+/// <summary>SimpleHPSDR: the output wired to the amplifier's key input, 1..7, or 0 for none.</summary>
+public sealed record AmpKeyPinSetRequest(int Pin);
 
 /// <summary>TX pre-key (MOX) delay in milliseconds, 0..500. See
 /// <see cref="StateDto.TxMoxPreKeyDelayMs"/>.</summary>

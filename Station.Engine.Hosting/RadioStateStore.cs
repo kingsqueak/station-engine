@@ -208,6 +208,7 @@ public sealed class RadioStateEntry
     // Null on rows from before they existed; see RadioService's hydrate.
     public int? TuneMaxPct { get; set; }
     public bool? AmpOn { get; set; }
+    public int? AmpKeyPin { get; set; }
     // TUN drive slider % (0..100). Default 10 mirrors RadioService._tunePct seed —
     // a 0 default would make pressing TUN appear to do nothing.
     public int TunePct { get; set; } = 10;
