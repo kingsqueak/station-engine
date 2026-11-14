@@ -316,6 +316,11 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
         // sees pre-shift IQ, so its max-bin detector must move by this amount
         // while the demodulator shifts the same signal back to baseband.
         public int CtunShiftHz;
+        // SimpleHPSDR: what this channel's notch filter was last positioned
+        // against (radio LO + CTUN shift, Hz), NaN before the first time; and
+        // how the channel asks the engine to position it again after a shift.
+        public double NotchOffsetHz = double.NaN;
+        public Action? NotchOffsetChanged;
         // Block-aligned retune. WDSP's receive chain works in blocks of
         // RxaDspSize samples at the DSP rate, and its frequency shift is one
         // value per block. A block starts every BlockFrames input frames, so
@@ -765,6 +770,17 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
     // _notchDbUnavailable latches if the bundled libwdsp predates the notch-DB
     // exports (mirrors the SBNR guard) so we don't spam the worker with throws.
     private readonly object _notchLock = new();
+
+    // SimpleHPSDR: WDSP's notched bandpass (nbp.c) and its SNBA twin keep the
+    // impulse they are rebuilding in the filter object itself, and none of
+    // their setters lock: two of them running at once free the same buffer
+    // twice and abort the process. WDSP expects one control thread. Here the
+    // shift comes from a channel's own worker (the block-aligned retune) while
+    // the notch database, its tune frequency and the passband come from
+    // request threads, so every call into that code takes this gate. It is
+    // the innermost lock: nothing is called out while it is held.
+    // (Crash 2026-11-14: dragging the panadapter with a manual notch set.)
+    private static readonly object NbpGate = new();
     private readonly List<NotchDto> _manualNotches = new();
     private double _notchTuneFreqHz;
     private bool _notchDbUnavailable;
@@ -832,6 +848,7 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
     {
         var state = new ChannelState
         {
+            NotchOffsetChanged = RequestNotchOffsetUpdate,
             Id = id,
             Generation = Interlocked.Increment(ref _channelGeneration),
             IsDisplayOnly = isDisplayOnly,
@@ -1012,8 +1029,8 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
             NativeMethods.SetRXAPanelGain1(id, 1.0);
             NativeMethods.SetRXAMode(id, (int)RxaMode.USB);
             NativeMethods.SetRXABandpassFreqs(id, 150.0, 2850.0);
-            NativeMethods.RXANBPSetFreqs(id, 150.0, 2850.0);
-            NativeMethods.SetRXASNBAOutputBandwidth(id, 150.0, 2850.0);
+            lock (NbpGate) NativeMethods.RXANBPSetFreqs(id, 150.0, 2850.0);
+            lock (NbpGate) NativeMethods.SetRXASNBAOutputBandwidth(id, 150.0, 2850.0);
 
             ApplyAgcDefaults(id);
             ApplySquelchDefaults(id);
@@ -1062,6 +1079,7 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
             int inQueueCapacity = ComputeInQueueCapacity(sampleRateHz);
             var state = new ChannelState
             {
+                NotchOffsetChanged = RequestNotchOffsetUpdate,
                 Id = id,
                 Generation = Interlocked.Increment(ref _channelGeneration),
                 IsDisplayOnly = displayOnly,
@@ -1533,9 +1551,12 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
     private static void ApplyShiftCore(ChannelState state, int shiftHz)
     {
         NativeMethods.SetRXAShiftFreq(state.Id, shiftHz);
-        NativeMethods.RXANBPSetShiftFrequency(state.Id, shiftHz);
         NativeMethods.SetRXAShiftRun(state.Id, shiftHz != 0 ? 1 : 0);
         state.CtunShiftHz = shiftHz;
+        // The notch filter follows from its own thread (ApplyNotchOffsets):
+        // repositioning it rebuilds a long filter, which must not hold up
+        // this channel's worker.
+        state.NotchOffsetChanged?.Invoke();
     }
 
     // Worker thread, just before a frame is exchanged.
@@ -2021,7 +2042,7 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
             NativeMethods.SetRXAANFRun(channelId, 0);
         }
 
-        NativeMethods.SetRXASNBARun(channelId, cfg.SnbEnabled ? 1 : 0);
+        lock (NbpGate) NativeMethods.SetRXASNBARun(channelId, cfg.SnbEnabled ? 1 : 0);
         // The notch-bandpass run flag gates BOTH the NBP toggle and the manual
         // notch database — so keep it on whenever active manual notches exist,
         // otherwise a routine NR change would silently disable the operator's
@@ -2030,9 +2051,10 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
         // decodes. The notch database itself is left as-is.
         bool anyActiveNotch;
         lock (_notchLock) anyActiveNotch = _manualNotches.Exists(static n => n.Active);
-        NativeMethods.RXANBPSetNotchesRun(
-            channelId,
-            !digitalBypassed && (cfg.NbpNotchesEnabled || anyActiveNotch) ? 1 : 0);
+        lock (NbpGate)
+            NativeMethods.RXANBPSetNotchesRun(
+                channelId,
+                !digitalBypassed && (cfg.NbpNotchesEnabled || anyActiveNotch) ? 1 : 0);
 
         // Mutually-exclusive pre-RXA blanker. Update threshold on whichever
         // path we're about to run (or both paths when switching off → on → the
@@ -2093,26 +2115,73 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
 
     public void SetNotchTuneFrequencyHz(double loHz)
     {
-        RunNativeLifecycleCriticalSection(() =>
+        lock (_notchLock)
         {
-            lock (_notchLock)
+            if (loHz == _notchTuneFreqHz) return;
+            _notchTuneFreqHz = loHz;
+        }
+        RequestNotchOffsetUpdate();
+    }
+
+    // ---- SimpleHPSDR: where the notch filter sits ------------------------
+    // WDSP places the notches against tune frequency + shift, and only ever
+    // uses the two added together. Setting either one rebuilds the filter
+    // (tens of thousands of taps), so setting both for one retune rebuilt it
+    // twice, the first time against a frequency the receiver was never on.
+    // Here the sum goes in as the tune frequency and WDSP's shift stays 0:
+    //   - dragging the panadapter with CTUN moves the LO and the shift by
+    //     opposite amounts, the sum doesn't change, and nothing is rebuilt;
+    //   - a real retune rebuilds once.
+    // The two halves of a retune arrive a moment apart (the LO from the
+    // request, the shift from the channel's worker at its block boundary), so
+    // the update waits for them to settle, on a timer thread: never on the
+    // worker, whose audio it would hold up.
+    private Timer? _notchOffsetTimer;
+    private const int NotchOffsetSettleMs = 60;
+
+    private void RequestNotchOffsetUpdate()
+    {
+        if (Volatile.Read(ref _disposed) != 0) return;
+        try
+        {
+            LazyInitializer.EnsureInitialized(ref _notchOffsetTimer,
+                () => new Timer(_ => ApplyNotchOffsets(), null, Timeout.Infinite, Timeout.Infinite))
+                .Change(NotchOffsetSettleMs, Timeout.Infinite);
+        }
+        catch (ObjectDisposedException) { }
+    }
+
+    private void ApplyNotchOffsets()
+    {
+        if (Volatile.Read(ref _disposed) != 0) return;
+        try
+        {
+            RunNativeLifecycleCriticalSection(() =>
             {
-                if (loHz == _notchTuneFreqHz) return;
-                _notchTuneFreqHz = loHz;
-                if (_notchDbUnavailable) return;
-                try
+                lock (_notchLock)
                 {
-                    foreach (var id in _channels.Keys)
+                    if (_notchDbUnavailable) return;
+                    try
                     {
-                        NativeMethods.RXANBPSetTuneFrequency(id, loHz);
+                        foreach (var (id, state) in _channels) ApplyNotchOffsetLocked(id, state);
+                    }
+                    catch (EntryPointNotFoundException)
+                    {
+                        MarkNotchDbUnavailable();
                     }
                 }
-                catch (EntryPointNotFoundException)
-                {
-                    MarkNotchDbUnavailable();
-                }
-            }
-        });
+            });
+        }
+        catch (Exception ex) when (ex is ObjectDisposedException or InvalidOperationException) { }
+    }
+
+    // Under _notchLock. Only calls into WDSP when the position really moved.
+    private void ApplyNotchOffsetLocked(int channelId, ChannelState state)
+    {
+        double offset = _notchTuneFreqHz + Volatile.Read(ref state.CtunShiftHz);
+        if (offset == state.NotchOffsetHz) return;
+        lock (NbpGate) NativeMethods.RXANBPSetTuneFrequency(channelId, offset);
+        state.NotchOffsetHz = offset;
     }
 
     // Re-apply the current notch list to one channel. Public-facing callers
@@ -2135,27 +2204,35 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
         if (_notchDbUnavailable) return;
         try
         {
-            // Position notches against the last LO we were told about.
-            NativeMethods.RXANBPSetTuneFrequency(channelId, _notchTuneFreqHz);
+            // Position notches against where the channel is tuned now.
+            if (_channels.TryGetValue(channelId, out var tuned))
+            {
+                tuned.NotchOffsetHz = double.NaN;
+                ApplyNotchOffsetLocked(channelId, tuned);
+            }
+            else
+            {
+                lock (NbpGate) NativeMethods.RXANBPSetTuneFrequency(channelId, _notchTuneFreqHz);
+            }
 
             int count = 0;
-            NativeMethods.RXANBPGetNumNotches(channelId, ref count);
+            lock (NbpGate) NativeMethods.RXANBPGetNumNotches(channelId, ref count);
             for (int i = count - 1; i >= 0; i--)
-                NativeMethods.RXANBPDeleteNotch(channelId, i);
+                lock (NbpGate) NativeMethods.RXANBPDeleteNotch(channelId, i);
 
             bool anyActive = false;
             for (int i = 0; i < _manualNotches.Count; i++)
             {
                 var n = _manualNotches[i];
                 anyActive |= n.Active;
-                NativeMethods.RXANBPAddNotch(channelId, i, n.CenterHz, n.WidthHz, n.Active ? 1 : 0);
+                lock (NbpGate) NativeMethods.RXANBPAddNotch(channelId, i, n.CenterHz, n.WidthHz, n.Active ? 1 : 0);
             }
 
             // The database stays loaded on a digitally bypassed channel so the
             // notches come straight back when it leaves digital.
             bool digitalBypassed = _channels.TryGetValue(channelId, out var state)
                 && IsRxDigitalBypassed(state);
-            NativeMethods.RXANBPSetNotchesRun(channelId, anyActive && !digitalBypassed ? 1 : 0);
+            lock (NbpGate) NativeMethods.RXANBPSetNotchesRun(channelId, anyActive && !digitalBypassed ? 1 : 0);
         }
         catch (EntryPointNotFoundException)
         {
@@ -2171,10 +2248,10 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
         try
         {
             int count = 0;
-            NativeMethods.RXANBPGetNumNotches(channelId, ref count);
+            lock (NbpGate) NativeMethods.RXANBPGetNumNotches(channelId, ref count);
             for (int i = count - 1; i >= 0; i--)
-                NativeMethods.RXANBPDeleteNotch(channelId, i);
-            NativeMethods.RXANBPSetNotchesRun(channelId, 0);
+                lock (NbpGate) NativeMethods.RXANBPDeleteNotch(channelId, i);
+            lock (NbpGate) NativeMethods.RXANBPSetNotchesRun(channelId, 0);
         }
         catch (EntryPointNotFoundException)
         {
@@ -4468,10 +4545,10 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
             try
             {
                 if (mp != 0) NativeMethods.SetRXABandpassNC(state.Id, cleanupNc);
-                NativeMethods.RXANBPSetMP(state.Id, mp);
+                lock (NbpGate) NativeMethods.RXANBPSetMP(state.Id, mp);
                 NativeMethods.RXABPSNBASetMP(state.Id, mp);
                 NativeMethods.SetRXABandpassMP(state.Id, mp);
-                NativeMethods.RXANBPSetNC(state.Id, masterNc);
+                lock (NbpGate) NativeMethods.RXANBPSetNC(state.Id, masterNc);
                 NativeMethods.RXABPSNBASetNC(state.Id, masterNc);
                 NativeMethods.SetRXABandpassNC(state.Id, mp != 0 ? cleanupNc : masterNc);
             }
@@ -5684,6 +5761,7 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        _notchOffsetTimer?.Dispose();
         foreach (var key in _channels.Keys.ToArray())
         {
             if (_channels.TryRemove(key, out var state))
@@ -6418,8 +6496,8 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
             RunNativeLifecycleCriticalSection(() =>
             {
                 NativeMethods.SetRXABandpassFreqs(state.Id, low, high);
-                NativeMethods.RXANBPSetFreqs(state.Id, low, high);
-                NativeMethods.SetRXASNBAOutputBandwidth(state.Id, low, high);
+                lock (NbpGate) NativeMethods.RXANBPSetFreqs(state.Id, low, high);
+                lock (NbpGate) NativeMethods.SetRXASNBAOutputBandwidth(state.Id, low, high);
             });
         }
     }
