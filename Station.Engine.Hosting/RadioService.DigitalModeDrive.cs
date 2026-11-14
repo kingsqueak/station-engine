@@ -35,7 +35,7 @@ public sealed partial class RadioService
 
     private void InitDigitalModeDrive()
     {
-        var key = DigitalDriveModes.KeyFor(Snapshot());
+        var key = ModeDriveKey(Snapshot());
         lock (_digitalDriveGate) _digitalDriveKey = key;
         StateChanged += OnStateChangedForDigitalDrive;
         // A recall skipped while keyed is retried on the falling edge (MOX and
@@ -54,7 +54,7 @@ public sealed partial class RadioService
     private bool DigitalDriveRecallDue(StateDto s)
     {
         lock (_digitalDriveGate)
-            return DigitalDriveModes.KeyFor(s, _digitalDriveKey) != _digitalDriveKey;
+            return ModeDriveKey(s, _digitalDriveKey) != _digitalDriveKey;
     }
 
     // Called from SetMoxCore before MOX latches: a mode change followed at
@@ -112,14 +112,14 @@ public sealed partial class RadioService
             previous = _digitalDriveKey;
             preDigital = _preDigitalDrivePct;
         }
-        var key = DigitalDriveModes.KeyFor(s, previous);
+        var key = ModeDriveKey(s, previous);
         if (key == previous) return;
         // First attempt at entering digital: remember the voice Drive. A
         // retried entry keeps the original, not a slider moved meanwhile.
         if (previous is null) preDigital ??= s.DrivePct;
 
         int? target = key is not null
-            ? _paStore.GetDigitalModeDrive(key)
+            ? _paStore.GetDigitalModeDrive(DriveMemory(key))
             : VoiceDriveFor(s) ?? preDigital;
         bool settled = target is not int pct || pct == s.DrivePct
             || SetDriveIfCurrent(pct, s.DrivePct);
@@ -144,7 +144,34 @@ public sealed partial class RadioService
     {
         string? current;
         lock (_digitalDriveGate) current = _digitalDriveKey;
-        return DigitalDriveModes.KeyFor(s, current);
+        return ModeDriveKey(s, current);
+    }
+
+    // SimpleHPSDR: which Drive memory the TX mode uses. A digital mode has its
+    // station-wide one (DigitalDriveModes). CW, AM and FM each have their own
+    // per band ("CW@40m"), since they want different power from sideband and an
+    // amplifier's gain differs by band. Null is sideband: USB and LSB together
+    // on the per-band voice memory.
+    private string? ModeDriveKey(StateDto s, string? current = null)
+    {
+        if (DigitalDriveModes.KeyFor(s, current) is { } digital) return digital;
+        var receiver = RadioFrequencyResolver.TxReceiver(s);
+        string? family = receiver.Mode switch
+        {
+            RxMode.CWL or RxMode.CWU => "CW",
+            RxMode.AM or RxMode.SAM or RxMode.DSB => "AM",
+            RxMode.FM => "FM",
+            _ => null,
+        };
+        if (family is null) return null;
+        return RuntimeBandKey(receiver.VfoHz) is { } band ? $"{family}@{band}" : null;
+    }
+
+    // The voice Drive remembered on the way into a mode memory belongs to the
+    // amplifier state it was taken in (SetAmpOn).
+    private void ForgetPreDigitalDrive()
+    {
+        lock (_digitalDriveGate) _preDigitalDrivePct = null;
     }
 
     // The per-band voice Drive for the band the dial is on (same key the
@@ -152,13 +179,13 @@ public sealed partial class RadioService
     private int? VoiceDriveFor(StateDto s)
     {
         var band = RuntimeBandKey(s.VfoHz);
-        return band is null ? null : _paStore.GetBandDrive(band).DrivePct;
+        return band is null ? null : _paStore.GetBandDrive(DriveMemory(band)).DrivePct;
     }
 
     private bool IsDigitalDriveMode()
     {
         StateDto s;
         lock (_sync) s = _state;
-        return DigitalDriveModes.KeyFor(s) is not null;
+        return ModeDriveKey(s) is not null;
     }
 }

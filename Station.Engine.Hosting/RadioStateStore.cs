@@ -204,6 +204,10 @@ public sealed class RadioStateEntry
     public int DrivePct { get; set; }
     // Station-wide DRV/TUN ceiling. Missing on legacy rows -> unrestricted 100.
     public int DriveMaxPct { get; set; } = 100;
+    // SimpleHPSDR: the TUN ceiling and the amplifier switch (StateDto.AmpOn).
+    // Null on rows from before they existed; see RadioService's hydrate.
+    public int? TuneMaxPct { get; set; }
+    public bool? AmpOn { get; set; }
     // TUN drive slider % (0..100). Default 10 mirrors RadioService._tunePct seed —
     // a 0 default would make pressing TUN appear to do nothing.
     public int TunePct { get; set; } = 10;

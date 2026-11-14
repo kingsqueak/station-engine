@@ -356,6 +356,34 @@ public static class TxControlEndpoints
             return Results.Ok(new { drivePercent = r.Snapshot().DrivePct });
         });
 
+        // SimpleHPSDR: the amplifier switch and its separate TUN ceiling.
+        endpoints.MapPost("/api/tx/amp", (AmpSetRequest req, RadioService r) =>
+        {
+            log.LogInformation("api.tx.amp on={On}", req.On);
+            var state = r.SetAmpOn(req.On);
+            if (state is null)
+                return Results.Conflict(new { error = "The amplifier setting can't change while transmitting." });
+            return Results.Ok(new
+            {
+                ampOn = state.AmpOn,
+                drivePercent = state.DrivePct,
+                tunePercent = state.TunePct,
+            });
+        });
+
+        endpoints.MapPost("/api/tx/tune-max", (TuneMaxSetRequest req, RadioService r) =>
+        {
+            log.LogInformation("api.tx.tune-max percent={Pct}", req.Percent);
+            if (req.Percent < 1 || req.Percent > 100)
+                return Results.BadRequest(new { error = "percent must be 1..100" });
+            var state = r.SetTuneMaximum(req.Percent);
+            return Results.Ok(new
+            {
+                tuneMaxPercent = state.TuneMaxPct,
+                tunePercent = state.TunePct,
+            });
+        });
+
         endpoints.MapPost("/api/tx/drive-max", (DriveMaxSetRequest req, RadioService r) =>
         {
             log.LogInformation("api.tx.drive-max percent={Pct}", req.Percent);

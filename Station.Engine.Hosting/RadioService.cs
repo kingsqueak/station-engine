@@ -176,6 +176,8 @@ public sealed partial class RadioService : IDisposable
     // Avoids hammering LiteDB during rapid VFO scroll or filter drags.
     private volatile bool _stateDirty;
     private volatile bool _disposed;
+    // SimpleHPSDR: mirrors StateDto.AmpOn for the Drive memory keys (DriveMemory).
+    private volatile bool _ampOn;
     private readonly System.Threading.Timer? _stateFlushTimer;
     // Filter writes flush straight to LiteDB rather than waiting for the 1 Hz
     // timer, because an edit must survive an abrupt exit (see
@@ -886,8 +888,18 @@ public sealed partial class RadioService : IDisposable
         // unrestricted slider. Clamp restored DRV/TUN before StateDto exists so
         // startup cannot briefly exceed the saved amplifier-safe maximum.
         int startupDriveMaxPct = Math.Clamp(rsSnap?.DriveMaxPct ?? 100, 1, 100);
-        _drivePct = Math.Min(_drivePct, startupDriveMaxPct);
-        _tunePct = Math.Min(_tunePct, startupDriveMaxPct);
+        // SimpleHPSDR: the maximums apply only while an amplifier is in line.
+        // Rows from before the switch existed had one ceiling for DRV and TUN,
+        // always on: below 100 it was protecting an amplifier, so start with
+        // the amplifier on and the same ceiling for both.
+        int startupTuneMaxPct = Math.Clamp(rsSnap?.TuneMaxPct ?? startupDriveMaxPct, 1, 100);
+        bool startupAmpOn = rsSnap?.AmpOn ?? startupDriveMaxPct < 100;
+        _ampOn = startupAmpOn;
+        if (startupAmpOn)
+        {
+            _drivePct = Math.Min(_drivePct, startupDriveMaxPct);
+            _tunePct = Math.Min(_tunePct, startupTuneMaxPct);
+        }
 
         // RX2 (VFO-B) tuning is hydrated into the canonical Receivers[1] entry —
         // the flat VFO-B StateDto fields were retired in the A/B wire collapse.
@@ -1009,6 +1021,8 @@ public sealed partial class RadioService : IDisposable
             // become the only path that puts these into the broadcast.
             DrivePct: Volatile.Read(ref _drivePct),
             DriveMaxPct: startupDriveMaxPct,
+            AmpOn: startupAmpOn,
+            TuneMaxPct: startupTuneMaxPct,
             TunePct: Volatile.Read(ref _tunePct),
             TxMoxPreKeyDelayMs: Volatile.Read(ref _txMoxPreKeyDelayMs),
             TxMoxTailDelayMs: Volatile.Read(ref _txMoxTailDelayMs),
@@ -3057,7 +3071,7 @@ public sealed partial class RadioService : IDisposable
     private StateDto? RestoreBandDrive(string? newBand)
     {
         if (newBand is null || IsTxActive()) return null;
-        var (drive, tune) = _paStore.GetBandDrive(newBand);
+        var (drive, tune) = _paStore.GetBandDrive(DriveMemory(newBand));
         if (drive is null && tune is null) return null;
         StateDto? last = null;
         int currentDrive, currentTune;
@@ -5188,7 +5202,7 @@ public sealed partial class RadioService : IDisposable
                 (abortIfTxActive && (_mox || _tunActive)))
                 return null;
 
-            clamped = Math.Min(requested, Math.Clamp(s.DriveMaxPct, 1, 100));
+            clamped = Math.Min(requested, DriveCap(s));
             Interlocked.Exchange(ref _drivePct, clamped);
             return s with { DrivePct = clamped };
         }, out bool applied);
@@ -5204,11 +5218,11 @@ public sealed partial class RadioService : IDisposable
             lock (_sync) { snap = _state; }
             if (CurrentDigitalDriveKey(snap) is { } digitalMode)
             {
-                _paStore.SetDigitalModeDrive(digitalMode, clamped);
+                _paStore.SetDigitalModeDrive(DriveMemory(digitalMode), clamped);
             }
             else if (RuntimeBandKey(snap.VfoHz) is { } band)
             {
-                _paStore.SetBandDrive(band, clamped);
+                _paStore.SetBandDrive(DriveMemory(band), clamped);
             }
         }
         return true;
@@ -5640,7 +5654,7 @@ public sealed partial class RadioService : IDisposable
                 (abortIfTxActive && (_mox || _tunActive)))
                 return null;
 
-            clamped = Math.Min(requested, Math.Clamp(s.DriveMaxPct, 1, 100));
+            clamped = Math.Min(requested, TuneCap(s));
             Interlocked.Exchange(ref _tunePct, clamped);
             return s with { TunePct = clamped };
         }, out bool applied);
@@ -5653,7 +5667,7 @@ public sealed partial class RadioService : IDisposable
             lock (_sync) { vfoHz = _state.VfoHz; }
             var band = RuntimeBandKey(vfoHz);
             if (band is not null)
-                _paStore.SetBandTune(band, clamped);
+                _paStore.SetBandTune(DriveMemory(band), clamped);
         }
         return true;
     }
@@ -6286,17 +6300,27 @@ public sealed partial class RadioService : IDisposable
     //   - Connected (push current snapshot to fresh client)
     private void RecomputePaAndPush() => RecomputePaAndPushCore(safetyInhibit: false);
 
+    // SimpleHPSDR: the ceilings in force. DriveMaxPct and TuneMaxPct are the
+    // amplifier's limits; without an amplifier in line the radio runs to 100.
+    internal static int DriveCap(StateDto s) => s.AmpOn ? Math.Clamp(s.DriveMaxPct, 1, 100) : 100;
+    internal static int TuneCap(StateDto s) => s.AmpOn ? Math.Clamp(s.TuneMaxPct, 1, 100) : 100;
+
+    // SimpleHPSDR: the Drive and Tune memories (per band, per mode) are kept
+    // twice, once for each amplifier state. Rows from before the switch
+    // existed are the "amplifier off" set.
+    private string DriveMemory(string key) => _ampOn ? "amp:" + key : key;
+
+    /// <summary>SimpleHPSDR: the amplifier's DRV ceiling. It limits the slider
+    /// only while the amplifier is on.</summary>
     public StateDto SetDriveMaximum(int percent)
     {
         int maximum = Math.Clamp(percent, 1, 100);
         Mutate(s =>
         {
             ThrowIfPaCalibrationInvariantMutation("Drive maximum");
-            int drive = Math.Min(s.DrivePct, maximum);
-            int tune = Math.Min(s.TunePct, maximum);
+            int drive = s.AmpOn ? Math.Min(s.DrivePct, maximum) : s.DrivePct;
             Interlocked.Exchange(ref _drivePct, drive);
-            Interlocked.Exchange(ref _tunePct, tune);
-            return s with { DrivePct = drive, DriveMaxPct = maximum, TunePct = tune };
+            return s with { DrivePct = drive, DriveMaxPct = maximum };
         });
         // Reduce live RF before touching storage, then persist this infrequent
         // hardware-protection setting before acknowledging the change so an
@@ -6304,6 +6328,75 @@ public sealed partial class RadioService : IDisposable
         RecomputePaAndPush();
         FlushState();
         return Snapshot();
+    }
+
+    /// <summary>SimpleHPSDR: the amplifier's TUN ceiling, apart from DRV's so
+    /// tuning power can be held well below operating drive.</summary>
+    public StateDto SetTuneMaximum(int percent)
+    {
+        int maximum = Math.Clamp(percent, 1, 100);
+        Mutate(s =>
+        {
+            ThrowIfPaCalibrationInvariantMutation("Tune maximum");
+            int tune = s.AmpOn ? Math.Min(s.TunePct, maximum) : s.TunePct;
+            Interlocked.Exchange(ref _tunePct, tune);
+            return s with { TunePct = tune, TuneMaxPct = maximum };
+        });
+        RecomputePaAndPush();
+        FlushState();
+        return Snapshot();
+    }
+
+    /// <summary>SimpleHPSDR: says whether an external amplifier is in line.
+    /// On: the amplifier's ceilings apply at once and its own Drive and Tune
+    /// memories are recalled. Off: the ceilings lift and the barefoot memories
+    /// come back. Refused (null) while transmitting: power must not jump under
+    /// a carrier.</summary>
+    public StateDto? SetAmpOn(bool on)
+    {
+        bool keyed = false;
+        Mutate(s =>
+        {
+            ThrowIfPaCalibrationInvariantMutation("Amplifier switch");
+            if (_mox || _tunActive) { keyed = true; return null; }
+            if (s.AmpOn == on) return null;
+            var next = s with { AmpOn = on };
+            // Lower first: nothing above the amplifier's ceilings survives the
+            // switch, whatever the recall below finds.
+            int drive = Math.Min(s.DrivePct, DriveCap(next));
+            int tune = Math.Min(s.TunePct, TuneCap(next));
+            Interlocked.Exchange(ref _drivePct, drive);
+            Interlocked.Exchange(ref _tunePct, tune);
+            _ampOn = on;
+            return next with { DrivePct = drive, TunePct = tune };
+        }, out bool applied);
+        if (keyed) return null;
+        if (applied)
+        {
+            _log.LogInformation("amp.switch on={On}", on);
+            RecomputePaAndPush();
+            RecallDriveForAmpChange();
+            FlushState();
+        }
+        return Snapshot();
+    }
+
+    // The newly selected set's Drive and Tune for where the dial is now. No
+    // stored value leaves the (already lowered) slider alone. Guarded like
+    // every recall: it yields to keying and to a slider moved meanwhile.
+    private void RecallDriveForAmpChange()
+    {
+        var s = Snapshot();
+        ForgetPreDigitalDrive();   // it belonged to the other set
+        var band = RuntimeBandKey(s.VfoHz);
+        var bandMemory = band is null ? default : _paStore.GetBandDrive(DriveMemory(band));
+        int? drive = CurrentDigitalDriveKey(s) is { } modeKey
+            ? _paStore.GetDigitalModeDrive(DriveMemory(modeKey))
+            : bandMemory.DrivePct;
+        if (drive is int d && d != s.DrivePct)
+            SetDriveCore(d, persist: false, s.DrivePct, abortIfTxActive: true);
+        if (bandMemory.TunePct is int t && t != s.TunePct)
+            SetTuneDriveCore(t, persist: false, s.TunePct, abortIfTxActive: true);
     }
 
     private void RecomputePaAndPushCore(bool safetyInhibit)
@@ -6351,7 +6444,7 @@ public sealed partial class RadioService : IDisposable
         // setters and the PA-change callback already clamp state, but this
         // prevents any racing legacy/internal source from producing a drive
         // byte above the persisted amplifier ceiling.
-        int activePct = Math.Min(requestedPct, Math.Clamp(stateSnap.DriveMaxPct, 1, 100));
+        int activePct = Math.Min(requestedPct, tunActive ? TuneCap(stateSnap) : DriveCap(stateSnap));
         bool tunSwrFoldback = tunActive && Volatile.Read(ref _tunSwrFoldbackActive) != 0;
         if (tunSwrFoldback)
             activePct = Math.Min(activePct, TunSwrFoldbackPercent(cfg.Global.PaMaxPowerWatts));
@@ -7935,6 +8028,8 @@ public sealed partial class RadioService : IDisposable
                 CwTxFilterLoAbs = cwTx.LoAbs,   CwTxFilterHiAbs = cwTx.HiAbs,
                 DrivePct = snap.DrivePct,
                 DriveMaxPct = snap.DriveMaxPct,
+                TuneMaxPct = snap.TuneMaxPct,
+                AmpOn = snap.AmpOn,
                 TunePct = snap.TunePct,
                 TxMoxPreKeyDelayMs = snap.TxMoxPreKeyDelayMs,
                 TxMoxTailDelayMs = snap.TxMoxTailDelayMs,

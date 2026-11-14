@@ -1387,6 +1387,11 @@ public sealed record StateDto(
     // carried here so every frontend sees the authoritative rail.
     // Default 100 preserves legacy state frames.
     int DriveMaxPct = 100,
+    // SimpleHPSDR: an external amplifier is in line. Only then do DriveMaxPct
+    // (DRV) and TuneMaxPct (TUN) limit the sliders; with it off both run to
+    // 100. Each state keeps its own Drive and Tune memories.
+    bool AmpOn = false,
+    int TuneMaxPct = 100,
     // Independent TUN drive slider 0..100. Same persistence pattern as
     // DrivePct. Default 10 mirrors RadioService._tunePct seed — a 0 default
     // would make pressing TUN appear to do nothing on first key.
@@ -1995,6 +2000,12 @@ public sealed record SplitFrequencySetRequest(int Receiver, long Hz);
 public sealed record DriveSetRequest(int Percent);
 
 public sealed record DriveMaxSetRequest(int Percent);
+
+/// <summary>SimpleHPSDR: the TUN ceiling while an amplifier is in line, 1..100.</summary>
+public sealed record TuneMaxSetRequest(int Percent);
+
+/// <summary>SimpleHPSDR: whether an external amplifier is in line (StateDto.AmpOn).</summary>
+public sealed record AmpSetRequest(bool On);
 
 /// <summary>TX pre-key (MOX) delay in milliseconds, 0..500. See
 /// <see cref="StateDto.TxMoxPreKeyDelayMs"/>.</summary>
