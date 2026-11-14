@@ -44,7 +44,8 @@ public static class PureSignalEndpoints
         endpoints.MapPost("/api/tx/ps/feedback-source",
             (PsFeedbackSourceSetRequest req, RadioService r) =>
         {
-            log.LogInformation("api.tx.ps.feedbackSource source={Source}", req.Source);
+            // SimpleHPSDR: the caller says why, so a source that moved can be traced.
+            log.LogInformation("api.tx.ps.feedbackSource source={Source} reason={Reason}", req.Source, req.Reason ?? "(not given)");
             return Results.Ok(r.SetPsFeedbackSource(req));
         });
 

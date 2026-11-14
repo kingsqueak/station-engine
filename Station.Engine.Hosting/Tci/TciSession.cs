@@ -2322,9 +2322,17 @@ public sealed class TciSession : IDisposable
         {
             _outboundClosed = true;
             ClearOutboundQueues();
-            _outboundSignal.Dispose();
         }
         _ws.Abort();
+        // Wake a parked send loop so it sees the closed socket and ends.
+        // Deliberately not disposed: SemaphoreSlim.Dispose abandons async
+        // waiters without completing them, so a send loop cancelled a moment
+        // after the dispose never finished, the session never ended, and
+        // engine shutdown sat out its whole timeout with the client still
+        // listed (SimpleHPSDR: a 10 s hang on quit with a TCI client connected).
+        // AvailableWaitHandle is never used, so there is nothing to release.
+        try { if (_outboundSignal.CurrentCount == 0) _outboundSignal.Release(); }
+        catch (SemaphoreFullException) { }
     }
 }
 

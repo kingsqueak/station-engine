@@ -3021,7 +3021,7 @@ public sealed record PsRestoreRequest(string Filename);
 // Feedback antenna selector — Internal coupler vs External (Bypass).
 // Sent from the PS settings panel. Affects only the radio-side ALEX bit;
 // the WDSP cal/iqc stages operate on whatever IQ arrives at DDC0/DDC1.
-public sealed record PsFeedbackSourceSetRequest(PsFeedbackSource Source);
+public sealed record PsFeedbackSourceSetRequest(PsFeedbackSource Source, string? Reason = null);
 
 // Manual PS TX feedback attenuation (dB). Operator alternative to
 // AutoAttenuate for a fixed external-tap chain: set the value that lands the

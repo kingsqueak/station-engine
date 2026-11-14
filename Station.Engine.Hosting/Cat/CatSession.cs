@@ -202,6 +202,7 @@ public sealed class CatSession : IDisposable
         try { _outboundSignal.Release(); } catch { }
         try { _stream?.Dispose(); } catch { }
         try { _client?.Dispose(); } catch { }
-        _outboundSignal.Dispose();
+        // The semaphore is not disposed, as in TciSession and CatSerialPort:
+        // SemaphoreSlim.Dispose abandons async waiters without completing them.
     }
 }
