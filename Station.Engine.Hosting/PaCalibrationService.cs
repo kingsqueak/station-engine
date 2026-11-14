@@ -402,8 +402,11 @@ public sealed class PaCalibrationService
         // than the controller is converging on and the recorded gain is wrong.
         int requiredDrivePct = TunePercentFor(
             TargetsWatts[^1], settings.Global.PaMaxPowerWatts);
-        if (state.DriveMaxPct < requiredDrivePct)
-            return $"Raise the drive MAX limit to at least {requiredDrivePct}% so calibration can reach {TargetsWatts[^1]} W.";
+        // SimpleHPSDR: calibration drives through TUN, and the ceiling there is
+        // the amplifier's Tune maximum while the amplifier switch is on (none
+        // when it is off).
+        if (RadioService.TuneCap(state) < requiredDrivePct)
+            return $"Turn Amp off, or raise the amplifier's Tune maximum to at least {requiredDrivePct}%, so calibration can reach {TargetsWatts[^1]} W.";
 
         if (settings.Bands.Any(b => b.DisablePa))
             return "Enable the PA on every band before starting calibration.";

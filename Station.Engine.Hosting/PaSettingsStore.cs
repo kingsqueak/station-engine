@@ -413,6 +413,38 @@ public sealed class PaSettingsStore : IDisposable
         }
     }
 
+    /// <summary>SimpleHPSDR: gives every Drive/Tune memory that has no twin
+    /// under <paramref name="prefix"/> a copy there (the upgrade to separate
+    /// memories for an amplifier in line). Returns how many were copied.</summary>
+    public int CopyDriveMemories(string prefix)
+    {
+        int copied = 0;
+        lock (_sync)
+        {
+            var bands = _bandDrive.FindAll().ToList();
+            foreach (var e in bands.Where(e => !e.Band.StartsWith(prefix, StringComparison.Ordinal)))
+            {
+                if (bands.Any(x => x.Band == prefix + e.Band)) continue;
+                _bandDrive.Insert(new PaBandDriveEntry
+                {
+                    Band = prefix + e.Band, DrivePct = e.DrivePct, TunePct = e.TunePct, UpdatedUtc = DateTime.UtcNow,
+                });
+                copied++;
+            }
+            var modes = _digitalModeDrive.FindAll().ToList();
+            foreach (var e in modes.Where(e => !e.Mode.StartsWith(prefix, StringComparison.Ordinal)))
+            {
+                if (modes.Any(x => x.Mode == prefix + e.Mode)) continue;
+                _digitalModeDrive.Insert(new PaDigitalModeDriveEntry
+                {
+                    Mode = prefix + e.Mode, DrivePct = e.DrivePct, UpdatedUtc = DateTime.UtcNow,
+                });
+                copied++;
+            }
+        }
+        return copied;
+    }
+
     // TUN drive % counterpart to SetBandDrive.
     public void SetBandTune(string band, int tunePct)
     {

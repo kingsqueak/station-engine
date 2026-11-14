@@ -119,7 +119,10 @@ public sealed partial class RadioService
         if (previous is null) preDigital ??= s.DrivePct;
 
         int? target = key is not null
-            ? _paStore.GetDigitalModeDrive(DriveMemory(key))
+            // CW, AM and FM with no Drive of their own yet on this band start
+            // from the band's (as they always did before they had one); a
+            // digital mode with none leaves the slider alone.
+            ? _paStore.GetDigitalModeDrive(DriveMemory(key)) ?? (IsBandModeKey(key) ? VoiceDriveFor(s) : null)
             : VoiceDriveFor(s) ?? preDigital;
         bool settled = target is not int pct || pct == s.DrivePct
             || SetDriveIfCurrent(pct, s.DrivePct);
@@ -166,6 +169,9 @@ public sealed partial class RadioService
         if (family is null) return null;
         return RuntimeBandKey(receiver.VfoHz) is { } band ? $"{family}@{band}" : null;
     }
+
+    // "CW@40m" and its kind, as against a digital mode's station-wide key.
+    private static bool IsBandModeKey(string key) => key.Contains('@');
 
     // The voice Drive remembered on the way into a mode memory belongs to the
     // amplifier state it was taken in (SetAmpOn).

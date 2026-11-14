@@ -895,6 +895,14 @@ public sealed partial class RadioService : IDisposable
         int startupTuneMaxPct = Math.Clamp(rsSnap?.TuneMaxPct ?? startupDriveMaxPct, 1, 100);
         bool startupAmpOn = rsSnap?.AmpOn ?? startupDriveMaxPct < 100;
         _ampOn = startupAmpOn;
+        // The same upgrade: the Drive and Tune memories were built with that
+        // amplifier in line, so they start as its set too (and stay as the
+        // barefoot set, which is safe: they are amplifier-sized levels).
+        if (rsSnap is { AmpOn: null } && startupAmpOn)
+        {
+            int copied = _paStore.CopyDriveMemories("amp:");
+            _log.LogInformation("amp.upgrade driveMaxPct={Max} memoriesCopied={Copied}", startupDriveMaxPct, copied);
+        }
         if (startupAmpOn)
         {
             _drivePct = Math.Min(_drivePct, startupDriveMaxPct);
@@ -6351,16 +6359,19 @@ public sealed partial class RadioService : IDisposable
     /// <summary>SimpleHPSDR: says whether an external amplifier is in line.
     /// On: the amplifier's ceilings apply at once and its own Drive and Tune
     /// memories are recalled. Off: the ceilings lift and the barefoot memories
-    /// come back. Refused (null) while transmitting: power must not jump under
-    /// a carrier.</summary>
+    /// come back. Off is refused (null) while transmitting: power must not
+    /// jump up under a carrier. On is allowed then, because it can only lower
+    /// power, and it is how a frontend protects an amplifier that was put in
+    /// line in the middle of an over; the one exception is when it would close
+    /// the amplifier's key output under that carrier.</summary>
     public StateDto? SetAmpOn(bool on)
     {
         bool keyed = false;
         Mutate(s =>
         {
             ThrowIfPaCalibrationInvariantMutation("Amplifier switch");
-            if (_mox || _tunActive) { keyed = true; return null; }
             if (s.AmpOn == on) return null;
+            if ((_mox || _tunActive) && (!on || s.AmpKeyPin != 0)) { keyed = true; return null; }
             var next = s with { AmpOn = on };
             // Lower first: nothing above the amplifier's ceilings survives the
             // switch, whatever the recall below finds.
@@ -6390,6 +6401,7 @@ public sealed partial class RadioService : IDisposable
         bool keyed = false;
         Mutate(s =>
         {
+            ThrowIfPaCalibrationInvariantMutation("Amplifier key output");
             if (_mox || _tunActive) { keyed = true; return null; }
             return s.AmpKeyPin == chosen ? null : s with { AmpKeyPin = chosen };
         }, out bool applied);
@@ -6426,7 +6438,7 @@ public sealed partial class RadioService : IDisposable
         var band = RuntimeBandKey(s.VfoHz);
         var bandMemory = band is null ? default : _paStore.GetBandDrive(DriveMemory(band));
         int? drive = CurrentDigitalDriveKey(s) is { } modeKey
-            ? _paStore.GetDigitalModeDrive(DriveMemory(modeKey))
+            ? _paStore.GetDigitalModeDrive(DriveMemory(modeKey)) ?? (IsBandModeKey(modeKey) ? bandMemory.DrivePct : null)
             : bandMemory.DrivePct;
         if (drive is int d && d != s.DrivePct)
             SetDriveCore(d, persist: false, s.DrivePct, abortIfTxActive: true);
@@ -6536,7 +6548,12 @@ public sealed partial class RadioService : IDisposable
             ocBandCfg.Band, ocBandCfg.OcTx, ocBandCfg.OcRx, ocBandCfg.OcTune, ocBandCfg.OcDxTx, ocBandCfg.OcDxRx);
 
         ActiveClient?.SetDriveOutput(driveOutput);
-        var (ocTx, ocRx, ocTune) = WithAmpKey(stateSnap, ocBandCfg.OcTx, ocBandCfg.OcRx, ocBandCfg.OcTune);
+        bool calibratingPa;
+        lock (_sync) calibratingPa = _paCalibrationInvariantLeaseActive;
+        // PA calibration measures the radio alone, so it never keys the amplifier.
+        var (ocTx, ocRx, ocTune) = WithAmpKey(
+            calibratingPa ? stateSnap with { AmpOn = false } : stateSnap,
+            ocBandCfg.OcTx, ocBandCfg.OcRx, ocBandCfg.OcTune);
         ActiveClient?.SetOcMasks(ocTx, ocRx, ocTune);
         ActiveClient?.SetPaEnabled(paEnabled);
         ActiveClient?.SetXvtrEnabled(xvtrOutputEnabled);
