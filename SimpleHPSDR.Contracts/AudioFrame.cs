@@ -55,7 +55,10 @@ public readonly record struct AudioFrame(
     byte Channels,
     uint SampleRateHz,
     ushort SampleCount,
-    ReadOnlyMemory<float> Samples)
+    ReadOnlyMemory<float> Samples,
+    // Receive pan, for outputs that play in stereo: left = Samples + Side,
+    // right = Samples - Side. Empty = plain mono. Never sent on the wire.
+    ReadOnlyMemory<float> Side = default)
 {
     public const int BodyHeaderSize = 1 + 1 + 4 + 2;
 

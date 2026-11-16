@@ -1005,7 +1005,23 @@ public partial class DspPipelineService : BackgroundService,
     // One secondary-receiver audio block read during a Tick, paired with its
     // sample count. Used to feed the N-receiver "Both" mixer without per-tick
     // allocation (the scratch span below is reused every tick).
-    internal readonly record struct RxAudioSlice(float[] Buffer, int Count, int FadeInSamplesRemaining = 0);
+    internal readonly record struct RxAudioSlice(
+        float[] Buffer, int Count, int FadeInSamplesRemaining = 0, bool PanOpposite = false);
+
+    // Receive pan between RX1 and RX2: -1 = RX1 hard left and RX2 hard right,
+    // 0 = both in both ears, +1 = RX1 hard right and RX2 hard left. The mono
+    // mix is unchanged; the pan rides beside it as a side signal
+    // (left = mix + side, right = mix - side) that only stereo outputs use.
+    // Held in memory only: the app sends it on connect and on every change.
+    private double _rxPan;
+    private readonly float[] _rxSideBuf = new float[AudioDrainCapacity];
+    public double RxPan => Volatile.Read(ref _rxPan);
+    public double SetRxPan(double pan)
+    {
+        double applied = double.IsFinite(pan) ? Math.Clamp(pan, -1.0, 1.0) : 0.0;
+        Volatile.Write(ref _rxPan, applied);
+        return applied;
+    }
     // Reused each tick to collect the enabled secondary RX audio blocks for the
     // mixer. Sized for every secondary slot (1..N-1) PLUS the Kiwi slice, which
     // is mixed in on the same bus; only the populated prefix is passed to
@@ -9174,7 +9190,9 @@ public partial class DspPipelineService : BackgroundService,
         Span<float> rx1,
         int rx1Count,
         ReadOnlySpan<RxAudioSlice> slices,
-        bool rx1Muted = false)
+        bool rx1Muted = false,
+        Span<float> side = default,
+        float pan = 0f)
     {
         rx1Count = Math.Clamp(rx1Count, 0, rx1.Length);
 
@@ -9191,13 +9209,22 @@ public partial class DspPipelineService : BackgroundService,
         count = Math.Min(count, rx1.Length);
         if (count == 0 || availableStreams == 0) return 0;
 
+        // The pan's side signal: (RX1 - the opposite receiver) scaled like the
+        // mix, so at full pan left is RX1 alone and right is the other. A
+        // sample with only one of the pair stays centred, and the side follows
+        // the other receiver's open fade.
+        bool wantSide = pan != 0f && side.Length >= count;
         for (int i = 0; i < count; i++)
         {
             float sum = 0f;
             float contributorWeight = 0f;
-            if (rx1Contributes && i < rx1Count)
+            float diff = 0f;
+            float pairWeight = 0f;
+            bool rx1Here = rx1Contributes && i < rx1Count;
+            if (rx1Here)
             {
                 sum = rx1[i];
+                diff = sum;
                 contributorWeight += 1f;
             }
             foreach (var s in slices)
@@ -9205,10 +9232,19 @@ public partial class DspPipelineService : BackgroundService,
                 int sc = Math.Clamp(s.Count, 0, s.Buffer.Length);
                 if (sc <= 0 || i >= sc) continue;
                 sum += s.Buffer[i];
-                contributorWeight += RxFadeInGain(s.FadeInSamplesRemaining, SecondaryRxOpenFadeInSamples, i);
+                float weight = RxFadeInGain(s.FadeInSamplesRemaining, SecondaryRxOpenFadeInSamples, i);
+                contributorWeight += weight;
+                if (s.PanOpposite)
+                {
+                    diff -= s.Buffer[i];
+                    pairWeight = weight;
+                }
             }
             // Keep a lone secondary's fade intact instead of dividing it away.
-            rx1[i] = sum / Math.Max(1f, contributorWeight);
+            float divisor = Math.Max(1f, contributorWeight);
+            rx1[i] = sum / divisor;
+            if (wantSide)
+                side[i] = rx1Here && pairWeight > 0f ? -pan * pairWeight * diff / divisor : 0f;
         }
         return count;
     }
@@ -9979,15 +10015,22 @@ public partial class DspPipelineService : BackgroundService,
             if (IsReceiverMuted(state, ri)
                 || (suppressRxAudioForTx && !allowLocalRxDuringSuppression))
                 continue;
-            _mixSlices[mixSliceCount++] = new RxAudioSlice(sec.AudioBuf, n, fadeRemaining);
+            _mixSlices[mixSliceCount++] = new RxAudioSlice(sec.AudioBuf, n, fadeRemaining, PanOpposite: ri == 1);
         }
 
         // RX1's own samples were already zeroed above when it is muted or TX
         // suppression is active without DUP; tell the mixer to drop RX1 from
         // the bus too. Every live, unmuted secondary still sums in normally.
+        float rxPan = (float)Volatile.Read(ref _rxPan);
+        // True while _rxSideBuf holds this block's pan and is still in step
+        // with every gain applied to the mix below.
+        bool rxPanned = rxPan != 0f && mixSliceCount > 0 && !rx1Muted;
         audioSampleCount = MixRxAudioN(
             audioBuf, audioSampleCount, _mixSlices.AsSpan(0, mixSliceCount),
-            rx1Muted: rx1Muted);
+            rx1Muted: rx1Muted,
+            side: rxPanned ? _rxSideBuf : default,
+            pan: rxPan);
+        rxPanned &= audioSampleCount > 0 && audioSampleCount <= _rxSideBuf.Length;
 
         // Operator RX master mute, read ONCE this tick so every branch below agrees.
         // While muted, real RX audio (and CW sidetone) is published normally and the
@@ -10018,6 +10061,7 @@ public partial class DspPipelineService : BackgroundService,
         if (audioSampleCount > 0)
         {
             SanitizeMixedRxAudioBuffer(audioBuf.AsSpan(0, audioSampleCount));
+            if (rxPanned) SanitizeMixedRxAudioBuffer(_rxSideBuf.AsSpan(0, audioSampleCount));
             rxAudioRmsForMeter = Rms(audioBuf.AsSpan(0, audioSampleCount));
 
             // MOX-edge fade-out envelope. The post-TX fade-in is applied to the
@@ -10038,9 +10082,13 @@ public partial class DspPipelineService : BackgroundService,
                     {
                         float ramp = 1f - (float)(i + 1) / n;
                         audioBuf[i] *= ramp;
+                        if (rxPanned) _rxSideBuf[i] *= ramp;
                     }
                     if (audioSampleCount > n)
+                    {
                         Array.Clear(audioBuf, n, audioSampleCount - n);
+                        if (rxPanned) Array.Clear(_rxSideBuf, n, audioSampleCount - n);
+                    }
                     _rxFadeOutPending = false;
                 }
             }
@@ -10083,12 +10131,29 @@ public partial class DspPipelineService : BackgroundService,
 
                 var rxAudioHandler = _rxAudioPluginHandler;
                 if (!rxDigitalBypass && rxAudioHandler is not null && audioSampleCount > 0)
+                {
                     rxAudioHandler(audioBuf.AsSpan(0, audioSampleCount), audioSampleCount, AudioOutputRateHz);
+                    // The plugin filtered the mix only; an unfiltered side
+                    // would put back what it took out. Play this block centred.
+                    rxPanned = false;
+                }
 
+                double squelchGainBefore = _adaptiveSquelch.Gain;
                 ApplyAdaptiveSquelch(
                     audioBuf.AsSpan(0, audioSampleCount),
                     squelch,
                     _adaptiveSquelch);
+                if (rxPanned)
+                {
+                    // The same gate, from the same starting gain, on the side.
+                    double squelchGainAfter = _adaptiveSquelch.Gain;
+                    _adaptiveSquelch.Gain = squelchGainBefore;
+                    ApplyAdaptiveSquelch(
+                        _rxSideBuf.AsSpan(0, audioSampleCount),
+                        squelch,
+                        _adaptiveSquelch);
+                    _adaptiveSquelch.Gain = squelchGainAfter;
+                }
 
                 // Slow post-WDSP perceived-loudness correction. Positive makeup
                 // is fail-closed unless the independent RX0 passband estimator
@@ -10153,6 +10218,11 @@ public partial class DspPipelineService : BackgroundService,
                 }
                 else if (postTxFadeRemaining > 0)
                 {
+                    if (rxPanned)
+                        ApplyRxPostTxFadeIn(
+                            _rxSideBuf.AsSpan(0, audioSampleCount),
+                            postTxFadeRemaining,
+                            RxPostTxFadeInSamples);
                     int next = ApplyRxPostTxFadeIn(
                         audioBuf.AsSpan(0, audioSampleCount),
                         postTxFadeRemaining,
@@ -10173,7 +10243,10 @@ public partial class DspPipelineService : BackgroundService,
                     Channels: 1,
                     SampleRateHz: (uint)AudioOutputRateHz,
                     SampleCount: (ushort)audioSampleCount,
-                    Samples: new ReadOnlyMemory<float>(audioBuf, 0, audioSampleCount));
+                    Samples: new ReadOnlyMemory<float>(audioBuf, 0, audioSampleCount),
+                    Side: rxPanned
+                        ? new ReadOnlyMemory<float>(_rxSideBuf, 0, audioSampleCount)
+                        : default);
                 CaptureAudioDiagnostics("rx", in audioFrame, finalAudioRms, finalAudioPeak, txMonitorOn, squelch);
                 if (duplexRxUnderTxMonitor)
                 {

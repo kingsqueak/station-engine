@@ -10,6 +10,8 @@ namespace SimpleHPSDR.Server;
 /// </summary>
 public sealed record SpectralZoomSetRequest(int Level, long? CenterHz = null);
 
+public sealed record RxPanSetRequest(double Pan);
+
 /// <summary>Maps engine-owned receiver configuration and tuning routes.</summary>
 public static class ReceiverControlEndpoints
 {
@@ -17,6 +19,13 @@ public static class ReceiverControlEndpoints
         this IEndpointRouteBuilder endpoints)
     {
         var log = endpoints.ServiceProvider.GetRequiredService<ILogger<object>>();
+
+        // Receive pan between RX1 and RX2 for stereo outputs: -1 = RX1 left and
+        // RX2 right, 0 = both centred, +1 = RX1 right and RX2 left.
+        endpoints.MapPut("/api/rx/pan", (RxPanSetRequest body, DspPipelineService pipe) =>
+            Results.Ok(new { pan = pipe.SetRxPan(body.Pan) }));
+        endpoints.MapGet("/api/rx/pan", (DspPipelineService pipe) =>
+            Results.Ok(new { pan = pipe.RxPan }));
 
         // Configure any receiver by index for full multi-DDC (RX1=0, RX2=1, RX3+=2..).
         endpoints.MapPost("/api/receivers/{index:int}", (

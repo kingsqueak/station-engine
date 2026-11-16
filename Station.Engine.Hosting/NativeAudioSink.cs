@@ -133,7 +133,7 @@ internal sealed class NativeAudioSink : IRxAudioSink, IPreviewAudioSink, IHosted
     // lazily inside StartAsync breaks the cycle — by the time the hosted-
     // service start phase fires, all singletons in the cycle exist.
     private readonly IServiceProvider? _services;
-    private readonly FloatSpscRing _ring = new(RingCapacity);
+    private readonly MidSideSpscRing _ring = new(RingCapacity);
     // TX monitor is latency-sensitive (the operator is hearing their own
     // voice), unlike bursty RX audio. Keep it on a dedicated ring so it never
     // waits for the RX path's 90 ms anti-crackle cushion. The device callback
@@ -749,7 +749,7 @@ internal sealed class NativeAudioSink : IRxAudioSink, IPreviewAudioSink, IHosted
         }
 
         var src = frame.Samples.Span;
-        int written = _ring.Write(src);
+        int written = _ring.Write(src, frame.Side.Span);
         if (written < src.Length)
         {
             int dropped = src.Length - written;
@@ -919,6 +919,12 @@ internal sealed class NativeAudioSink : IRxAudioSink, IPreviewAudioSink, IHosted
         Span<float> mono = totalFrames <= 4096
             ? stackalloc float[totalFrames]
             : new float[totalFrames];
+        // The receive pan: left = mono + side, right = mono - side. Zero
+        // except while panned receive audio is playing.
+        Span<float> side = totalFrames <= 4096
+            ? stackalloc float[totalFrames]
+            : new float[totalFrames];
+        side.Clear();
 
         // Self-monitor has priority and starts on the very next device
         // callback. In particular, it does not wait for the RX ring to reach
@@ -1022,7 +1028,7 @@ internal sealed class NativeAudioSink : IRxAudioSink, IPreviewAudioSink, IHosted
         int rxRead = 0;
         if (!renderingTxMonitor && !rxSilence)
         {
-            int read = _ring.Read(mono);
+            int read = _ring.Read(mono, side);
             rxRead = read;
             if (read < totalFrames)
             {
@@ -1054,7 +1060,7 @@ internal sealed class NativeAudioSink : IRxAudioSink, IPreviewAudioSink, IHosted
         {
             // A recording playing: it replaces receive audio rather than
             // having the band's noise underneath.
-            if (_previewExclusive) mono.Clear();
+            if (_previewExclusive) { mono.Clear(); side.Clear(); }
             Span<float> aud = totalFrames <= 4096
                 ? stackalloc float[totalFrames]
                 : new float[totalFrames];
@@ -1082,9 +1088,19 @@ internal sealed class NativeAudioSink : IRxAudioSink, IPreviewAudioSink, IHosted
             for (int i = 0; i < totalFrames; i++)
             {
                 float s = mono[i];
-                for (int c = 0; c < channelsI; c++)
+                float d = side[i];
+                if (d == 0f)
                 {
-                    output[outIdx++] = s;
+                    for (int c = 0; c < channelsI; c++)
+                        output[outIdx++] = s;
+                }
+                else
+                {
+                    // Panned receive: the first two channels are left and right.
+                    output[outIdx++] = Math.Clamp(s + d, -1f, 1f);
+                    output[outIdx++] = Math.Clamp(s - d, -1f, 1f);
+                    for (int c = 2; c < channelsI; c++)
+                        output[outIdx++] = s;
                 }
             }
         }
