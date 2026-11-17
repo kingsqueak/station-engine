@@ -154,11 +154,18 @@ internal sealed class NativeAudioSink : IRxAudioSink, IPreviewAudioSink, IHosted
     private const double DcBlockPole = 1.0 - 2.0 * Math.PI * 8.0 / FrameRateHz; // ~8 Hz
     internal const int DeclickRampSamples = FrameRateHz / 200;                  // 5 ms
     private OutputSource _lastOutputSource = OutputSource.Silence;
-    private double _rxDcX, _rxDcY, _monitorDcX, _monitorDcY;
-    private float _lastOutputSample;
+    private double _rxDcX, _rxDcY, _monitorDcX, _monitorDcY, _sideDcX, _sideDcY;
     private bool _lastOutputEndedInPad;
-    private float _declickOffset;
-    private int _declickPos = DeclickRampSamples;
+    // One ramp for the mix and one for the pan's side signal: left and right
+    // are mix + side and mix - side, so a step in either is a click.
+    private struct Declick
+    {
+        public float Offset;
+        public int Pos;
+        public float Last;
+    }
+    private Declick _monoDeclick = new() { Pos = DeclickRampSamples };
+    private Declick _sideDeclick = new() { Pos = DeclickRampSamples };
     private readonly FloatSpscRing _previewRing = new(PreviewRingCapacity);
     private readonly object _deviceSync = new();
 
@@ -818,10 +825,12 @@ internal sealed class NativeAudioSink : IRxAudioSink, IPreviewAudioSink, IHosted
     // DC-block the live part of this callback's audio with the source's own
     // filter, then smooth any step: at a change of source, and where a partial
     // callback is padded with silence. live = samples of real audio at the
-    // start of mono; the rest is already zero.
-    private void DeclickOutput(Span<float> mono, OutputSource source, int live)
+    // start of mono; the rest is already zero. side is the pan's side signal
+    // for the same frames: receive audio only, zero for every other source.
+    private void DeclickOutput(Span<float> mono, Span<float> side, OutputSource source, int live)
     {
         bool sourceChanged = source != _lastOutputSource || _lastOutputEndedInPad;
+        int sideLive = source == OutputSource.Rx ? live : 0;
         if (live > 0)
         {
             bool prime = source != _lastOutputSource;
@@ -829,22 +838,31 @@ internal sealed class NativeAudioSink : IRxAudioSink, IPreviewAudioSink, IHosted
                 DcBlock(mono[..live], ref _monitorDcX, ref _monitorDcY, prime);
             else
                 DcBlock(mono[..live], ref _rxDcX, ref _rxDcY, prime);
+            if (sideLive > 0)
+                DcBlock(side[..sideLive], ref _sideDcX, ref _sideDcY, prime);
         }
-        if (sourceChanged && mono.Length > 0)
-            StartDeclick(_lastOutputSample - mono[0]);
-        if (live > 0 && live < mono.Length)
+        Smooth(mono, live, sourceChanged, ref _monoDeclick);
+        Smooth(side, sideLive, sourceChanged, ref _sideDeclick);
+        _lastOutputSource = source;
+        _lastOutputEndedInPad = live > 0 && live < mono.Length;
+    }
+
+    private static void Smooth(Span<float> s, int live, bool sourceChanged, ref Declick d)
+    {
+        if (s.Length == 0) return;
+        if (sourceChanged)
+            StartDeclick(ref d, d.Last - s[0]);
+        if (live > 0 && live < s.Length)
         {
-            ApplyDeclick(mono[..live]);
-            StartDeclick(mono[live - 1]);
-            ApplyDeclick(mono[live..]);
+            ApplyDeclick(ref d, s[..live]);
+            StartDeclick(ref d, s[live - 1]);
+            ApplyDeclick(ref d, s[live..]);
         }
         else
         {
-            ApplyDeclick(mono);
+            ApplyDeclick(ref d, s);
         }
-        _lastOutputSource = source;
-        _lastOutputEndedInPad = live > 0 && live < mono.Length;
-        if (mono.Length > 0) _lastOutputSample = mono[^1];
+        d.Last = s[^1];
     }
 
     internal static void DcBlock(Span<float> s, ref double x1, ref double y1, bool prime)
@@ -864,19 +882,19 @@ internal sealed class NativeAudioSink : IRxAudioSink, IPreviewAudioSink, IHosted
         }
     }
 
-    private void StartDeclick(float offset)
+    private static void StartDeclick(ref Declick d, float offset)
     {
         // Carry over whatever is left of a ramp already running.
-        if (_declickPos < DeclickRampSamples)
-            offset += _declickOffset * DeclickWeight(_declickPos);
-        _declickOffset = offset;
-        _declickPos = 0;
+        if (d.Pos < DeclickRampSamples)
+            offset += d.Offset * DeclickWeight(d.Pos);
+        d.Offset = offset;
+        d.Pos = 0;
     }
 
-    private void ApplyDeclick(Span<float> s)
+    private static void ApplyDeclick(ref Declick d, Span<float> s)
     {
-        for (int i = 0; i < s.Length && _declickPos < DeclickRampSamples; i++)
-            s[i] += _declickOffset * DeclickWeight(_declickPos++);
+        for (int i = 0; i < s.Length && d.Pos < DeclickRampSamples; i++)
+            s[i] += d.Offset * DeclickWeight(d.Pos++);
     }
 
     // 1 at the step, falling to 0 along a raised cosine.
@@ -904,8 +922,8 @@ internal sealed class NativeAudioSink : IRxAudioSink, IPreviewAudioSink, IHosted
         {
             output.Clear();
             _lastOutputSource = OutputSource.Silence;
-            _lastOutputSample = 0f;
-            _declickPos = DeclickRampSamples;
+            _monoDeclick = new() { Pos = DeclickRampSamples };
+            _sideDeclick = new() { Pos = DeclickRampSamples };
             return;
         }
         // miniaudio's buffer is interleaved float32 sized frameCount * channels.
@@ -1043,11 +1061,11 @@ internal sealed class NativeAudioSink : IRxAudioSink, IPreviewAudioSink, IHosted
         }
 
         if (renderingTxMonitor)
-            DeclickOutput(mono, OutputSource.Monitor, txMonitorRead);
+            DeclickOutput(mono, side, OutputSource.Monitor, txMonitorRead);
         else if (rxSilence)
-            DeclickOutput(mono, OutputSource.Silence, 0);
+            DeclickOutput(mono, side, OutputSource.Silence, 0);
         else
-            DeclickOutput(mono, OutputSource.Rx, rxRead);
+            DeclickOutput(mono, side, OutputSource.Rx, rxRead);
 
         // Local side-channel mixing: when enabled, sum published mono monitor
         // samples into the RX mono buffer BEFORE channel expansion. We use a
@@ -1074,7 +1092,7 @@ internal sealed class NativeAudioSink : IRxAudioSink, IPreviewAudioSink, IHosted
         }
 
         if (mixedPreview)
-            DspPipelineService.LimitRxAudioBuffer(mono);
+            DspPipelineService.LimitRxAudioBuffer(mono, side);
 
         // Expand mono → output channels. channels==1 is the trivial path.
         if (channelsI == 1)

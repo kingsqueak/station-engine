@@ -330,6 +330,32 @@ public partial class DspPipelineService : BackgroundService,
         }
     }
 
+    // The same limiter for a panned block. Left and right are mid + side and
+    // mid - side, so the louder ear's peak is |mid| + |side|: limit that and
+    // scale both by the same gain, which keeps the stereo image. Limiting the
+    // mid alone would pass a hard-panned receiver at half its level and leave
+    // the ear it plays in to be clipped at the output. With no side this is
+    // LimitRxAudioBuffer(mid).
+    internal static void LimitRxAudioBuffer(Span<float> mid, Span<float> side)
+    {
+        int n = Math.Min(mid.Length, side.Length);
+        for (int i = 0; i < n; i++)
+        {
+            float m = float.IsFinite(mid[i]) ? mid[i] : 0f;
+            float d = float.IsFinite(side[i]) ? side[i] : 0f;
+            float peak = Math.Abs(m) + Math.Abs(d);
+            if (peak > RxLevelerOutputSoftKnee)
+            {
+                float gain = SoftLimitRxAudioSample(peak) / peak;
+                m *= gain;
+                d *= gain;
+            }
+            mid[i] = m;
+            side[i] = d;
+        }
+        if (mid.Length > n) LimitRxAudioBuffer(mid[n..]);
+    }
+
     internal static void SanitizeDisplayBuffer(Span<float> dbBins)
     {
         for (int i = 0; i < dbBins.Length; i++)
@@ -1014,6 +1040,8 @@ public partial class DspPipelineService : BackgroundService,
     // (left = mix + side, right = mix - side) that only stereo outputs use.
     // Held in memory only: the app sends it on connect and on every change.
     private double _rxPan;
+    // The pan the last mixed block ended on (0 when it played centred). Audio tick only.
+    private float _rxPanApplied;
     private readonly float[] _rxSideBuf = new float[AudioDrainCapacity];
     public double RxPan => Volatile.Read(ref _rxPan);
     public double SetRxPan(double pan)
@@ -9192,7 +9220,8 @@ public partial class DspPipelineService : BackgroundService,
         ReadOnlySpan<RxAudioSlice> slices,
         bool rx1Muted = false,
         Span<float> side = default,
-        float pan = 0f)
+        float pan = 0f,
+        float? panFrom = null)
     {
         rx1Count = Math.Clamp(rx1Count, 0, rx1.Length);
 
@@ -9212,8 +9241,12 @@ public partial class DspPipelineService : BackgroundService,
         // The pan's side signal: (RX1 - the opposite receiver) scaled like the
         // mix, so at full pan left is RX1 alone and right is the other. A
         // sample with only one of the pair stays centred, and the side follows
-        // the other receiver's open fade.
-        bool wantSide = pan != 0f && side.Length >= count;
+        // the other receiver's open fade. The pan moves from the last
+        // block's value to this one's along the block, so a turn of the
+        // control or the pan coming on is a glide and not a step.
+        float panStart = panFrom ?? pan;
+        bool wantSide = (pan != 0f || panStart != 0f) && side.Length >= count;
+        float panStep = (pan - panStart) / count;
         for (int i = 0; i < count; i++)
         {
             float sum = 0f;
@@ -9244,7 +9277,9 @@ public partial class DspPipelineService : BackgroundService,
             float divisor = Math.Max(1f, contributorWeight);
             rx1[i] = sum / divisor;
             if (wantSide)
-                side[i] = rx1Here && pairWeight > 0f ? -pan * pairWeight * diff / divisor : 0f;
+                side[i] = rx1Here && pairWeight > 0f
+                    ? -(panStart + panStep * (i + 1)) * pairWeight * diff / divisor
+                    : 0f;
         }
         return count;
     }
@@ -10024,13 +10059,15 @@ public partial class DspPipelineService : BackgroundService,
         float rxPan = (float)Volatile.Read(ref _rxPan);
         // True while _rxSideBuf holds this block's pan and is still in step
         // with every gain applied to the mix below.
-        bool rxPanned = rxPan != 0f && mixSliceCount > 0 && !rx1Muted;
+        bool rxPanned = (rxPan != 0f || _rxPanApplied != 0f) && mixSliceCount > 0 && !rx1Muted;
         audioSampleCount = MixRxAudioN(
             audioBuf, audioSampleCount, _mixSlices.AsSpan(0, mixSliceCount),
             rx1Muted: rx1Muted,
             side: rxPanned ? _rxSideBuf : default,
-            pan: rxPan);
+            pan: rxPan,
+            panFrom: _rxPanApplied);
         rxPanned &= audioSampleCount > 0 && audioSampleCount <= _rxSideBuf.Length;
+        _rxPanApplied = rxPanned ? rxPan : 0f;
 
         // Operator RX master mute, read ONCE this tick so every branch below agrees.
         // While muted, real RX audio (and CW sidetone) is published normally and the
@@ -10136,6 +10173,7 @@ public partial class DspPipelineService : BackgroundService,
                     // The plugin filtered the mix only; an unfiltered side
                     // would put back what it took out. Play this block centred.
                     rxPanned = false;
+                    _rxPanApplied = 0f;
                 }
 
                 double squelchGainBefore = _adaptiveSquelch.Gain;
@@ -10206,7 +10244,10 @@ public partial class DspPipelineService : BackgroundService,
 
                 // Preserve the established local-radio order: limit the fully
                 // processed local block first, then apply its post-TX fade.
-                LimitRxAudioBuffer(audioBuf.AsSpan(0, audioSampleCount));
+                if (rxPanned)
+                    LimitRxAudioBuffer(audioBuf.AsSpan(0, audioSampleCount), _rxSideBuf.AsSpan(0, audioSampleCount));
+                else
+                    LimitRxAudioBuffer(audioBuf.AsSpan(0, audioSampleCount));
                 int postTxFadeRemaining = Volatile.Read(ref _rxPostTxFadeInSamplesRemaining);
                 // Local audio that remained continuous through TX and drain
                 // must not receive a second fade. If it starved or Kiwi
