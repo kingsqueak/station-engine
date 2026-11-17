@@ -106,6 +106,9 @@ change, because no IQ is flowing then.
   pass of the wait). A restore issued before the first transmission leaves the
   thread in `SetTXAiqcStart` with those splines already owned by iqc; freeing
   them first made `destroy_iqc` free them again (crash at engine shutdown).
+  If the thread has not exited after the wait, nothing of the calibrator is
+  freed (it is still in use); once it has, the five `SemsPSCorr` semaphores
+  are closed as well.
 - `fm_tone.{c,h}`, `fmmod.{c,h}`, `fmd.{c,h}`, `emph.{c,h}`, `tests/fm_tests.c`:
   SimpleHPSDR FM extension. TX: `SetTXACTCSSLevel`, DCS encode (`SetTXADCSRun`,
   `SetTXADCSCode`; Golay (23,12) codewords pinned against published vectors),

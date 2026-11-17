@@ -1,5 +1,9 @@
 # Builds the native libraries SimpleHPSDR names itself (miniaudio, RADE, ASIO)
-# and WDSP for Linux and Windows. macOS ones are built on a Mac (see NATIVE-BUILD.md).
+# and WDSP for every packaged runtime: Linux, Windows and macOS, x64 and arm64.
+# All six WDSP libraries are built here, on clean machines, whenever the WDSP
+# sources change, and the committed ones are replaced together from this run's
+# artifacts; a WDSP built on a developer's machine is for testing only.
+# miniaudio and RADE for macOS are still built on a Mac (see NATIVE-BUILD.md).
 # codec2 and FFTW don't change here and keep their committed binaries.
 # The artifacts are copied into SimpleHPSDR.Dsp/runtimes/<rid>/native by hand.
 name: Native libraries
@@ -99,6 +103,76 @@ jobs:
         with:
           name: wdsp-${{ matrix.rid }}
           path: out/wdsp.dll
+
+  # Links the committed FFTW of each runtime (only the header comes from
+  # Homebrew) and finds it beside itself through @loader_path. x64 is
+  # cross-built on the Apple silicon runner. The deployment targets are the
+  # oldest macOS each package supports.
+  wdsp-macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { rid: osx-arm64, arch: arm64, target: '14.0' }
+          - { rid: osx-x64, arch: x86_64, target: '12.0' }
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: |
+          set -euo pipefail
+          brew install fftw ninja
+          native="SimpleHPSDR.Dsp/runtimes/${{ matrix.rid }}/native"
+          F="$RUNNER_TEMP/fftw"
+          mkdir -p "$F/include" "$F/lib" out
+          cp "$(brew --prefix fftw)/include/fftw3.h" "$F/include/"
+          cp "$native/libfftw3.3.dylib" "$F/lib/libfftw3.dylib"
+          cp "$native/libfftw3f.3.dylib" "$F/lib/libfftw3f.dylib"
+          cmake -S native/wdsp -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }} \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=${{ matrix.target }} \
+            -DWDSP_WITH_NR3=ON -DWDSP_WITH_NR4=ON \
+            -DPKG_CONFIG_EXECUTABLE=/usr/bin/false -DCMAKE_DISABLE_FIND_PACKAGE_FFTW3=ON \
+            -DFFTW_ROOT="$F" -DFFTW3F_LIBRARY="$F/lib/libfftw3f.dylib"
+          cmake --build build --parallel
+          install_name_tool \
+            -change @rpath/libfftw3.3.dylib @loader_path/libfftw3.3.dylib \
+            -change @rpath/libfftw3f.3.dylib @loader_path/libfftw3f.3.dylib \
+            -delete_rpath "$F/lib" build/libwdsp.dylib
+          codesign -f -s - build/libwdsp.dylib
+          cp build/libwdsp.dylib out/
+      - name: Check exports and links
+        run: |
+          set -euo pipefail
+          lib=out/libwdsp.dylib
+          test "$(lipo -archs "$lib")" = "${{ matrix.arch }}"
+          minos=$(otool -l "$lib" | awk '/LC_BUILD_VERSION/ {f=1} f && /minos/ {print $2; exit}')
+          echo "minos $minos"
+          test "$minos" = "${{ matrix.target }}"
+          syms=$(nm -gU "$lib")
+          for sym in GetWDSPVersion PSSaveCorr PSRestoreCorr SetPSControl; do
+            if ! grep -E " _$sym\$" <<<"$syms"; then
+              echo "missing export: $sym"
+              exit 1
+            fi
+          done
+          otool -L "$lib"
+          unexpected=$(otool -L "$lib" | sed 1,2d | grep -v -E "@loader_path/libfftw3f?\.3\.dylib|/usr/lib/libSystem\.B\.dylib" || true)
+          if [ -n "$unexpected" ]; then
+            echo "unexpected dependencies:"
+            echo "$unexpected"
+            exit 1
+          fi
+          if otool -l "$lib" | grep -q LC_RPATH; then
+            echo "unexpected rpath"
+            exit 1
+          fi
+          codesign --verify "$lib"
+          shasum -a 256 "$lib"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wdsp-${{ matrix.rid }}
+          path: out/libwdsp.dylib
 
   linux:
     strategy:

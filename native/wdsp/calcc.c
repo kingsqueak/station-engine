@@ -1106,19 +1106,22 @@ void destroy_calcc (CALCC a)
 		InterlockedBitTestAndReset(&b->busy, 0);
 		exited = WaitForSingleObject(a->hCorrChangeExited, 10) == WAIT_OBJECT_0;
 	}
+	// If the thread never answered (a slow save file, a long fit), it is still
+	// using this calibrator: its buffers, cs_update, the semaphores and the
+	// exit event. Leave all of it allocated. A leak at close is harmless;
+	// freeing memory under a running thread is not.
+	if (!exited)
+		return;
 	CloseHandle(a->hCorrChangeExited);
+	for (int i = 0; i < 5; i++)
+		CloseHandle(a->SemsPSCorr[i]);
 
-	// If the thread never answered, what these point to may belong to iqc:
-	// leave them rather than risk a double free.
-	if (exited)
-	{
-		ns_free(a->util.m_spline_restore); a->util.m_spline_restore = NULL;
-		ns_free(a->util.c_spline_restore); a->util.c_spline_restore = NULL;
-		ns_free(a->util.s_spline_restore); a->util.s_spline_restore = NULL;
-		ns_free(a->util.m_spline_save);    a->util.m_spline_save = NULL;
-		ns_free(a->util.c_spline_save);    a->util.c_spline_save = NULL;
-		ns_free(a->util.s_spline_save);    a->util.s_spline_save = NULL;
-	}
+	ns_free(a->util.m_spline_restore); a->util.m_spline_restore = NULL;
+	ns_free(a->util.c_spline_restore); a->util.c_spline_restore = NULL;
+	ns_free(a->util.s_spline_restore); a->util.s_spline_restore = NULL;
+	ns_free(a->util.m_spline_save);    a->util.m_spline_save = NULL;
+	ns_free(a->util.c_spline_save);    a->util.c_spline_save = NULL;
+	ns_free(a->util.s_spline_save);    a->util.s_spline_save = NULL;
 
 	ns_free(a->m_spline); a->m_spline = NULL;
 	ns_free(a->c_spline); a->c_spline = NULL;
