@@ -138,6 +138,8 @@ public static class StationEngineHostingExtensions
         services.AddSingleton<StreamingHub>();
         services.AddSingleton<RadioService>();
         services.AddSingleton<RadioReclaimService>();
+        services.AddSingleton<RadioYieldService>();
+        services.AddHostedService(sp => sp.GetRequiredService<RadioYieldService>());
         services.AddSingleton<
             SimpleHPSDR.Protocol1.Discovery.IRadioDiscovery,
             SimpleHPSDR.Protocol1.Discovery.RadioDiscoveryService>();

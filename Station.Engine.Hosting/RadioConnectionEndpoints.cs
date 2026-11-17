@@ -60,19 +60,27 @@ public static class RadioConnectionEndpoints
                 .ToArray();
         });
 
+        // What this engine last gave up to another SimpleHPSDR (RadioYieldService).
+        endpoints.MapGet("/api/radios/yielded", (RadioYieldService yield) => Results.Ok(yield.Last));
+
         // Take over a Busy radio. Discovery reports status 0x03 when another
         // client owns the radio; the UI normally disables Connect for those.
         // This is outward-facing and deliberate: the Connect panel gates it
         // behind an explicit confirmation because the stop can interrupt an
-        // active transmission. P2 sends the stop and reconnects unconditionally
-        // (maintainer decision, 2026-08-16) — an earlier revision required the
-        // radio to prove stable Idle first, but that made an appliance's own
-        // still-alive controller (e.g. a G2's on-board Zeus Link kiosk) win the
-        // race back almost every time, leaving the operator unable to take the
-        // radio over at all. See docs/lessons/p2-second-master-relay-chatter.md.
+        // active transmission.
+        //
+        // The stop only reaches the radio, so the controller that had it must
+        // let go too, or the radio has two masters and chatters its relays
+        // (seen 2026-11-17: this code used to connect unconditionally). First
+        // the take-over is announced, and another SimpleHPSDR disconnects
+        // (RadioYieldService). Then, after the stop, the radio must stay Idle:
+        // one that goes Busy again has a controller that is still running, and
+        // P2 refuses to connect beside it. That controller has to be stopped
+        // where it runs; a controller built into the radio is such a case.
         endpoints.MapPost("/api/radios/reclaim", async (
             ReclaimRadioRequest req,
             RadioReclaimService reclaim,
+            RadioYieldService yield,
             IProtocol2ConnectionConnector p2Connection,
             RadioService radio,
             DspPipelineService dsp,
@@ -89,6 +97,7 @@ public static class RadioConnectionEndpoints
 
             if (!isP2)
             {
+                await yield.AnnounceAsync(ipEndpoint.Address, ctx.RequestAborted).ConfigureAwait(false);
                 await reclaim.ReclaimAsync(
                         ipEndpoint.Address,
                         isProtocol2: false,
@@ -149,19 +158,43 @@ public static class RadioConnectionEndpoints
                         statusCode: StatusCodes.Status503ServiceUnavailable);
                 }
 
+                await yield.AnnounceAsync(ipEndpoint.Address, ctx.RequestAborted).ConfigureAwait(false);
                 await reclaim.ReclaimAsync(
                         ipEndpoint.Address,
                         isProtocol2: true,
                         ct: ctx.RequestAborted)
                     .ConfigureAwait(false);
 
-                // Best-effort probe for board kind / firmware only. Reclaim
-                // already committed to the takeover by sending the stop, so this
-                // does not re-block on Busy — fails OPEN, same as the ordinary
-                // connect probe: a radio that doesn't answer (or still shows
-                // Busy because another controller resumed) is not blocked.
-                var finalProbe = await p2Connection.ProbeAsync(ipEndpoint, ctx.RequestAborted)
-                    .ConfigureAwait(false);
+                // The radio must now stay Idle for longer than a live
+                // controller goes between commands (SimpleHPSDR and Thetis
+                // both speak at least once a second). A radio that doesn't
+                // answer is not blocked, as with an ordinary connect.
+                Protocol2ConnectionProbe? finalProbe = null;
+                var busyAfterStop = new bool[P2TakeoverIdleProbes];
+                for (int i = 0; i < P2TakeoverIdleProbes; i++)
+                {
+                    if (i > 0) await Task.Delay(P2TakeoverIdleProbeGap, ctx.RequestAborted).ConfigureAwait(false);
+                    var probe = await p2Connection.ProbeAsync(ipEndpoint, ctx.RequestAborted)
+                        .ConfigureAwait(false);
+                    finalProbe = probe ?? finalProbe;
+                    busyAfterStop[i] = probe?.Busy == true;
+                }
+                if (P2TakeoverStillControlled(busyAfterStop))
+                {
+                    log.LogWarning(
+                        "api.radios.reclaim REFUSED: radio {Ip} went Busy again after the stop (probes busy={Busy}); another controller is still running",
+                        ipEndpoint.Address,
+                        string.Join(",", busyAfterStop));
+                    return Results.Json(
+                        new
+                        {
+                            error =
+                                "The other program is still running and took the radio back. " +
+                                "Stop it on the computer where it runs, then connect.",
+                            busy = true,
+                        },
+                        statusCode: StatusCodes.Status409Conflict);
+                }
 
                 var boardKind = ResolveP2BoardKind(req.BoardId, finalProbe);
                 var rateKhz = ResolveP2RateKhz(req.SampleRate);
@@ -380,6 +413,22 @@ public static class RadioConnectionEndpoints
 
         return endpoints;
     }
+
+    // After a take-over's stop: probes this far apart, the first one 350 ms
+    // after the stop (RadioReclaimService), so about 1.7 s in all.
+    internal const int P2TakeoverIdleProbes = 4;
+    internal static readonly TimeSpan P2TakeoverIdleProbeGap = TimeSpan.FromMilliseconds(450);
+
+    /// <summary>
+    /// Whether the radio is still being commanded by someone else after a
+    /// take-over's stop. The early probes may still show the old stream
+    /// winding down; a radio that is Busy in either of the last two has a
+    /// live controller.
+    /// </summary>
+    internal static bool P2TakeoverStillControlled(IReadOnlyList<bool> busyAfterStop) =>
+        busyAfterStop.Count >= 2
+            ? busyAfterStop[^1] || busyAfterStop[^2]
+            : busyAfterStop.Count == 1 && busyAfterStop[0];
 
     internal static bool CanBypassBusyProbe(bool isP2, bool force) =>
         force && !isP2;
