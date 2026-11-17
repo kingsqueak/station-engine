@@ -105,7 +105,8 @@ jobs:
           path: out/wdsp.dll
 
   # Links the committed FFTW of each runtime (only the header comes from
-  # Homebrew) and finds it beside itself through @loader_path. x64 is
+  # Homebrew; the embedded libspecbleach includes it too, so it is passed to
+  # every target) and finds it beside itself through @loader_path. x64 is
   # cross-built on the Apple silicon runner. The deployment targets are the
   # oldest macOS each package supports.
   wdsp-macos:
@@ -133,7 +134,8 @@ jobs:
             -DCMAKE_OSX_DEPLOYMENT_TARGET=${{ matrix.target }} \
             -DWDSP_WITH_NR3=ON -DWDSP_WITH_NR4=ON \
             -DPKG_CONFIG_EXECUTABLE=/usr/bin/false -DCMAKE_DISABLE_FIND_PACKAGE_FFTW3=ON \
-            -DFFTW_ROOT="$F" -DFFTW3F_LIBRARY="$F/lib/libfftw3f.dylib"
+            -DFFTW_ROOT="$F" -DFFTW3F_LIBRARY="$F/lib/libfftw3f.dylib" \
+            -DCMAKE_C_FLAGS="-I$F/include"
           cmake --build build --parallel
           install_name_tool \
             -change @rpath/libfftw3.3.dylib @loader_path/libfftw3.3.dylib \
