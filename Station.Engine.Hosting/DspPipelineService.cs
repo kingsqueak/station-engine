@@ -955,6 +955,10 @@ public partial class DspPipelineService : BackgroundService,
         // bandwidth. Server-side only — not in StateDto. See UpdateRxLo.
         public long LoHz;
         public bool LoInit;
+        // CTUN off: the dial (CW-offset applied) the centre was dragged away
+        // from. While the dial is still there the centre stays where it was
+        // dragged, as RX1's does; tuning recentres. long.MinValue = not dragged.
+        public long PannedAtDialHz = long.MinValue;
         public readonly float[] PanBuf;
         public readonly float[] WfBuf;
         public readonly float[] AudioBuf = new float[AudioDrainCapacity];
@@ -7226,9 +7230,13 @@ public partial class DspPipelineService : BackgroundService,
         long span = Volatile.Read(ref _sampleRateHz);
         if (span <= 0) span = s.SampleRate > 0 ? s.SampleRate : SyntheticSampleRateHz;
         long edge = (long)(span * 0.45); // recentre before the dial hits the DDC edge
-        if (!rx.LoInit || !s.CtunEnabled || Math.Abs(effB - rx.LoHz) > edge)
+        // CTUN off and the display dragged (RequestSecondaryLo): keep the
+        // dragged centre until the dial moves, like RX1's panadapter.
+        bool dragged = !s.CtunEnabled && rx.LoInit && rx.PannedAtDialHz == effB;
+        if (!rx.LoInit || (!s.CtunEnabled && !dragged) || Math.Abs(effB - rx.LoHz) > edge)
         {
             rx.LoHz = effB;
+            rx.PannedAtDialHz = long.MinValue;
         }
         rx.LoInit = true;
     }
@@ -7245,8 +7253,8 @@ public partial class DspPipelineService : BackgroundService,
     /// <para>Only meaningful for a true independent DDC (Protocol 2). P1 / synthetic
     /// secondaries sub-receive RX1's shared NCO (their WDSP shift is RadioLoHz-
     /// relative, see <see cref="ComputeSecondaryCtunShiftHz"/>), so their centre
-    /// can't move independently — no-op there. Also a no-op with CTUN off (the
-    /// centre follows the dial) or when the receiver is disabled.</para>
+    /// can't move independently — no-op there. Also a no-op when the receiver
+    /// is disabled. With CTUN off the dragged centre holds until the dial moves.</para>
     ///
     /// <para>Re-applies the current state under <c>_engineLock</c> on the caller
     /// thread, exactly like normal tuning via <see cref="RadioService.StateChanged"/>,
@@ -7263,11 +7271,20 @@ public partial class DspPipelineService : BackgroundService,
         lock (_engineLock)
         {
             var s = _radio.Snapshot();
-            if (!s.CtunEnabled || !SecondaryReceiverEnabled(rxIndex, s)) return;
+            if (!SecondaryReceiverEnabled(rxIndex, s)) return;
             var rx = _secondaryRx[rxIndex];
             if (rx.LoInit && rx.LoHz == clamped) return; // already centred there
             rx.LoHz = clamped;
             rx.LoInit = true;
+            // CTUN off: the centre normally follows the dial (UpdateRxLo). A
+            // drag of the panadapter holds until the dial next moves, as on
+            // RX1; before, the request was dropped and RX2's display could
+            // not be dragged at all with CTUN off.
+            if (!s.CtunEnabled)
+            {
+                var (mode, vfoHz, _, _, _) = SecondaryRxParams(s, rxIndex);
+                rx.PannedAtDialHz = CwOffset.EffectiveLoHz(mode, vfoHz);
+            }
             OnRadioStateChanged(s);
         }
     }
