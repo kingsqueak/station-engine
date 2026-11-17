@@ -14,6 +14,7 @@ source tree.
 | --- | --- |
 | `wdsp.dll`, `libwdsp.so`, `libwdsp.dylib` | `native/wdsp/`, with `native/libspecbleach/` and `native/rnnoise/` statically embedded by the default build |
 | `fftw3.dll`, `fftw3f.dll`, `libfftw3-3.dll`, `libfftw3f-3.dll`, `libfftw3.so.3`, `libfftw3f.so.3`, `libfftw3.3.dylib`, `libfftw3f.3.dylib` | Unmodified upstream FFTW; provenance and exact per-RID acquisition are below |
+| `wdspWisdom01.seed` (linux-arm64) | FFTW wisdom planned by `native/wdsp/wisdom-seed.py` in the `Native libraries` workflow; data, not code |
 | `miniaudio.dll`, `libminiaudio.so`, `libminiaudio.dylib` | `native/miniaudio/` |
 | `simplehpsdr_asio.dll` | `native/asio/`; Windows-only ASIO 2.3.4 host bridge, including the SDK interface source used to build it |
 | `codec2.dll`, `libcodec2.so`, `libcodec2.dylib` | `native/codec2/`; its CMake recipe fetches codec2 1.2.0 and applies the included build-system patch |
@@ -96,6 +97,17 @@ of one run into `SimpleHPSDR.Dsp/runtimes/<rid>/native/` and commit them
 together. The recipes here are for a local test build only; for macOS arm64
 add `-DCMAKE_OSX_DEPLOYMENT_TARGET=14.0`, or the library targets the build
 machine's macOS.
+
+The same run's `wisdom-linux-arm64` artifact is `wdspWisdom01.seed`: FFTW's
+wisdom for WDSP's 65 plans, planned on the arm64 runner with the new
+`libwdsp.so` and the committed FFTW. Commit it beside the linux-arm64
+libraries. On a Raspberry Pi, where planning takes an hour or more, the engine
+puts this file in place instead of planning, after checking that it holds
+every plan for the FFTW in the package (`WdspWisdomParallel.TryUseSeed`;
+`STATION_ENGINE_WISDOM_SEED=1` uses it on any machine that has one, `0` on
+none). It depends on FFTW and on the plan list in `wisdom.c`, not on the rest
+of WDSP, so it needs replacing only when one of those changes; the workflow
+fails if the committed file no longer holds every plan for the committed FFTW.
 
 ## Linux x64
 

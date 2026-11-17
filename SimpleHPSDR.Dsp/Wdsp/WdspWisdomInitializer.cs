@@ -259,21 +259,26 @@ public sealed class WdspWisdomInitializer
             // level up.
             var dirForNative = dir + Path.DirectorySeparatorChar;
 
-            // SimpleHPSDR: no wisdom yet, so build it on several cores first;
-            // WDSPwisdom below then only loads it. Falls back to WDSP's own
-            // one-at-a-time planning if that isn't possible here.
+            // SimpleHPSDR: no wisdom yet. On a Raspberry Pi the package's
+            // ready-made file goes in its place; anywhere else it is built on
+            // several cores first. WDSPwisdom below then only loads it. Falls
+            // back to WDSP's own one-at-a-time planning if neither is possible.
             if (_parallel && !File.Exists(wisdomPath)
                 && WdspNativeLoader.TryGetResolvedNativeLibraryPath(out var wdspPath) && wdspPath is not null
                 && WdspNativeLoader.FftwDependencyFilePaths(wdspPath)
                     .FirstOrDefault(p => Path.GetFileName(p).StartsWith("libfftw3.", StringComparison.Ordinal)) is { } fftwPath)
             {
-                Volatile.Write(ref _statusOverride, "Planning FFTs in parallel: starting");
-                try
+                string seedPath = Path.Combine(Path.GetDirectoryName(wdspPath) ?? "", WdspWisdomParallel.SeedFileName);
+                if (!WdspWisdomParallel.TryUseSeed(seedPath, fftwPath, wisdomPath, _log))
                 {
-                    WdspWisdomParallel.TryBuild(wisdomPath, fftwPath, _log,
-                        s => Volatile.Write(ref _statusOverride, s));
+                    Volatile.Write(ref _statusOverride, "Planning FFTs in parallel: starting");
+                    try
+                    {
+                        WdspWisdomParallel.TryBuild(wisdomPath, fftwPath, _log,
+                            s => Volatile.Write(ref _statusOverride, s));
+                    }
+                    finally { Volatile.Write(ref _statusOverride, null); }
                 }
-                finally { Volatile.Write(ref _statusOverride, null); }
             }
 
             _log.LogInformation("wdsp.wisdom initialising dir={Dir}", dirForNative);
@@ -293,6 +298,8 @@ public sealed class WdspWisdomInitializer
             // it just forces a rebake next launch. Never written on failure,
             // so the next launch retries the bake.
             TryWriteStamp(stampPath, stamp);
+            // Parts of a stopped parallel run have no use once the file is there.
+            if (_parallel) WdspWisdomParallel.DeleteParts(dir);
             success = true;
         }
         catch (Exception ex)

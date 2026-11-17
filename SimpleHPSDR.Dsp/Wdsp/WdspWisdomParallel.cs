@@ -13,6 +13,15 @@
 //
 // Not on Windows, where FFTW is linked into wdsp.dll and not reachable on its
 // own; any failure falls back to WDSP's own one-at-a-time planning.
+//
+// Planning can be stopped and picked up again: each worker saves its wisdom
+// after every plan, and the next start plans only what the saved parts don't
+// hold. Workers end when the engine that started them is gone.
+//
+// A package may also carry a ready-made wisdom file beside the libraries
+// (wdspWisdom01.seed, made by the Native libraries workflow with the same
+// FFTW). On a Raspberry Pi, where planning takes an hour or more, that file
+// is used instead of planning (TryUseSeed).
 
 using System.Diagnostics;
 using System.Globalization;
@@ -28,6 +37,19 @@ public static class WdspWisdomParallel
 
     /// <summary>Set to "1" to plan one at a time, as WDSP does.</summary>
     public const string SequentialEnvironmentVariable = "STATION_ENGINE_WISDOM_SEQUENTIAL";
+
+    /// <summary>"1": use the packaged wisdom file on any machine that has one;
+    /// "0": never; unset: on a Raspberry Pi only.</summary>
+    public const string SeedEnvironmentVariable = "STATION_ENGINE_WISDOM_SEED";
+
+    /// <summary>The packaged wisdom file, beside the WDSP and FFTW libraries.</summary>
+    public const string SeedFileName = "wdspWisdom01.seed";
+
+    // Set by the engine for its workers: the engine's process id. A worker
+    // whose parent is no longer that process stops.
+    private const string ParentEnvironmentVariable = "STATION_ENGINE_WISDOM_PARENT";
+
+    private const string PartPrefix = ".wisdom-part-";
 
     // Mirrors wisdom.c: MAX_WISDOM_SIZE 262144, sizes 64 upward by doubling.
     private const int MinSize = 64, MaxSize = 262_144;
@@ -129,18 +151,97 @@ public static class WdspWisdomParallel
         catch (Exception) { return null; }
     }
 
-    /// <summary>Largest first, each to the least-loaded worker (LPT).</summary>
-    internal static List<List<Plan>> Assign(IReadOnlyList<Plan> plans, int workers)
+    /// <summary>Largest first, each to the least-loaded worker (LPT).
+    /// <paramref name="costOf"/> gives each plan's relative time by its code.</summary>
+    internal static List<List<Plan>> Assign(IReadOnlyList<Plan> plans, IReadOnlyDictionary<string, double> costOf, int workers)
     {
         var buckets = Enumerable.Range(0, workers).Select(_ => new List<Plan>()).ToList();
         var load = new double[workers];
-        foreach (var i in Enumerable.Range(0, plans.Count).OrderByDescending(Cost))
+        foreach (var plan in plans.OrderByDescending(p => costOf[p.Code]))
         {
             int w = Array.IndexOf(load, load.Min());
-            buckets[w].Add(plans[i]);
-            load[w] += Cost(i);
+            buckets[w].Add(plan);
+            load[w] += costOf[plan.Code];
         }
         return buckets.Where(b => b.Count > 0).ToList();
+    }
+
+    /// <summary>Wisdom parts in <paramref name="dir"/>, from this run or one that was stopped.</summary>
+    private static List<string> PartFiles(string dir)
+    {
+        try
+        {
+            return Directory.EnumerateFiles(dir, PartPrefix + "*")
+                .Where(f => !f.EndsWith(".tmp", StringComparison.Ordinal))
+                .ToList();
+        }
+        catch (Exception) { return []; }
+    }
+
+    /// <summary>Removes what a planning run left in <paramref name="dir"/>. For
+    /// the caller once the wisdom file is in place.</summary>
+    public static void DeleteParts(string dir)
+    {
+        try
+        {
+            foreach (var f in Directory.EnumerateFiles(dir, PartPrefix + "*"))
+                try { File.Delete(f); } catch (Exception) { }
+        }
+        catch (Exception) { }
+    }
+
+    /// <summary>Whether the packaged wisdom file is to be used here: on a
+    /// Raspberry Pi (64-bit Linux), or as <see cref="SeedEnvironmentVariable"/> says.</summary>
+    internal static bool SeedWanted()
+    {
+        switch (Environment.GetEnvironmentVariable(SeedEnvironmentVariable))
+        {
+            case "1": return true;
+            case "0": return false;
+        }
+        if (!OperatingSystem.IsLinux() || RuntimeInformation.ProcessArchitecture != Architecture.Arm64)
+            return false;
+        try
+        {
+            return File.ReadAllText("/proc/device-tree/model").Contains("Raspberry Pi", StringComparison.Ordinal);
+        }
+        catch (Exception) { return false; }
+    }
+
+    /// <summary>
+    /// Puts the packaged wisdom file <paramref name="seedPath"/> in place as
+    /// <paramref name="wisdomPath"/>, when this machine is to use one and the
+    /// file holds every plan WDSP asks for with this FFTW library. False (and
+    /// no file) otherwise; the caller then plans as usual.
+    /// </summary>
+    public static bool TryUseSeed(string seedPath, string fftwPath, string wisdomPath, ILogger log)
+    {
+        if (OperatingSystem.IsWindows() || !File.Exists(seedPath) || !File.Exists(fftwPath) || !SeedWanted())
+            return false;
+        try
+        {
+            using var fftw = Fftw.Load(fftwPath);
+            int total = AllPlans().Count;
+            int covered = fftw.ImportWisdom(seedPath) == 0 ? 0 : Covered(fftw).Count;
+            if (covered != total)
+            {
+                // Made with another FFTW build, or incomplete: nothing of it stays.
+                fftw.ForgetWisdom();
+                log.LogWarning("wdsp.wisdom packaged file covers {Covered} of {Total} plans; not used", covered, total);
+                return false;
+            }
+            string temp = wisdomPath + ".tmp";
+            File.Copy(seedPath, temp, overwrite: true);
+            File.Move(temp, wisdomPath, overwrite: true);
+            log.LogInformation("wdsp.wisdom taken from the packaged file ({Total} plans); no planning needed", total);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            log.LogWarning(ex, "wdsp.wisdom packaged file could not be used");
+            try { File.Delete(wisdomPath + ".tmp"); } catch (Exception) { }
+            return false;
+        }
     }
 
     /// <summary>
@@ -159,25 +260,35 @@ public static class WdspWisdomParallel
         var plans = AllPlans();
         double total = Enumerable.Range(0, plans.Count).Sum(Cost);
         var costOf = Enumerable.Range(0, plans.Count).ToDictionary(i => plans[i].Code, Cost);
-        int workers = WorkerCount();
-        var shares = Assign(plans, workers);
         string dir = Path.GetDirectoryName(wisdomPath)!;
-        string partPrefix = Path.Combine(dir, $".wisdom-part-{Environment.ProcessId}-");
-        var parts = new List<string>();
         var processes = new List<Process>();
         var clock = Stopwatch.StartNew();
-        double doneCost = 0;
-        int donePlans = 0;
-        var gate = new object();
-        status($"Planning FFTs in parallel: 0% (0 of {plans.Count} plans, {shares.Count} at once)");
-        log.LogInformation("wdsp.wisdom parallel build workers={Workers} plans={Plans}", shares.Count, plans.Count);
         try
         {
+            using var fftw = Fftw.Load(fftwPath);
+
+            // What a run that was stopped already planned. Its parts go into
+            // this process's FFTW (where the merge at the end needs them too);
+            // FFTW itself then says which plans they hold.
+            var earlier = PartFiles(dir);
+            foreach (var part in earlier) fftw.ImportWisdom(part);
+            var have = earlier.Count > 0 ? Covered(fftw) : [];
+            var todo = plans.Where(p => !have.Contains(p.Code)).ToList();
+            double doneCost = have.Sum(code => costOf[code]);
+            int donePlans = have.Count;
+            var shares = Assign(todo, costOf, Math.Min(WorkerCount(), Math.Max(1, todo.Count)));
+            var gate = new object();
+            status($"Planning FFTs in parallel: {100 * doneCost / total:0}% ({donePlans} of {plans.Count} plans, {shares.Count} at once)");
+            log.LogInformation("wdsp.wisdom parallel build workers={Workers} plans={Plans} alreadyPlanned={Have}",
+                shares.Count, todo.Count, have.Count);
+
+            var parts = new List<string>();
             for (int w = 0; w < shares.Count; w++)
             {
-                string part = partPrefix + w;
+                string part = Path.Combine(dir, $"{PartPrefix}{Environment.ProcessId}-{w}");
                 parts.Add(part);
                 var psi = new ProcessStartInfo(exe) { UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true };
+                psi.Environment[ParentEnvironmentVariable] = Environment.ProcessId.ToString(CultureInfo.InvariantCulture);
                 // Run as `dotnet StationEngine.dll` in development: pass the assembly too.
                 if (Path.GetFileNameWithoutExtension(exe).Equals("dotnet", StringComparison.OrdinalIgnoreCase)
                     && Environment.GetCommandLineArgs() is { Length: > 0 } argv)
@@ -207,21 +318,23 @@ public static class WdspWisdomParallel
                 p.WaitForExit();
                 if (p.ExitCode != 0) throw new InvalidOperationException($"worker exited with {p.ExitCode}");
             }
-            if (donePlans != plans.Count)
-                throw new InvalidOperationException($"workers planned {donePlans} of {plans.Count}");
 
             status("Planning FFTs in parallel: merging");
-            using var fftw = Fftw.Load(fftwPath);
             foreach (var part in parts)
                 if (fftw.ImportWisdom(part) == 0) throw new InvalidOperationException($"could not read {part}");
+            int covered = Covered(fftw).Count;
+            if (covered != plans.Count)
+                throw new InvalidOperationException($"the parts hold {covered} of {plans.Count} plans");
             string temp = wisdomPath + ".tmp";
             if (fftw.ExportWisdom(temp) == 0) throw new InvalidOperationException("could not write the merged wisdom");
             File.Move(temp, wisdomPath, overwrite: true);
+            DeleteParts(dir);
             log.LogInformation("wdsp.wisdom parallel build done in {Seconds:0} s with {Workers} workers", clock.Elapsed.TotalSeconds, shares.Count);
             return true;
         }
         catch (Exception ex)
         {
+            // The parts stay: the next start plans only what they don't hold.
             log.LogWarning(ex, "wdsp.wisdom parallel build failed; WDSP will plan one at a time");
             foreach (var p in processes)
                 try { if (!p.HasExited) p.Kill(); } catch (Exception) { }
@@ -231,7 +344,6 @@ public static class WdspWisdomParallel
         finally
         {
             foreach (var p in processes) p.Dispose();
-            foreach (var part in parts) try { File.Delete(part); } catch (Exception) { }
         }
     }
 
@@ -240,6 +352,7 @@ public static class WdspWisdomParallel
     {
         // args: --plan-fftw-wisdom <fftw library> <output file> <cf:64,cb:65,...>
         if (args.Length != 4) { Console.Error.WriteLine("usage: --plan-fftw-wisdom <fftw> <out> <plans>"); return 2; }
+        StopWithParent();
         try
         {
             using var fftw = Fftw.Load(args[1]);
@@ -257,6 +370,11 @@ public static class WdspWisdomParallel
                     if (plan == IntPtr.Zero) throw new InvalidOperationException($"FFTW could not plan {p.Code}");
                     fftw.Execute(plan);
                     fftw.Destroy(plan);
+                    // Saved after every plan (all of this worker's so far), so
+                    // a run that is stopped keeps what it finished.
+                    string temp = args[2] + ".tmp";
+                    if (fftw.ExportWisdom(temp) == 0) return 3;
+                    File.Move(temp, args[2], overwrite: true);
                     Console.Out.WriteLine("done " + p.Code);
                     Console.Out.Flush();
                 }
@@ -266,7 +384,7 @@ public static class WdspWisdomParallel
                 Fftw.Free(input);
                 Fftw.Free(output);
             }
-            return fftw.ExportWisdom(args[2]) != 0 ? 0 : 3;
+            return 0;
         }
         catch (Exception ex)
         {
@@ -275,23 +393,46 @@ public static class WdspWisdomParallel
         }
     }
 
-    /// <summary>For checking: how many of wisdom.c's plans <paramref name="wisdomFile"/>
-    /// covers (planned with FFTW_WISDOM_ONLY, so a gap gives no plan).</summary>
-    internal static (int Covered, int Total) Coverage(string fftwPath, string wisdomFile)
+    [DllImport("libc", EntryPoint = "getppid")]
+    private static extern int GetParentProcessId();
+
+    // A worker left behind by an engine that was stopped would plan on for
+    // many minutes, on a core of its own, beside the workers of the next
+    // start. So a worker watches for its parent going away and ends itself;
+    // what it finished is already saved.
+    private static void StopWithParent()
     {
-        using var fftw = Fftw.Load(fftwPath);
-        if (fftw.ImportWisdom(wisdomFile) == 0) return (0, AllPlans().Count);
+        if (OperatingSystem.IsWindows()
+            || !int.TryParse(Environment.GetEnvironmentVariable(ParentEnvironmentVariable), NumberStyles.None,
+                CultureInfo.InvariantCulture, out int parent))
+            return;
+        new Thread(() =>
+        {
+            try
+            {
+                while (GetParentProcessId() == parent) Thread.Sleep(1000);
+            }
+            catch (Exception) { return; }
+            Environment.Exit(4);
+        }) { IsBackground = true, Name = "wisdom-parent-watch" }.Start();
+    }
+
+    /// <summary>The codes of wisdom.c's plans that the wisdom now in
+    /// <paramref name="fftw"/> holds (planned with FFTW_WISDOM_ONLY, so a gap
+    /// gives no plan).</summary>
+    private static HashSet<string> Covered(Fftw fftw)
+    {
         nuint bytes = (nuint)((MaxSize + 1) * 2 * sizeof(double));
         IntPtr input = Fftw.Malloc0(bytes), output = Fftw.Malloc0(bytes);
         try
         {
-            int covered = 0;
+            var covered = new HashSet<string>();
             foreach (var p in AllPlans())
             {
                 IntPtr plan = fftw.Make(p, input, output, FftwPatient | FftwWisdomOnly);
-                if (plan != IntPtr.Zero) { covered++; fftw.Destroy(plan); }
+                if (plan != IntPtr.Zero) { covered.Add(p.Code); fftw.Destroy(plan); }
             }
-            return (covered, AllPlans().Count);
+            return covered;
         }
         finally
         {
@@ -300,18 +441,28 @@ public static class WdspWisdomParallel
         }
     }
 
+    /// <summary>For checking: how many of wisdom.c's plans <paramref name="wisdomFile"/> covers.</summary>
+    internal static (int Covered, int Total) Coverage(string fftwPath, string wisdomFile)
+    {
+        using var fftw = Fftw.Load(fftwPath);
+        if (fftw.ImportWisdom(wisdomFile) == 0) return (0, AllPlans().Count);
+        return (Covered(fftw).Count, AllPlans().Count);
+    }
+
     /// <summary>The few FFTW calls needed, bound by name from the bundled library.</summary>
     internal sealed class Fftw : IDisposable
     {
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate IntPtr PlanDft1d(int n, IntPtr input, IntPtr output, int sign, uint flags);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate IntPtr PlanReal1d(int n, IntPtr input, IntPtr output, uint flags);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void PlanAction(IntPtr plan);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate void NoArguments();
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int WisdomFile([MarshalAs(UnmanagedType.LPUTF8Str)] string path);
 
         private readonly IntPtr _lib;
         private readonly PlanDft1d _dft;
         private readonly PlanReal1d _r2c, _c2r;
         private readonly PlanAction _execute, _destroy;
+        private readonly Action _forget;
         private readonly WisdomFile _import, _export;
 
         private Fftw(IntPtr lib)
@@ -323,6 +474,8 @@ public static class WdspWisdomParallel
             _c2r = Get<PlanReal1d>("fftw_plan_dft_c2r_1d");
             _execute = Get<PlanAction>("fftw_execute");
             _destroy = Get<PlanAction>("fftw_destroy_plan");
+            var forget = Get<NoArguments>("fftw_forget_wisdom");
+            _forget = () => forget();
             _import = Get<WisdomFile>("fftw_import_wisdom_from_filename");
             _export = Get<WisdomFile>("fftw_export_wisdom_to_filename");
         }
@@ -341,6 +494,7 @@ public static class WdspWisdomParallel
         public void Destroy(IntPtr plan) => _destroy(plan);
         public int ImportWisdom(string path) => _import(path);
         public int ExportWisdom(string path) => _export(path);
+        public void ForgetWisdom() => _forget();
 
         // WDSP's malloc0 on macOS/Linux: malloc, then zero.
         public static unsafe IntPtr Malloc0(nuint bytes)

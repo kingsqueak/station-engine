@@ -34,6 +34,11 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Link>runtimes/%(RecursiveDir)%(Filename)%(Extension)</Link>
     </None>
+    <!-- A ready-made FFTW wisdom file for slow machines (WdspWisdomParallel.TryUseSeed). -->
+    <None Include="runtimes/**/wdspWisdom01.seed" Pack="true" PackagePath="runtimes/">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>runtimes/%(RecursiveDir)%(Filename)%(Extension)</Link>
+    </None>
     <None Include="runtimes/**/*.dll" Exclude="runtimes/**/simplehpsdr_asio.dll" Pack="true" PackagePath="runtimes/">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Link>runtimes/%(RecursiveDir)%(Filename)%(Extension)</Link>
