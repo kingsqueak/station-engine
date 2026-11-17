@@ -109,7 +109,68 @@ typedef struct _gru
 	double* h;
 	double* gi;
 	double* gh;
+	double* wt_ih;	// w_ih transposed: [nin][3 * nhidden]
+	double* wt_hh;	// w_hh transposed: [nhidden][3 * nhidden]
 } gru;				/* GRU is typedef'd in nnet.h */
+
+// SimpleHPSDR: the matrix-vector products below run column by column over a
+// transposed copy of the weights (y[i] += wt[j][i] * x[j] for every i, then the
+// next j).  Each y[i] still gets the same products added in the same order as
+// the row-by-row form (bias, then j = 0, 1, ...), so the result is bit-identical,
+// but the inner loop is now over independent elements and the compiler can use
+// vector instructions for it.  The row form is a sum the compiler may not
+// reorder, so it stayed scalar.
+static double* nn_transpose (const double* w, int nrows, int ncols)
+{
+	int i, j;
+	double* t = (double*) malloc0 ((size_t)nrows * ncols * sizeof (double));
+	for (i = 0; i < nrows; i++)
+		for (j = 0; j < ncols; j++)
+			t[(size_t)j * nrows + i] = w[(size_t)i * ncols + j];
+	return t;
+}
+
+// y[0..n) += a * x[0..n); y and x never overlap.
+static inline void nn_axpy (double* restrict y, const double* restrict x, double a, int n)
+{
+	int i;
+	for (i = 0; i < n; i++) y[i] += a * x[i];
+}
+
+// The same, for the matrix-vector products.  Clang on arm64 compiles the row
+// form (a sum over j of row[j] * x[j]) with separate multiplies and adds: it
+// vectorises the multiplies and keeps the adds in order.  Everywhere else the
+// row form and this one get the same treatment anyway (a fused multiply-add
+// with GCC on arm64, separate operations on x86-64).  So fusing is switched
+// off here for Clang, and the result stays bit-identical to the row form on
+// every platform we build for.
+static inline void nn_axpy_mv (double* restrict y, const double* restrict x, double a, int n)
+{
+#if defined(__clang__)
+#pragma clang fp contract(off)
+#endif
+	int i;
+	for (i = 0; i < n; i++) y[i] += a * x[i];
+}
+
+// y[0..nout) = b + W x, with wt = W transposed ([nin][nout]).
+static void nn_affine_t
+	(
+	double* restrict y,
+	const double* restrict wt,
+	const double* b,
+	const double* restrict x,
+	int nin,
+	int nout
+	)
+{
+	int j;
+	memcpy (y, b, (size_t)nout * sizeof (double));
+	for (j = 0; j < nin; j++)
+	{
+		nn_axpy_mv (y, wt + (size_t)j * nout, x[j], nout);
+	}
+}
 
 static double gru_sigmoid (double x)
 {
@@ -141,11 +202,15 @@ GRU create_gru
 	g->h  = (double*) malloc0 (    nhidden * sizeof (double));
 	g->gi = (double*) malloc0 (3 * nhidden * sizeof (double));
 	g->gh = (double*) malloc0 (3 * nhidden * sizeof (double));
+	g->wt_ih = nn_transpose (w_ih, 3 * nhidden, nin);
+	g->wt_hh = nn_transpose (w_hh, 3 * nhidden, nhidden);
 	return g;
 }
 
 void destroy_gru (GRU g)
 {
+	_aligned_free (g->wt_hh);
+	_aligned_free (g->wt_ih);
 	_aligned_free (g->gh);
 	_aligned_free (g->gi);
 	_aligned_free (g->h);
@@ -166,33 +231,18 @@ const double* run_gru_dbg
 	double* nout
 	)
 {
-	int i, j;
+	int i;
 	const int I = g->nin;
 	const int H = g->nhidden;
 	const int H2 = 2 * H;
 	const int H3 = 3 * H;
-	const double* W = g->w_ih;
-	const double* U = g->w_hh;
 	double* gi = g->gi;
 	double* gh = g->gh;
 	double* h = g->h;
-	double acc, r, z, n;
+	double r, z, n;
 
-	for (i = 0; i < H3; i++)
-	{
-		const double* row = W + (size_t)i * I;
-		acc = g->b_ih[i];
-		for (j = 0; j < I; j++) acc += row[j] * x[j];
-		gi[i] = acc;
-	}
-
-	for (i = 0; i < H3; i++)
-	{
-		const double* row = U + (size_t)i * H;
-		acc = g->b_hh[i];
-		for (j = 0; j < H; j++) acc += row[j] * h[j];
-		gh[i] = acc;
-	}
+	nn_affine_t (gi, g->wt_ih, g->b_ih, x, I, H3);
+	nn_affine_t (gh, g->wt_hh, g->b_hh, h, H, H3);
 
 	for (i = 0; i < H; i++)
 	{
@@ -241,6 +291,7 @@ typedef struct _conv2d
 	double* ring;
 	int head;
 	double* y;
+	double* tmp;	// one kernel row's sums across the output bins
 } conv2d;				/* CONV2D is typedef'd in nnet.h */
 
 CONV2D create_conv2d
@@ -276,12 +327,14 @@ CONV2D create_conv2d
 
 	c->ring = (double*) malloc0 ((size_t)kt * cin * c->slotw * sizeof (double));
 	c->y    = (double*) malloc0 ((size_t)cout * c->fout      * sizeof (double));
+	c->tmp  = (double*) malloc0 ((size_t)c->fout             * sizeof (double));
 	c->head = 0;
 	return c;
 }
 
 void destroy_conv2d (CONV2D c)
 {
+	_aligned_free (c->tmp);
 	_aligned_free (c->y);
 	_aligned_free (c->ring);
 	_aligned_free (c);
@@ -301,8 +354,8 @@ const double* run_conv2d (CONV2D c, const double* x)
 	const int sf = c->stride_f, pf = c->pad_f;
 	const int W = c->slotw;
 	int co, ci, i, f, j, s;
-	double acc;
 	double* slot;
+	double* restrict tmp = c->tmp;
 
 	c->head = (c->head + 1) % kt;
 	slot = c->ring + (size_t)c->head * Cin * W;
@@ -322,14 +375,30 @@ const double* run_conv2d (CONV2D c, const double* x)
 			for (ci = 0; ci < Cin; ci++)
 			{
 				const double* wk = wco + ((size_t)ci * kt + i) * kf;
-				const double* xr = c->ring + ((size_t)s * Cin + ci) * W;
-				for (f = 0; f < Fout; f++)
-				{
-					const double* xp = xr + (size_t)f * sf;
-					acc = 0.0;
-					for (j = 0; j < kf; j++) acc += wk[j] * xp[j];
-					yco[f] += acc;
-				}
+				const double* restrict xr = c->ring + ((size_t)s * Cin + ci) * W;
+				// SimpleHPSDR: every bin's sum over the kernel is built
+				// together, one kernel tap at a time, so the compiler can
+				// vectorise across the bins.  Each sum still starts at 0.0
+				// and adds its taps in order j = 0, 1, ... before it goes
+				// into the output: bit-identical to summing one bin at a time.
+				for (f = 0; f < Fout; f++) tmp[f] = 0.0;
+				if (sf == 2)
+					for (j = 0; j < kf; j++)
+					{
+						const double wv = wk[j];
+						const double* restrict xp = xr + j;
+						for (f = 0; f < Fout; f++) tmp[f] += wv * xp[2 * f];
+					}
+				else if (sf == 1)
+					for (j = 0; j < kf; j++) nn_axpy (tmp, xr + j, wk[j], Fout);
+				else
+					for (j = 0; j < kf; j++)
+					{
+						const double wv = wk[j];
+						const double* xp = xr + j;
+						for (f = 0; f < Fout; f++) tmp[f] += wv * xp[(size_t)f * sf];
+					}
+				for (f = 0; f < Fout; f++) yco[f] += tmp[f];
 			}
 		}
 	}
@@ -380,6 +449,15 @@ typedef struct _convt2d
 	double* ring;
 	int head;
 	double* y;
+	// SimpleHPSDR: the output is built in stride_f separate "phase" rows per
+	// channel (output bin m * stride_f + p lives at yph[co][p][m]) and woven
+	// into y at the end.  A kernel tap then adds into consecutive elements of
+	// one phase row instead of every stride_f-th output bin, which the compiler
+	// can vectorise.  Each output bin gets the same additions in the same order.
+	int phlen;		// bins per phase row
+	int* ph;		// [kf] phase row a tap adds into
+	int* phoff;		// [kf] offset of input bin 0 in that row (may be negative)
+	double* yph;	// [cout][stride_f][phlen]
 } convt2d;				/* CONVT2D is typedef'd in nnet.h */
 
 CONVT2D create_convt2d
@@ -449,6 +527,19 @@ CONVT2D create_convt2d
 		c->shi[j] = hi;
 	}
 
+	c->phlen = (c->fout + stride_f - 1) / stride_f;
+	c->ph    = (int*) malloc0 ((size_t)kf * sizeof (int));
+	c->phoff = (int*) malloc0 ((size_t)kf * sizeof (int));
+	for (j = 0; j < kf; j++)
+	{
+		// output bin = f * stride_f + (j - pad_f) = (f + q) * stride_f + p
+		int o = j - pad_f;
+		int p = ((o % stride_f) + stride_f) % stride_f;
+		c->ph[j]    = p;
+		c->phoff[j] = (o - p) / stride_f;
+	}
+	c->yph  = (double*) malloc0 ((size_t)cout * stride_f * c->phlen * sizeof (double));
+
 	c->ring = (double*) malloc0 ((size_t)kt * cin * fin * sizeof (double));
 	c->y    = (double*) malloc0 ((size_t)cout * c->fout  * sizeof (double));
 	c->head = 0;
@@ -457,6 +548,9 @@ CONVT2D create_convt2d
 
 void destroy_convt2d (CONVT2D c)
 {
+	_aligned_free (c->yph);
+	_aligned_free (c->phoff);
+	_aligned_free (c->ph);
 	_aligned_free (c->y);
 	_aligned_free (c->ring);
 	_aligned_free (c->tap_i);
@@ -479,7 +573,8 @@ const double* run_convt2d (CONVT2D c, const double* x)
 	const int Fin = c->fin, Fout = c->fout;
 	const int kt = c->kt, kf = c->kf;
 	const int sf = c->stride_f, pf = c->pad_f;
-	int co, ci, i, f, j, s;
+	const int M = c->phlen;
+	int co, ci, i, f, j, s, p, m;
 
 	c->head = (c->head + 1) % kt;
 	memcpy (c->ring + (size_t)c->head * Cin * Fin, x,
@@ -487,8 +582,9 @@ const double* run_convt2d (CONVT2D c, const double* x)
 
 	for (co = 0; co < Cout; co++)
 	{
-		double* yco = c->y + (size_t)co * Fout;
-		for (f = 0; f < Fout; f++) yco[f] = c->b[co];
+		double* yp = c->yph + (size_t)co * sf * M;
+		const double bias = c->b[co];
+		for (f = 0; f < sf * M; f++) yp[f] = bias;
 	}
 
 	for (i = 0; i < kt; i++)
@@ -500,16 +596,25 @@ const double* run_convt2d (CONVT2D c, const double* x)
 			for (co = 0; co < Cout; co++)
 			{
 				const double* wk = c->w + (((size_t)ci * Cout + co) * kt + i) * kf;
-				double* yco = c->y + (size_t)co * Fout;
 				for (j = 0; j < kf; j++)
 				{
 					const double wv = wk[j];
 					const int lo = c->slo[j], hi = c->shi[j];
-					const int off = j - pf;
-					for (f = lo; f <= hi; f++)
-						yco[f * sf + off] += wv * xr[f];
+					const int n = hi - lo + 1;
+					nn_axpy (c->yph + ((size_t)co * sf + c->ph[j]) * M + c->phoff[j] + lo,
+						xr + lo, wv, n);
 				}
 			}
+		}
+	}
+
+	for (co = 0; co < Cout; co++)
+	{
+		double* yco = c->y + (size_t)co * Fout;
+		for (p = 0; p < sf; p++)
+		{
+			const double* yp = c->yph + ((size_t)co * sf + p) * M;
+			for (m = 0; m * sf + p < Fout; m++) yco[m * sf + p] = yp[m];
 		}
 	}
 	return c->y;

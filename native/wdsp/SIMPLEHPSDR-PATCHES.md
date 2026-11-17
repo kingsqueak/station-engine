@@ -134,6 +134,20 @@ including analyzer behavior, wisdom ordering, NR3/NR4 support, and portability
 fixes. `FDnoiseIQ.c` remains in the tree/build to avoid unrelated deletion; the
 updated EMNR implementation no longer references it.
 
+- `nnet.c` (2026-11-17, SimpleHPSDR): the three loops that take about 90% of
+  NNR's time (`run_convt2d`, the GRU's two matrix-vector products, `run_conv2d`)
+  are rearranged so the compiler can vectorise them, with every sum kept in
+  its original order. The GRU works column by column over a transposed copy of
+  its weights; `run_conv2d` builds all bins' kernel sums together, one tap at a
+  time; `run_convt2d` accumulates into per-phase rows and weaves them into the
+  output. The output is bit-identical to upstream's: checked with
+  `tests/nnr_bench.c` for all four models with GCC 14 on a Raspberry Pi 5 and
+  Apple Clang on an M2 (18 to 25% and 36 to 42% less time). Clang on arm64
+  compiles upstream's row sums without fused multiply-adds, so the GRU helper
+  switches fusing off for Clang (`nn_axpy_mv`); don't remove that. Not checked
+  on x86-64, where neither form can fuse at the baseline instruction set.
+  On an upstream update of `nnet.c`, re-apply and re-run the comparison.
+
 ## Validation and future upgrades
 
 Build from source for every packaged RID and refresh **all** committed WDSP
