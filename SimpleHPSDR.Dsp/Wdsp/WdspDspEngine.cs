@@ -3403,25 +3403,23 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
             {
                 lock (_rxMoxGate)
                 {
-                    // A new PureSignal over can supersede a deferred half-duplex
-                    // resume. Transfer suppression ownership to RX1 so secondary
-                    // receivers are not left muted by the preceding over.
-                    _halfDuplexRxSuspended = false;
+                    // PureSignal pauses every audible receiver, not just RX1:
+                    // the transmitting slice can be any receiver (A2, B1, B2),
+                    // and one left running ingests the keyed signal on the TX
+                    // frequency, then plays its tail after unkey. Their audio
+                    // is dropped while keyed anyway (DUP is not live under PS),
+                    // so this only adds the key-down flush. Receivers opened
+                    // mid-over start suppressed, as in half duplex.
+                    _halfDuplexRxSuspended = true;
+                    var receivers = new List<ChannelState>();
                     foreach (var receive in _channels.Values)
                     {
-                        bool shouldSuppress = receive.Id == rxaId;
-                        if (shouldSuppress)
-                        {
-                            if (!receive.RxDspSuppressedForMox)
-                                SetReceiveMoxSuppressed(receive, suppressed: true);
-                        }
-                        else if (receive.RxDspSuppressedForMox && !receive.Stopped)
-                        {
-                            // Resuming a receiver the superseded over still
-                            // owns: same flush as any other resume.
-                            ResumeReceiveChannel(receive);
-                        }
+                        if (receive.Stopped || receive.IsDisplayOnly || receive.IsTxMonitor)
+                            continue;
+                        if (receive.RxDspSuppressedForMox) continue;
+                        receivers.Add(receive);
                     }
+                    SuppressReceiversForMox(receivers);
                 }
                 _primaryRxDspSuppressedForCurrentMox = true;
             }
@@ -3527,26 +3525,23 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
 
     private void ResumeReceiveAfterMox(int primaryRxaId)
     {
+        // PureSignal and half duplex both pause every audible receiver, so
+        // key-up resumes every one of them (RX1 may already be gone).
+        lock (_rxMoxGate)
+        {
+            _halfDuplexRxSuspended = false;
+            foreach (var receive in _channels.Values)
+            {
+                if (!receive.RxDspSuppressedForMox || receive.Stopped) continue;
+                ResumeReceiveChannel(receive);
+            }
+        }
         if (_primaryRxDspSuppressedForCurrentMox)
         {
-            if (_channels.TryGetValue(primaryRxaId, out var receive) && !receive.Stopped)
-                ResumeReceiveChannel(receive);
             _primaryRxDspSuppressedForCurrentMox = false;
             // PERF_PASS_3_DEBUG: t2 — WDSP RXA processing resumed. Uncommitted.
             _log.LogInformation("wdsp.rxa.up ts={Ts}",
                 System.Diagnostics.Stopwatch.GetTimestamp());
-        }
-        else
-        {
-            lock (_rxMoxGate)
-            {
-                _halfDuplexRxSuspended = false;
-                foreach (var receive in _channels.Values)
-                {
-                    if (!receive.RxDspSuppressedForMox || receive.Stopped) continue;
-                    ResumeReceiveChannel(receive);
-                }
-            }
         }
     }
 
@@ -3619,28 +3614,6 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
         {
             foreach (var receive in receivers)
                 lock (receive.MoxGate) receive.NativeFlushOnSilence = false;
-        }
-    }
-
-    private static void SetReceiveMoxSuppressed(ChannelState receive, bool suppressed)
-    {
-        MarkReceiveMoxSuppressed(receive, suppressed);
-        if (!suppressed) return;
-        // Discard receive state that may have ingested leakage before
-        // suppression began, as develop's key-down channel stop did: this is
-        // the same blocking SetChannelState(id,0,1) on the same control path.
-        // The worker drives WDSP's down-slew on silence while the flush runs,
-        // so no transition IQ reaches AM/SAM or AGC. The flush zeroes AM
-        // demodulator memory and the AGC look-ahead ring; AGC gain survives.
-        // If no IQ is flowing, WDSP times out (100 ms) exactly as on develop.
-        lock (receive.MoxGate) receive.NativeFlushOnSilence = true;
-        try
-        {
-            NativeMethods.SetChannelState(receive.Id, 0, 1);
-        }
-        finally
-        {
-            lock (receive.MoxGate) receive.NativeFlushOnSilence = false;
         }
     }
 
