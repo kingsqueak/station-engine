@@ -15,7 +15,7 @@ internal static class TciExtendedFrequency
         TxUsesVfoB(state));
 
     internal static bool TxUsesVfoB(StateDto state) =>
-        state.TxReceiverIndex == 1 || RadioFrequencyResolver.IsSplitEnabledForTx(state);
+        RadioFrequencyResolver.IsExternalSplit(state);
 
     public static string Command(long frequencyHz, bool rx2Enabled, bool txOnVfoB)
     {

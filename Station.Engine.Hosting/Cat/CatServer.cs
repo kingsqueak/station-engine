@@ -213,7 +213,7 @@ public sealed class CatServer : IHostedService, IDisposable
         Broadcast(CatProtocol.Response("MD", CatProtocol.ModeDigit(state.Mode)));
         BroadcastRateLimited("IF",
             CatProtocol.Response("IF", CatProtocol.BuildIfBody(state.VfoHz, state.Mode, _tx.IsMoxOn,
-                RadioFrequencyResolver.IsSplitEnabledForTx(state))));
+                RadioFrequencyResolver.IsExternalSplit(state))));
     }
 
     internal void BroadcastStateForTest(StateDto state) => OnRadioStateChanged(state);

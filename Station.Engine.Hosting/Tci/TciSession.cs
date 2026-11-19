@@ -1042,8 +1042,7 @@ public sealed class TciSession : IDisposable
         }
         if (receiver == 0 && channel == 1)
         {
-            var state = radio.Snapshot();
-            radio.SetSplitFrequency(state.TxReceiverIndex, rfHz);
+            RadioFrequencyResolver.SetExternalTxDial(radio, rfHz);
             return;
         }
         if (receiver == 1 && channel == 0)
@@ -1562,7 +1561,7 @@ public sealed class TciSession : IDisposable
     }
 
     internal static bool ResolveSplitEnabled(StateDto state) =>
-        RadioFrequencyResolver.IsSplitEnabledForTx(state);
+        RadioFrequencyResolver.IsExternalSplit(state);
 
     internal static void SetSplitEnabled(RadioService radio, bool enabled)
     {

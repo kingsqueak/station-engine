@@ -199,7 +199,11 @@ internal sealed class CatCommandHandler
             // External source — bypass the frozen-NCO recenter heuristic so the
             // hardware tracks the commanded frequency absolutely (issue #461,
             // same as TCI). Kenwood/Thetis set commands have no reply.
-            if (vfoB && _radio.Snapshot().Rx2Enabled) _radio.SetVfoB(hz);
+            // VFO B follows CatVfoBHz: the TX slice while transmit is on
+            // another receiver, else RX2, else RX1's split dial.
+            if (vfoB && _radio.Snapshot().TxReceiverIndex > 0)
+                RadioFrequencyResolver.SetExternalTxDial(_radio, hz);
+            else if (vfoB && _radio.Snapshot().Rx2Enabled) _radio.SetVfoB(hz);
             else if (vfoB) _radio.SetSplitFrequency(0, hz);
             else _radio.SetVfo(hz, fromExternal: true);
         }
@@ -254,7 +258,7 @@ internal sealed class CatCommandHandler
         var state = _radio.Snapshot();
         _send(CatProtocol.Response("IF",
             CatProtocol.BuildIfBody(state.VfoHz, state.Mode, _tx.IsMoxOn,
-                RadioFrequencyResolver.IsSplitEnabledForTx(state))));
+                RadioFrequencyResolver.IsExternalSplit(state))));
     }
 
     /// <summary>ZZIF is get-only in Thetis (CATStructs.xml nsetparms=-1); any
@@ -270,7 +274,7 @@ internal sealed class CatCommandHandler
         var state = _radio.Snapshot();
         _send(CatProtocol.Response("ZZIF",
             CatProtocol.BuildZzIfBody(state.VfoHz, state.Mode, _tx.IsMoxOn,
-                RadioFrequencyResolver.IsSplitEnabledForTx(state))));
+                RadioFrequencyResolver.IsExternalSplit(state))));
     }
 
     private void HandleFr(string args)
@@ -284,7 +288,7 @@ internal sealed class CatCommandHandler
         if (args.Length == 0)
         {
             _send(CatProtocol.Response(cmd,
-                RadioFrequencyResolver.IsSplitEnabledForTx(_radio.Snapshot()) ? "1" : "0"));
+                RadioFrequencyResolver.IsExternalSplit(_radio.Snapshot()) ? "1" : "0"));
             return;
         }
         // ZZSP/ZZSW are strict (Thetis CATStructs.xml: exactly 1 set digit,

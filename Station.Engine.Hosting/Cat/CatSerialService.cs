@@ -257,7 +257,7 @@ public sealed class CatSerialService : BackgroundService, ISerialPttPinSource
         Broadcast(CatProtocol.Response("MD", CatProtocol.ModeDigit(state.Mode)));
         BroadcastRateLimited("IF",
             CatProtocol.Response("IF", CatProtocol.BuildIfBody(state.VfoHz, state.Mode, _tx.IsMoxOn,
-                RadioFrequencyResolver.IsSplitEnabledForTx(state))));
+                RadioFrequencyResolver.IsExternalSplit(state))));
     }
 
     private void OnMoxChanged(bool moxOn)

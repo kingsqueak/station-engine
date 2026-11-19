@@ -1462,7 +1462,7 @@ public sealed partial class RadioService : IDisposable
         {
             var projected = ProjectedStateUnderLock();
             return (_state.VfoHz, _state.Mode, _mox,
-                RadioFrequencyResolver.IsSplitEnabledForTx(projected));
+                RadioFrequencyResolver.IsExternalSplit(projected));
         }
     }
 

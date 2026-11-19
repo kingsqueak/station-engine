@@ -142,7 +142,7 @@ public static class TciHandshake
         cmds.Add(TciProtocol.Command("rx_enable", 0, true));
         cmds.Add(TciProtocol.Command("rx_enable", 1, state.Rx2Enabled));
         cmds.Add(TciProtocol.Command("split_enable", 0,
-            RadioFrequencyResolver.IsSplitEnabledForTx(state)));
+            RadioFrequencyResolver.IsExternalSplit(state)));
         cmds.Add(TciProtocol.Command("tx_enable", 0, moxOn || tunOn));
         cmds.Add(TciProtocol.Command("trx", 0, moxOn));
         cmds.Add(TciProtocol.Command("tune", 0, tunOn));

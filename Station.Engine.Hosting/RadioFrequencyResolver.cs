@@ -81,10 +81,41 @@ public static class RadioFrequencyResolver
         return receiver.SplitEnabled && receiver.TxVfoHz > 0;
     }
 
-    /// <summary>Kenwood/Thetis VFO-B projection: RX2 owns B while exposed;
-    /// otherwise B is RX1's independent split-TX dial.</summary>
+    /// <summary>
+    /// Split as CAT and TCI clients see it: the receiver's own split, or
+    /// transmit on any receiver other than RX1 (receiving on VFO A while
+    /// transmitting on another slice is split, as Thetis's TX on VFO B is).
+    /// Loggers, digital-mode programs and TCI tuners read the TX frequency
+    /// from VFO B / <c>vfo:0,1</c> only while split is reported. Only the
+    /// CAT/TCI reporting uses this; the engine's own TX path keeps
+    /// <see cref="IsSplitEnabledForTx"/>.
+    /// </summary>
+    public static bool IsExternalSplit(StateDto state) =>
+        state.TxReceiverIndex > 0 || IsSplitEnabledForTx(state);
+
+    /// <summary>
+    /// Set the TX dial from CAT VFO B or TCI <c>vfo:0,1</c>. With transmit on
+    /// another slice (and that slice not split itself) the TX dial is that
+    /// slice's own frequency, so tune it; otherwise set the TX receiver's
+    /// split frequency, as before.
+    /// </summary>
+    public static void SetExternalTxDial(RadioService radio, long hz)
+    {
+        var state = radio.Snapshot();
+        int tx = state.TxReceiverIndex;
+        if (tx > 0 && !TxReceiver(state).SplitEnabled)
+            radio.SetReceiverVfo(tx, hz);
+        else
+            radio.SetSplitFrequency(tx, hz);
+    }
+
+    /// <summary>Kenwood/Thetis VFO-B projection: the TX slice's dial while
+    /// transmit is on a receiver other than RX1; otherwise RX2 owns B while
+    /// exposed, and without RX2 B is RX1's independent split-TX dial.</summary>
     public static long CatVfoBHz(StateDto state)
     {
+        if (state.TxReceiverIndex > 0)
+            return TxDialFrequencyHz(state);
         if (state.Rx2Enabled && state.Receivers is { Count: > 1 })
             return state.Receivers[1].VfoHz;
         return state.SplitTxHz > 0 ? state.SplitTxHz : state.VfoHz;
