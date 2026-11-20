@@ -418,6 +418,7 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
         public long DiagEnqueueFull;       // enqueues that found the bounded InQueue full (worker fell behind)
         public long DiagDroppedOldest;     // frames dropped (oldest evicted) to keep the RX thread non-blocking — bounded, deliberate glitch
         public long DiagWorkerFrames;      // frames the worker processed this window
+        public long WorkerFramesTotal;     // frames the worker has finished since the channel opened (worker writes)
         public long DiagWorkerTotalTicks;  // Σ per-frame fexchange0+Spectrum0 Stopwatch ticks
         public long DiagWorkerMaxTicks;    // max single-frame processing ticks
         public long DiagAudioOverrun;      // PushAudio writes that overwrote an unread sample (ring full → discontinuity)
@@ -1586,6 +1587,10 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
     /// or the channel had no positions).</summary>
     internal long LastAlignedRetunePos(int channelId) =>
         _channels.TryGetValue(channelId, out var state) ? Volatile.Read(ref state.LastRetunePos) : long.MinValue;
+
+    /// <summary>Tests: frames the channel's worker has finished since it opened.</summary>
+    internal long ProcessedRxFrames(int channelId) =>
+        _channels.TryGetValue(channelId, out var state) ? Volatile.Read(ref state.WorkerFramesTotal) : 0;
 
     // One receiver on a retuning channel's stream: the shift it needs after
     // the retune, and its RetuneEpoch when that was worked out. A change made
@@ -6429,6 +6434,7 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
 
                 long frameTicks = System.Diagnostics.Stopwatch.GetTimestamp() - frameStart;
                 state.DiagWorkerFrames++;
+                Volatile.Write(ref state.WorkerFramesTotal, state.WorkerFramesTotal + 1);
                 state.DiagWorkerTotalTicks += frameTicks;
                 if (frameTicks > state.DiagWorkerMaxTicks) state.DiagWorkerMaxTicks = frameTicks;
 

@@ -98,7 +98,18 @@ public static class SharedRetuneSelfTest
                 }
                 engine.FeedIq(follower, span, pos);
                 pos += n;
-                if (paced) Thread.Sleep(1);
+                if (paced)
+                {
+                    // Both workers done with what they have before the next
+                    // packet, whatever else the machine is doing, and no
+                    // faster than a live stream: WDSP runs each block on a
+                    // thread of its own, and the shift is changed half a
+                    // block after a boundary on the strength of that time.
+                    while (engine.ProcessedRxFrames(source) < sourceFed / Frame
+                           || engine.ProcessedRxFrames(follower) < pos / Frame)
+                        Thread.Yield();
+                    Thread.Sleep(1);
+                }
                 else if (pos % (238 * 40) == 0) Drain();
             }
         }
@@ -114,7 +125,8 @@ public static class SharedRetuneSelfTest
 
         // A long run first: WDSP's own oscillator is then far from where it
         // started, so a hand-over that lost the phase would show.
-        Feed(238 * 1000);
+        Feed(238 * 950);
+        Feed(238 * 50, paced: true);
         Thread.Sleep(300);
         Drain();
         long exchanged = sourceFed / Frame;
@@ -126,8 +138,8 @@ public static class SharedRetuneSelfTest
                 [(follower, followerShift - StepHz)])
             : engine.TryScheduleAlignedRetune(source, sourceShift - StepHz, 1.2, static () => { });
         if (!bridge) engine.SetCtunShift(follower, followerShift - StepHz);
-        Feed(238 * 120, paced: true);
-        Feed(238 * 680);
+        Feed(238 * 300, paced: true);
+        Feed(238 * 500);
         Thread.Sleep(300);
         Drain();
         long placed = engine.LastAlignedRetunePos(source);
@@ -162,14 +174,22 @@ public static class SharedRetuneSelfTest
         double before = CircularMean(angle, settle, stepWindow - 20);
         double after = CircularMean(angle, windows - 100, windows);
         int disturbed = 0;
-        for (int w = settle; w < windows; w++)
+        var detail = new System.Text.StringBuilder();
+        // Only the stretch around the retune, which is fed at a live stream's
+        // pace: the rest is fed as fast as it goes, and WDSP, which hands
+        // each block to a thread of its own, drops the odd one then.
+        for (int w = stepWindow - 5; w < stepWindow + 60; w++)
         {
             double off = Math.Min(Wrap(angle[w] - before), Wrap(angle[w] - after));
-            if (Math.Abs(level[w] / refLevel - 1) > 0.1 || off > 0.15) disturbed++;
+            if (Math.Abs(level[w] / refLevel - 1) > 0.1 || off > 0.15)
+            {
+                disturbed++;
+                detail.Append($" [{(w - stepWindow) * 2:+0;-0} ms: level {level[w] / refLevel:0.00}, phase {Wrap(angle[w] - before):0.00}]");
+            }
         }
         double stepRad = Math.Atan2(Math.Sin(after - before), Math.Cos(after - before));
         output.WriteLine($"{label}: tone level {refLevel:E2}, disturbed {disturbed * 2.0:0.0} ms, " +
-            $"phase step {stepRad:0.000} rad (retune at sample {stepAt})");
+            $"phase step {stepRad:0.000} rad (retune at sample {stepAt}){detail}");
         return new Result(refLevel > 1e-6, disturbed * 2.0, stepRad);
     }
 
