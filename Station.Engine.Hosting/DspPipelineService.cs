@@ -1035,6 +1035,11 @@ public partial class DspPipelineService : BackgroundService,
         }
     }
     private readonly SecondaryRx[] _secondaryRx;
+    // Receivers fed from receiver 0's and receiver 1's DDC streams, in index
+    // order. Rebuilt under _engineLock and published whole with Volatile.Write;
+    // the receive thread reads a snapshot, so a published array never changes.
+    private int[] _source0Sharers = [];
+    private int[] _source1Sharers = [];
     private int _sampleRateHz;
 
     // One secondary-receiver audio block read during a Tick, paired with its
@@ -6141,6 +6146,8 @@ public partial class DspPipelineService : BackgroundService,
             if (rx.SourceIndex >= 0) rx.LoInit = false;
             rx.SourceIndex = source;
         }
+        PublishSharers(ref _source0Sharers, 0);
+        PublishSharers(ref _source1Sharers, 1);
 
         var engine = _engine;
         int channel = _channelId;
@@ -8600,6 +8607,41 @@ public partial class DspPipelineService : BackgroundService,
             engine.FeedIq(rx2Channel, interleavedIqSamples);
     }
 
+    // Replace the published list of receivers fed from <paramref name="source"/>
+    // only when its membership changed, so an unchanged list costs no allocation.
+    private void PublishSharers(ref int[] published, int source)
+    {
+        int count = 0;
+        bool same = true;
+        for (int ri = 2; ri < MaxReceivers; ri++)
+        {
+            if (_secondaryRx[ri].SourceIndex != source) continue;
+            same &= count < published.Length && published[count] == ri;
+            count++;
+        }
+        if (same && count == published.Length) return;
+        int[] next = count == 0 ? [] : new int[count];
+        count = 0;
+        for (int ri = 2; ri < MaxReceivers; ri++)
+            if (_secondaryRx[ri].SourceIndex == source) next[count++] = ri;
+        Volatile.Write(ref published, next);
+    }
+
+    // Feed a source's samples to the receivers sharing its stream, after the
+    // source itself. Each channel id is read right before its feed because
+    // native ids are recycled when channels close and reopen.
+    private void FeedSharers(IDspEngine engine, int[] sharers, ReadOnlySpan<double> iq)
+    {
+        for (int k = 0; k < sharers.Length; k++)
+        {
+            var rx = _secondaryRx[sharers[k]];
+            int chan = Volatile.Read(ref rx.ChannelId);
+            if (chan < 0) continue;
+            engine.FeedIq(chan, iq);
+            rx.FedFrames++;
+        }
+    }
+
     // Apply a diversity config change (DSP thread). Precomputes the complex
     // weight from gain magnitude + phase so the hot path only does a multiply-add.
     private void ApplyDiversityConfig(DiversityConfig cfg)
@@ -8615,19 +8657,23 @@ public partial class DspPipelineService : BackgroundService,
 
     // The source shares RX0's producer-owned lifetime and sample identity.
     // Unpaired or malformed frames pass through raw, never against old IQ.
-    private void FeedRx0WithOptionalDiversity(IDspEngine engine, int channel,
+    // Returns the samples RX0's channel was given, so receivers sharing RX0's
+    // stream hear the same (combined) signal. The combined span lives in
+    // _divCombineBuf and is valid until the next frame on this thread.
+    private ReadOnlySpan<double> FeedRx0WithOptionalDiversity(IDspEngine engine, int channel,
         ReadOnlySpan<double> rx0, ReadOnlySpan<double> source)
     {
         var div = Volatile.Read(ref _diversity);
         if (!div.Enabled || source.IsEmpty || source.Length != rx0.Length)
         {
             engine.FeedIq(channel, rx0);
-            return;
+            return rx0;
         }
         if (_divCombineBuf.Length < rx0.Length) _divCombineBuf = new double[rx0.Length];
         var dest = _divCombineBuf.AsSpan(0, rx0.Length);
         DiversityCombine(rx0, source, div.WeightI, div.WeightQ, dest, div.ReferenceRx, div.Output);
         engine.FeedIq(channel, dest);
+        return dest;
     }
 
     // Complex diversity combine: dest = rx0 + (wI + j·wQ)·src, per IQ pair.
@@ -8895,6 +8941,12 @@ public partial class DspPipelineService : BackgroundService,
                         engine.FeedIq(secChan, frame.InterleavedSamples.Span);
                         rx.FedFrames++;
                     }
+                    if (ri == 1)
+                    {
+                        var sharers1 = Volatile.Read(ref _source1Sharers);
+                        if (sharers1.Length != 0)
+                            FeedSharers(engine, sharers1, frame.InterleavedSamples.Span);
+                    }
                 }
                 return;
             }
@@ -8902,8 +8954,11 @@ public partial class DspPipelineService : BackgroundService,
             LogRxIqRms(0, frame.InterleavedSamples.Span, ref _rx1IqRmsLogMs);
             if (Volatile.Read(ref _retuneProbeActive) != 0)
                 NoteRetuneProbe(frame.InterleavedSamples.Span, frame.SampleRateHz);
-            FeedRx0WithOptionalDiversity(engine, channel, frame.InterleavedSamples.Span,
+            var rx0Fed = FeedRx0WithOptionalDiversity(engine, channel, frame.InterleavedSamples.Span,
                 frame.DiversitySourceSamples.Span);
+            var sharers0 = Volatile.Read(ref _source0Sharers);
+            if (sharers0.Length != 0)
+                FeedSharers(engine, sharers0, rx0Fed);
             RxIqAvailable?.Invoke(0, frame.SampleRateHz, frame.InterleavedSamples);
         }
         MaybeTickInline();
