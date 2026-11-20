@@ -1171,7 +1171,14 @@ public sealed record ReceiverDto(
     // and settable via ReceiverSetRequest.Nr. NrMode inside this block always
     // equals the NrMode field above. Null on pre-per-RX-noise wire frames, where
     // the receiver used the shared StateDto.Nr.
-    NrConfig? Nr = null);
+    NrConfig? Nr = null,
+    // Shared-stream receiver: the index (0 or 1) of the receiver whose DDC
+    // stream this one is fed from, tuned inside that stream by the WDSP shift.
+    // Null for a receiver with its own DDC. Only receivers 2 and 3 can share.
+    int? SourceReceiver = null,
+    // A shared-stream receiver whose dial lies outside its source's captured
+    // span: it keeps its frequency and is silent until the span covers it again.
+    bool OutOfSpan = false);
 
 public sealed record StateDto(
     ConnectionStatus Status,
@@ -1784,7 +1791,11 @@ public sealed record ReceiverSetRequest(
     // Per-receiver noise block (NB, NB threshold, ANF, SNB, NBP, NR tunables).
     // Replace-style like POST /api/rx/nr. Its NrMode is ignored: the mode is
     // set only through NrMode above. Index 0 updates StateDto.Nr.
-    NrConfig? Nr = null);
+    NrConfig? Nr = null,
+    // Shared-stream receiver (index 2 or 3 only): feed it from receiver 0's or
+    // 1's DDC stream, not a DDC of its own. Read on every Enabled: true
+    // request, where null means "own DDC"; ignored otherwise.
+    int? SourceReceiver = null);
 
 /// <summary>Operator settings for the POTA/SOTA Spots feature. Persisted in
 /// simplehpsdr-prefs.db (<c>SpotsSettingsStore</c>) and shared with the frontend.
