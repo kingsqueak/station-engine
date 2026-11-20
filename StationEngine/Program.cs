@@ -32,6 +32,9 @@ public partial class Program
         // the engine itself); nothing else of the engine starts.
         if (args.Length > 0 && args[0] == SimpleHPSDR.Dsp.Wdsp.WdspWisdomParallel.WorkerArgument)
             return SimpleHPSDR.Dsp.Wdsp.WdspWisdomParallel.RunWorker(args);
+        // SimpleHPSDR: a no-radio check of the DSP engine; nothing else starts.
+        if (args.Length > 0 && args[0] == "--selftest-shared-retune")
+            return SimpleHPSDR.Dsp.Wdsp.SharedRetuneSelfTest.Run(Console.Out);
 
         // Must run before any TX pacing starts — see RaiseTimerResolutionOnWindows.
         var timerResolution = RaiseTimerResolutionOnWindows();

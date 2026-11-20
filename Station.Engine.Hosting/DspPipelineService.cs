@@ -1220,6 +1220,17 @@ public partial class DspPipelineService : BackgroundService,
     private long _alignedRetuneLoHw = long.MinValue;
     private int _alignedRetuneChannel = -1;
     private long _alignedRetuneDeadlineTicks;
+    // Receivers on receiver 0's stream whose shift changes with a scheduled
+    // retune (the engine moves each on the same sample as receiver 0's):
+    // collected while one state change is applied (_engineLock), and the
+    // channels of the last schedule, for the timeout flush.
+    private bool _collectRetuneFollowers;
+    private readonly List<(int ChannelId, int ShiftHz)> _retuneFollowers = new(2);
+    private int[] _alignedRetuneFollowerChannels = [];
+    // Samples fed so far from receiver 0's and receiver 1's streams (receive
+    // thread only): the positions that tie a shared-stream receiver's
+    // samples to its source's.
+    private long _streamPos0, _streamPos1;
     private int _appliedTxLowHz;
     private int _appliedTxHighHz;
 
@@ -6037,16 +6048,20 @@ public partial class DspPipelineService : BackgroundService,
         long nowForRetune = Stopwatch.GetTimestamp();
         bool retuneStillScheduled = loHw == _alignedRetuneLoHw
             && nowForRetune < Volatile.Read(ref _alignedRetuneDeadlineTicks);
+        // A receiver on receiver 0's stream keeps its dial when the centre
+        // moves, so its shift changes with the centre even when RX1's own
+        // does not (RX1 tuned with CTUN off): that is scheduled as well.
         bool alignRetune = AlignedRetuneEnabled && p2 is not null && _rxSinkAttached && !_keyed
             && _lastSentP2LoHw != long.MinValue && loHw != _lastSentP2LoHw
-            && ctunShiftForRetune != _appliedCtunOffsetHz;
+            && (ctunShiftForRetune != _appliedCtunOffsetHz || SharerOfRx0NeedsShift(s));
+        _retuneFollowers.Clear();
         if (!alignRetune && !retuneStillScheduled)
         {
             // An older retune still waiting for its block boundary goes out
             // first, with its shift, so it can't arrive after this newer
             // centre and leave the radio on the old one.
             if (Interlocked.Exchange(ref _alignedRetuneDeadlineTicks, 0) != 0)
-                Volatile.Read(ref _engine)?.FlushAlignedRetune(_alignedRetuneChannel);
+                FlushAlignedRetunes(Volatile.Read(ref _engine));
             p2?.SetVfoAHz(loHw);
             if (p2 is not null) _lastSentP2LoHw = loHw;
         }
@@ -6196,14 +6211,25 @@ public partial class DspPipelineService : BackgroundService,
                 p2.SetExtraReceivers(0);
             }
         }
-        for (int ri = 2; ri < MaxReceivers; ri++)
-            _ = EnsureSecondaryRxChannel(engine, ri, s);
+        _collectRetuneFollowers = alignRetune;
+        try
+        {
+            for (int ri = 2; ri < MaxReceivers; ri++)
+                _ = EnsureSecondaryRxChannel(engine, ri, s);
+        }
+        finally
+        {
+            _collectRetuneFollowers = false;
+        }
 
         if (p2 is not null)
         {
             int normalizedZoom = NormalizeWidebandZoomRequest(s.ZoomLevel);
             if (normalizedZoom != s.ZoomLevel)
             {
+                // The collected shifts were to ride on this pass's retune,
+                // which the nested pass now does without them.
+                ApplyRetuneFollowersNow(engine);
                 // The receiver/layout edge consumed the last spare DDC. Re-enter
                 // once with the honest raw ceiling; the nested snapshot contains
                 // every mutation from this state edge, so returning here loses no
@@ -6267,12 +6293,28 @@ public partial class DspPipelineService : BackgroundService,
         if (alignRetune && p2 is not null)
         {
             var client = p2;
-            bool scheduled = engine.TryScheduleAlignedRetune(
-                channel, ctunShiftHz, AlignedRetuneLeadMs, () => client.SetVfoAHz(loHw));
+            var followers = System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_retuneFollowers);
+            bool scheduled = followers.IsEmpty
+                ? engine.TryScheduleAlignedRetune(
+                    channel, ctunShiftHz, AlignedRetuneLeadMs, () => client.SetVfoAHz(loHw))
+                : engine.TryScheduleAlignedRetune(
+                    channel, ctunShiftHz, AlignedRetuneLeadMs, () => client.SetVfoAHz(loHw), followers);
             if (scheduled)
             {
                 _alignedRetuneLoHw = loHw;
                 _alignedRetuneChannel = channel;
+                if (followers.IsEmpty)
+                {
+                    if (_alignedRetuneFollowerChannels.Length != 0)
+                        Volatile.Write(ref _alignedRetuneFollowerChannels, []);
+                }
+                else
+                {
+                    var ids = new int[followers.Length];
+                    for (int k = 0; k < ids.Length; k++) ids[k] = followers[k].ChannelId;
+                    Volatile.Write(ref _alignedRetuneFollowerChannels, ids);
+                }
+                _retuneFollowers.Clear();
                 Volatile.Write(ref _alignedRetuneDeadlineTicks,
                     nowForRetune + Stopwatch.Frequency * AlignedRetuneTimeoutMs / 1000);
             }
@@ -6280,9 +6322,10 @@ public partial class DspPipelineService : BackgroundService,
             {
                 // Anything older still waiting goes out before this one.
                 if (Interlocked.Exchange(ref _alignedRetuneDeadlineTicks, 0) != 0)
-                    engine.FlushAlignedRetune(_alignedRetuneChannel);
+                    FlushAlignedRetunes(engine);
                 client.SetVfoAHz(loHw);
                 engine.SetCtunShift(channel, ctunShiftHz);
+                ApplyRetuneFollowersNow(engine);
             }
             _lastSentP2LoHw = loHw;
             _appliedCtunOffsetHz = ctunShiftHz;
@@ -7456,7 +7499,14 @@ public partial class DspPipelineService : BackgroundService,
         if (rx.OutOfSpan != outOfSpan) rx.OutOfSpan = outOfSpan;
         if (!outOfSpan && rx.AppliedCtunShiftHz != shiftHz)
         {
-            engine.SetCtunShift(channelId, shiftHz);
+            // On receiver 0's stream, with receiver 0's centre about to move
+            // in step with the engine's blocks: this shift moves with it. A
+            // channel that is only now being opened has nothing to keep in step.
+            if (_collectRetuneFollowers && ReceiverSourceIndex(s, rxIndex) == 0
+                && Volatile.Read(ref rx.ChannelId) == channelId)
+                _retuneFollowers.Add((channelId, shiftHz));
+            else
+                engine.SetCtunShift(channelId, shiftHz);
             rx.AppliedCtunShiftHz = shiftHz;
         }
         if (rx.AppliedAgcTopDb != agcNext)
@@ -8646,6 +8696,43 @@ public partial class DspPipelineService : BackgroundService,
             engine.FeedIq(rx2Channel, interleavedIqSamples);
     }
 
+    // A running receiver on receiver 0's stream, inside its span, whose shift
+    // differs from the one this state asks for: the same sum
+    // ApplyStateToSecondaryRxChannel does, ahead of it.
+    private bool SharerOfRx0NeedsShift(StateDto s)
+    {
+        for (int ri = 2; ri < MaxReceivers; ri++)
+        {
+            var rx = _secondaryRx[ri];
+            if (Volatile.Read(ref rx.ChannelId) < 0 || !SecondaryReceiverEnabled(ri, s)
+                || ReceiverSourceIndex(s, ri) != 0) continue;
+            var (mode, vfoHz, _, _, _) = SecondaryRxParams(s, ri);
+            long offsetHz = CwOffset.EffectiveLoHz(mode, vfoHz) - s.RadioLoHz;
+            if (Math.Abs(offsetHz) > DdcUsableHalfSpanHz(s)) continue;
+            if (rx.AppliedCtunShiftHz != (int)offsetHz) return true;
+        }
+        return false;
+    }
+
+    // The shifts collected for a scheduled retune that is not going to carry
+    // them after all: applied at once, since their latches already moved.
+    private void ApplyRetuneFollowersNow(IDspEngine engine)
+    {
+        foreach (var (followerChannel, shiftHz) in _retuneFollowers)
+            engine.SetCtunShift(followerChannel, shiftHz);
+        _retuneFollowers.Clear();
+    }
+
+    // Carry out whatever is left of a scheduled retune: receiver 0's and the
+    // receivers on its stream that were to move with it.
+    private void FlushAlignedRetunes(IDspEngine? engine)
+    {
+        if (engine is null) return;
+        engine.FlushAlignedRetune(_alignedRetuneChannel);
+        foreach (int follower in Volatile.Read(ref _alignedRetuneFollowerChannels))
+            engine.FlushAlignedRetune(follower);
+    }
+
     // Replace the published list of receivers fed from <paramref name="source"/>
     // only when its membership changed, so an unchanged list costs no allocation.
     private void PublishSharers(ref int[] published, int source)
@@ -8669,14 +8756,14 @@ public partial class DspPipelineService : BackgroundService,
     // Feed a source's samples to the receivers sharing its stream, after the
     // source itself. Each channel id is read right before its feed because
     // native ids are recycled when channels close and reopen.
-    private void FeedSharers(IDspEngine engine, int[] sharers, ReadOnlySpan<double> iq)
+    private void FeedSharers(IDspEngine engine, int[] sharers, ReadOnlySpan<double> iq, long streamPos)
     {
         for (int k = 0; k < sharers.Length; k++)
         {
             var rx = _secondaryRx[sharers[k]];
             int chan = Volatile.Read(ref rx.ChannelId);
             if (chan < 0) continue;
-            engine.FeedIq(chan, iq);
+            engine.FeedIq(chan, iq, streamPos);
             rx.FedFrames++;
         }
     }
@@ -8700,18 +8787,18 @@ public partial class DspPipelineService : BackgroundService,
     // stream hear the same (combined) signal. The combined span lives in
     // _divCombineBuf and is valid until the next frame on this thread.
     private ReadOnlySpan<double> FeedRx0WithOptionalDiversity(IDspEngine engine, int channel,
-        ReadOnlySpan<double> rx0, ReadOnlySpan<double> source)
+        ReadOnlySpan<double> rx0, ReadOnlySpan<double> source, long streamPos)
     {
         var div = Volatile.Read(ref _diversity);
         if (!div.Enabled || source.IsEmpty || source.Length != rx0.Length)
         {
-            engine.FeedIq(channel, rx0);
+            engine.FeedIq(channel, rx0, streamPos);
             return rx0;
         }
         if (_divCombineBuf.Length < rx0.Length) _divCombineBuf = new double[rx0.Length];
         var dest = _divCombineBuf.AsSpan(0, rx0.Length);
         DiversityCombine(rx0, source, div.WeightI, div.WeightQ, dest, div.ReferenceRx, div.Output);
-        engine.FeedIq(channel, dest);
+        engine.FeedIq(channel, dest, streamPos);
         return dest;
     }
 
@@ -8975,16 +9062,18 @@ public partial class DspPipelineService : BackgroundService,
                     int secChan = Volatile.Read(ref rx.ChannelId);
                     rx.RoutedFrames++;
                     LogRxIqRms(ri, frame.InterleavedSamples.Span, ref rx.IqRmsLogMs);
+                    long pos1 = ri == 1 ? _streamPos1 : -1;
+                    if (ri == 1) _streamPos1 += frame.InterleavedSamples.Length / 2;
                     if (secChan >= 0)
                     {
-                        engine.FeedIq(secChan, frame.InterleavedSamples.Span);
+                        engine.FeedIq(secChan, frame.InterleavedSamples.Span, pos1);
                         rx.FedFrames++;
                     }
                     if (ri == 1)
                     {
                         var sharers1 = Volatile.Read(ref _source1Sharers);
                         if (sharers1.Length != 0)
-                            FeedSharers(engine, sharers1, frame.InterleavedSamples.Span);
+                            FeedSharers(engine, sharers1, frame.InterleavedSamples.Span, pos1);
                     }
                 }
                 return;
@@ -8993,11 +9082,13 @@ public partial class DspPipelineService : BackgroundService,
             LogRxIqRms(0, frame.InterleavedSamples.Span, ref _rx1IqRmsLogMs);
             if (Volatile.Read(ref _retuneProbeActive) != 0)
                 NoteRetuneProbe(frame.InterleavedSamples.Span, frame.SampleRateHz);
+            long pos0 = _streamPos0;
+            _streamPos0 += frame.InterleavedSamples.Length / 2;
             var rx0Fed = FeedRx0WithOptionalDiversity(engine, channel, frame.InterleavedSamples.Span,
-                frame.DiversitySourceSamples.Span);
+                frame.DiversitySourceSamples.Span, pos0);
             var sharers0 = Volatile.Read(ref _source0Sharers);
             if (sharers0.Length != 0)
-                FeedSharers(engine, sharers0, rx0Fed);
+                FeedSharers(engine, sharers0, rx0Fed, pos0);
             RxIqAvailable?.Invoke(0, frame.SampleRateHz, frame.InterleavedSamples);
         }
         MaybeTickInline();
@@ -9485,7 +9576,7 @@ public partial class DspPipelineService : BackgroundService,
         if (retuneDeadline != 0 && Stopwatch.GetTimestamp() >= retuneDeadline
             && Interlocked.CompareExchange(ref _alignedRetuneDeadlineTicks, 0, retuneDeadline) == retuneDeadline)
         {
-            Volatile.Read(ref _engine)?.FlushAlignedRetune(_alignedRetuneChannel);
+            FlushAlignedRetunes(Volatile.Read(ref _engine));
         }
         // issue #1167: the timer thread and the RX inline-tick thread can both
         // be live during the sink attach/detach window. FloatSpscRing is strict

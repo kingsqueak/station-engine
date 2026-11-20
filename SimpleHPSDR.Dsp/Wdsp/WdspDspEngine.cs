@@ -261,7 +261,9 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
         long AudioOverrunPerWindow,
         long AgeMs);
 
-    private readonly record struct RxIqWorkItem(double[] Samples, bool SuppressDsp);
+    // StartPos: where the frame's first sample sits in its source stream
+    // (complex samples, as the feeder counts them), or -1 when not known.
+    private readonly record struct RxIqWorkItem(double[] Samples, bool SuppressDsp, long StartPos = -1);
 
     private sealed class ChannelState
     {
@@ -329,8 +331,29 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
         public readonly object RetuneGate = new();
         public long ExchangeCount;
         public int BlockPhaseReset;                 // set when the channel restarts
-        public (int ShiftHz, int LeadFrames, Action Send)? RetuneRequested;
+        public (int ShiftHz, int LeadFrames, Action Send, RetuneFollower[]? Followers)? RetuneRequested;
         public (long ApplyAtCount, int ShiftHz)? RetuneInFlight;
+        // A receiver fed from another receiver's stream (a follower) has its
+        // own block grid, so its source's retune lands inside one of its
+        // blocks. The source's worker hands it a bridge: the stream position
+        // where the new centre starts and the shift it then needs. From there
+        // to the follower's own next block boundary its worker rotates the
+        // samples by the difference, so WDSP's current shift stays right;
+        // at the boundary the new shift takes over. AtPos long.MinValue:
+        // no position known, change the shift at the next frame.
+        // Bridge is guarded by RetuneGate; BridgeFlag tells the worker to look.
+        public (long AtPos, int ShiftHz)? Bridge;
+        public int BridgeFlag;
+        // Worker only. The rotation never jumps back: the phase it reached at
+        // the hand-over stays on as a constant (PhaseOffset) until the channel
+        // restarts, or the carrier's phase would step there.
+        public bool BridgeRotating;
+        public double BridgePhase;
+        public double PhaseOffset;
+        // Stream position of the first sample of PartialFrame (FillGate).
+        public long FillStartPos = -1;
+        // Diagnostics: where this channel's last scheduled retune was placed.
+        public long LastRetunePos = long.MinValue;
         // Counts every new shift decision (a schedule or an immediate change),
         // so a flush that had to send outside the gate can tell it was overtaken.
         public long RetuneEpoch;
@@ -1301,7 +1324,15 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
     public bool IsRxChannelOpen(int channelId) =>
         _channels.TryGetValue(channelId, out var state) && !state.Stopped;
 
-    public void FeedIq(int channelId, ReadOnlySpan<double> interleavedIqSamples)
+    public void FeedIq(int channelId, ReadOnlySpan<double> interleavedIqSamples) =>
+        FeedIq(channelId, interleavedIqSamples, -1);
+
+    /// <summary>As <see cref="FeedIq(int, ReadOnlySpan{double})"/>, with the
+    /// position of the first sample in its stream (complex samples; -1 when
+    /// not known). Channels fed the same samples get the same positions,
+    /// which is what lets a receiver on a shared stream follow its source's
+    /// retune to the sample.</summary>
+    public void FeedIq(int channelId, ReadOnlySpan<double> interleavedIqSamples, long streamPos)
     {
         if (!_channels.TryGetValue(channelId, out var state)) return;
         if (state.Stopped) return;
@@ -1311,6 +1342,8 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
         {
             lock (state.FillGate)
             {
+                if (state.PartialFill == 0)
+                    state.FillStartPos = streamPos < 0 ? -1 : streamPos + offset / 2;
                 int need = state.PartialFrame.Length - state.PartialFill;
                 int take = Math.Min(need, interleavedIqSamples.Length - offset);
                 interleavedIqSamples.Slice(offset, take).CopyTo(state.PartialFrame.AsSpan(state.PartialFill));
@@ -1321,6 +1354,7 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
                 if (state.PartialFill == state.PartialFrame.Length)
                 {
                     double[] frame = state.PartialFrame;
+                    long frameStartPos = state.FillStartPos;
                     if (!state.FreeFrames.TryDequeue(out var next))
                         next = new double[2 * InSize];
                     state.PartialFrame = next;
@@ -1335,7 +1369,8 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
                         // must not relabel transition IQ as live receive data.
                         var workItem = new RxIqWorkItem(
                             frame,
-                            frameSuppressed);
+                            frameSuppressed,
+                            frameStartPos);
                         try
                         {
                             if (BlockingIqFeed)
@@ -1454,13 +1489,19 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
         // An immediate change replaces the shift of anything still scheduled.
         // A radio command that was waiting for its block boundary goes out now.
         Action? sendNow;
+        RetuneFollower[]? release;
         lock (state.RetuneGate)
         {
             sendNow = state.RetuneRequested?.Send;
+            release = state.RetuneRequested?.Followers;
             state.RetuneRequested = null;
             state.RetuneInFlight = null;
+            // As a follower: this newer value replaces a bridge under way.
+            state.Bridge = null;
+            Volatile.Write(ref state.BridgeFlag, 0);
             state.RetuneEpoch++;
         }
+        HandFollowers(release, long.MinValue);
         try { sendNow?.Invoke(); } catch { }
         lock (state.FilterProfileGate)
         {
@@ -1489,18 +1530,85 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
     /// False when the channel can't do it (not running): the caller then
     /// retunes at once.
     /// </summary>
-    public bool TryScheduleAlignedRetune(int channelId, int shiftHz, double leadMs, Action sendRadioCommand)
+    public bool TryScheduleAlignedRetune(int channelId, int shiftHz, double leadMs, Action sendRadioCommand) =>
+        TryScheduleAlignedRetune(channelId, shiftHz, leadMs, sendRadioCommand, default);
+
+    /// <summary>As above, for a channel whose samples also feed other channels
+    /// (<paramref name="followers"/>: receivers on its stream, each with the
+    /// shift it needs once the centre has moved). Each follower's shift
+    /// changes on the same sample as this channel's, whatever becomes of the
+    /// request: a follower is never left on its old shift.</summary>
+    public bool TryScheduleAlignedRetune(int channelId, int shiftHz, double leadMs, Action sendRadioCommand,
+        ReadOnlySpan<(int ChannelId, int ShiftHz)> followers)
     {
         if (_disposed != 0 || !_channels.TryGetValue(channelId, out var state)) return false;
         if (state.Stopped || state.RxDspSuppressedForMox) return false;
         double frameMs = RxaInSize * 1000.0 / state.SampleRateHz;
         int leadFrames = Math.Clamp((int)Math.Round(leadMs / frameMs), 0, state.BlockFrames - 1);
+        RetuneFollower[]? list = null;
+        if (!followers.IsEmpty)
+        {
+            list = new RetuneFollower[followers.Length];
+            int n = 0;
+            foreach (var (followerId, followerShiftHz) in followers)
+            {
+                // A follower that is gone has nothing left to shift.
+                if (followerId == channelId || !_channels.TryGetValue(followerId, out var f) || f.Stopped) continue;
+                long epoch;
+                lock (f.RetuneGate) epoch = f.RetuneEpoch;
+                list[n++] = new RetuneFollower(f, followerShiftHz, epoch);
+            }
+            if (n != list.Length) Array.Resize(ref list, n);
+            if (n == 0) list = null;
+        }
+        RetuneFollower[]? replaced;
         lock (state.RetuneGate)
         {
-            state.RetuneRequested = (shiftHz, leadFrames, sendRadioCommand);
+            replaced = state.RetuneRequested?.Followers;
+            state.RetuneRequested = (shiftHz, leadFrames, sendRadioCommand, list);
             state.RetuneEpoch++;
         }
+        // Followers of a request this one replaced that it no longer lists
+        // get the shift they were promised now.
+        if (replaced is not null)
+            foreach (var old in replaced)
+            {
+                bool listed = false;
+                if (list is not null)
+                    foreach (var now in list) listed |= ReferenceEquals(now.State, old.State);
+                if (!listed) HandFollower(old, long.MinValue);
+            }
         return true;
+    }
+
+    /// <summary>Diagnostics and tests: the stream position at which the
+    /// channel's last scheduled retune was placed (long.MinValue: none yet,
+    /// or the channel had no positions).</summary>
+    internal long LastAlignedRetunePos(int channelId) =>
+        _channels.TryGetValue(channelId, out var state) ? Volatile.Read(ref state.LastRetunePos) : long.MinValue;
+
+    // One receiver on a retuning channel's stream: the shift it needs after
+    // the retune, and its RetuneEpoch when that was worked out. A change made
+    // to it directly since then (the operator tuned it) is newer and wins.
+    private sealed record RetuneFollower(ChannelState State, int ShiftHz, long Epoch);
+
+    // Give followers their new shift from stream position atPos on
+    // (long.MinValue: from their next frame). Only the follower's own
+    // worker, or a flush under the lifecycle lock, makes the native call.
+    private static void HandFollowers(RetuneFollower[]? followers, long atPos)
+    {
+        if (followers is null) return;
+        foreach (var f in followers) HandFollower(f, atPos);
+    }
+
+    private static void HandFollower(RetuneFollower f, long atPos)
+    {
+        lock (f.State.RetuneGate)
+        {
+            if (f.State.RetuneEpoch != f.Epoch) return;
+            f.State.Bridge = (atPos, f.ShiftHz);
+            Volatile.Write(ref f.State.BridgeFlag, 1);
+        }
     }
 
     /// <summary>Carry out anything still waiting from
@@ -1515,7 +1623,7 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
         // then take no lock and touch nothing, so the receive worker isn't
         // disturbed. The timeout flush runs after every retune.
         lock (state.RetuneGate)
-            if (state.RetuneRequested is null && state.RetuneInFlight is null) return;
+            if (state.RetuneRequested is null && state.RetuneInFlight is null && state.Bridge is null) return;
         lock (state.FilterProfileGate)
             RunNativeLifecycleCriticalSection(() => FlushAlignedRetune(state, native: !state.Stopped));
         if (!state.Stopped) ConfigureMaxBinDetector(state);
@@ -1526,17 +1634,23 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
     // the lifecycle lock.
     private static void FlushAlignedRetune(ChannelState state, bool native = true)
     {
-        (int ShiftHz, int LeadFrames, Action Send)? requested;
+        (int ShiftHz, int LeadFrames, Action Send, RetuneFollower[]? Followers)? requested;
         long epoch;
         lock (state.RetuneGate)
         {
             requested = state.RetuneRequested;
             if (state.RetuneInFlight is { } f && native) ApplyShiftCore(state, f.ShiftHz);
+            // As a follower: a bridge is newer than anything in flight. Its
+            // worker sees Bridge gone and stops rotating.
+            if (state.Bridge is { } b && native) ApplyShiftCore(state, b.ShiftHz);
+            state.Bridge = null;
+            Volatile.Write(ref state.BridgeFlag, 0);
             state.RetuneRequested = null;
             state.RetuneInFlight = null;
             epoch = state.RetuneEpoch;
         }
         if (requested is not { } r) return;
+        HandFollowers(r.Followers, long.MinValue);
         try { r.Send(); } catch { }
         if (!native) return;
         lock (state.RetuneGate)
@@ -1559,24 +1673,37 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
         state.NotchOffsetChanged?.Invoke();
     }
 
-    // Worker thread, just before a frame is exchanged.
-    private static void BeforeRxExchange(ChannelState state)
+    // Worker thread, just before a frame is exchanged. Returns the samples
+    // to exchange: the frame itself, or a rotated copy in scratch when the
+    // channel is bridging a retune of the stream it shares (the frame stays
+    // as received for the analyzer).
+    private static double[] BeforeRxExchange(ChannelState state, in RxIqWorkItem item, double[] scratch)
     {
+        double[] frame = item.Samples;
         if (Volatile.Read(ref state.BlockPhaseReset) != 0)
         {
             Volatile.Write(ref state.BlockPhaseReset, 0);
             state.ExchangeCount = 0;
             // The block grid moved: finish anything in progress at once.
-            if (state.RetuneInFlight is not null || state.RetuneRequested is not null)
+            // WDSP's own oscillator restarted too, so the held phase goes.
+            state.BridgeRotating = false;
+            state.PhaseOffset = 0;
+            if (state.RetuneInFlight is not null || state.RetuneRequested is not null
+                || Volatile.Read(ref state.BridgeFlag) != 0)
             {
                 FlushAlignedRetune(state);
                 ConfigureMaxBinDetector(state);
             }
         }
-        if (state.RetuneInFlight is null) return;
+        double[] exchange = frame;
+        if (Volatile.Read(ref state.BridgeFlag) != 0 || state.BridgeRotating)
+            exchange = BridgeFrame(state, item, scratch);
+        else if (state.PhaseOffset != 0)
+            exchange = RotateFrame(frame, scratch, 0, state.PhaseOffset, 0, out _);
+        if (state.RetuneInFlight is null) return exchange;
         lock (state.RetuneGate)
         {
-            if (state.RetuneInFlight is not { } f || state.ExchangeCount < f.ApplyAtCount) return;
+            if (state.RetuneInFlight is not { } f || state.ExchangeCount < f.ApplyAtCount) return exchange;
             state.RetuneInFlight = null;
             // Applied under the gate: an immediate SetCtunShift takes the
             // same gate, so it can't land between the check and the apply
@@ -1584,14 +1711,136 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
             ApplyShiftCore(state, f.ShiftHz);
         }
         ConfigureMaxBinDetector(state);
+        return exchange;
+    }
+
+    // Worker thread: a bridge is pending or running on this follower.
+    private static double[] BridgeFrame(ChannelState state, in RxIqWorkItem item, double[] scratch)
+    {
+        double[] frame = item.Samples;
+        int n = state.BlockFrames;
+        int rotateFrom;
+        double deltaRad;
+        bool appliedNow = false;
+        lock (state.RetuneGate)
+        {
+            if (state.Bridge is not { } b)
+            {
+                // Withdrawn (a direct shift change, or a flush): hold the phase.
+                Volatile.Write(ref state.BridgeFlag, 0);
+                if (state.BridgeRotating) state.PhaseOffset = state.BridgePhase;
+                state.BridgeRotating = false;
+                rotateFrom = InSize;
+                deltaRad = 0;
+            }
+            else
+            {
+                long start = item.StartPos;
+                long blockSamples = (long)n * InSize;
+                // No position to go by, the change long past, or so far ahead
+                // that it belongs to a stream this channel is no longer on.
+                bool now = b.AtPos == long.MinValue || start < 0
+                    || start - b.AtPos > 2 * blockSamples
+                    || b.AtPos - start > state.SampleRateHz;
+                bool wholeFrameAfter = !now && start >= b.AtPos;
+                if (now)
+                {
+                    state.RetuneInFlight = null;
+                    ApplyShiftCore(state, b.ShiftHz);
+                    appliedNow = true;
+                }
+                else if (wholeFrameAfter && state.ExchangeCount % n == 0)
+                {
+                    // This frame starts one of this channel's own blocks, all
+                    // of it at the new centre: WDSP's shift takes over here.
+                    state.RetuneInFlight = (state.ExchangeCount + (n >= 2 ? n / 2 : 0), b.ShiftHz);
+                }
+                if (now || (wholeFrameAfter && state.ExchangeCount % n == 0))
+                {
+                    state.Bridge = null;
+                    Volatile.Write(ref state.BridgeFlag, 0);
+                    if (state.BridgeRotating) state.PhaseOffset = state.BridgePhase;
+                    state.BridgeRotating = false;
+                    rotateFrom = InSize;
+                    deltaRad = 0;
+                }
+                else
+                {
+                    // The shift WDSP gives the block being filled: one still
+                    // waiting for its apply point belongs to this block.
+                    int baseShiftHz = state.RetuneInFlight?.ShiftHz ?? state.CtunShiftHz;
+                    deltaRad = 2.0 * Math.PI * (b.ShiftHz - baseShiftHz) / state.SampleRateHz;
+                    rotateFrom = (int)Math.Clamp(b.AtPos - start, 0, InSize);
+                    if (!state.BridgeRotating && rotateFrom < InSize)
+                    {
+                        state.BridgeRotating = true;
+                        state.BridgePhase = state.PhaseOffset;
+                    }
+                }
+            }
+        }
+        if (appliedNow) ConfigureMaxBinDetector(state);
+        if (!state.BridgeRotating)
+            return state.PhaseOffset != 0 ? RotateFrame(frame, scratch, 0, state.PhaseOffset, 0, out _) : frame;
+        var result = RotateFrame(frame, scratch, rotateFrom, state.BridgePhase, deltaRad, out double phase);
+        state.BridgePhase = phase;
+        return result;
+    }
+
+    // dst = src turned by `phase`, the phase advancing by deltaRad a sample
+    // from sample `from` on: the same operation as WDSP's shift stage, which
+    // is the first thing its receive chain does to these samples.
+    private static double[] RotateFrame(double[] src, double[] dst, int from, double phase, double deltaRad,
+        out double phaseOut)
+    {
+        (double sin, double cos) = Math.SinCos(phase);
+        int count = src.Length / 2;
+        for (int i = 0; i < count; i++)
+        {
+            if (i >= from && deltaRad != 0)
+            {
+                (sin, cos) = Math.SinCos(phase);
+                phase += deltaRad;
+            }
+            double re = src[2 * i], im = src[2 * i + 1];
+            dst[2 * i] = re * cos - im * sin;
+            dst[2 * i + 1] = re * sin + im * cos;
+        }
+        phase %= 2.0 * Math.PI;
+        phaseOut = phase;
+        return dst;
+    }
+
+    // Worker thread, for a frame that is not exchanged (receive muted for
+    // transmit): a bridge can't be carried through it, so its shift goes in now.
+    private static void ResolveBridgeNow(ChannelState state)
+    {
+        if (Volatile.Read(ref state.BridgeFlag) == 0 && !state.BridgeRotating) return;
+        bool applied = false;
+        lock (state.RetuneGate)
+        {
+            if (state.Bridge is { } b)
+            {
+                state.RetuneInFlight = null;
+                ApplyShiftCore(state, b.ShiftHz);
+                applied = true;
+            }
+            state.Bridge = null;
+            Volatile.Write(ref state.BridgeFlag, 0);
+        }
+        if (state.BridgeRotating) state.PhaseOffset = state.BridgePhase;
+        state.BridgeRotating = false;
+        if (applied) ConfigureMaxBinDetector(state);
     }
 
     // Worker thread, just after a frame is exchanged.
-    private static void AfterRxExchange(ChannelState state)
+    private static void AfterRxExchange(ChannelState state, long frameStartPos)
     {
         long count = ++state.ExchangeCount;
         if (state.RetuneRequested is null) return;
         Action send;
+        RetuneFollower[]? followers;
+        long boundaryPos;
         lock (state.RetuneGate)
         {
             if (state.RetuneRequested is not { } r || state.RetuneInFlight is not null) return;
@@ -1606,7 +1855,14 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
             state.RetuneInFlight = (applyAt, r.ShiftHz);
             state.RetuneRequested = null;
             send = r.Send;
+            followers = r.Followers;
+            // Where that first frame of the new block starts in the stream:
+            // the sample from which the radio's new centre is expected.
+            boundaryPos = frameStartPos < 0 ? long.MinValue
+                : frameStartPos + (long)InSize * (framesToBoundary + 1);
+            Volatile.Write(ref state.LastRetunePos, boundaryPos);
         }
+        HandFollowers(followers, boundaryPos);
         try { send(); } catch { }
     }
 
@@ -6069,6 +6325,7 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
         double[] audio = new double[state.OutDoubles];
         double[] spectrumIq = new double[2 * InSize];
         double[] silence = new double[2 * InSize];
+        double[] rotated = new double[2 * InSize];
         int monoSamples = state.OutDoubles / 2;
         try
         {
@@ -6106,13 +6363,13 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
                                 break;
                         }
 
-                        BeforeRxExchange(state);
+                        double[] exchange = BeforeRxExchange(state, workItem, rotated);
                         NativeMethods.fexchange0(
                             state.Id,
-                            ref frame[0],
+                            ref exchange[0],
                             ref audio[0],
                             out _);
-                        AfterRxExchange(state);
+                        AfterRxExchange(state, workItem.StartPos);
                         // Publish under MoxGate so key-down cannot clear the
                         // ring and then lose a race to this pre-MOX frame.
                         PushAudio(state, audio, monoSamples);
@@ -6123,6 +6380,7 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
                         // keeps driving the channel-down slew. Feed it silence:
                         // real transition IQ must not reach the demodulator
                         // while WDSP discards pre-suppression receive state.
+                        ResolveBridgeNow(state);
                         if (state.NativeFlushOnSilence)
                             NativeMethods.fexchange0(
                                 state.Id,

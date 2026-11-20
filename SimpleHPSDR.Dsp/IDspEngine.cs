@@ -103,9 +103,20 @@ public interface IDspEngine : IDisposable
     /// radio its new centre and change the receive shift so both take effect
     /// on the same IQ. False when the engine can't (the caller retunes at once).</summary>
     bool TryScheduleAlignedRetune(int channelId, int shiftHz, double leadMs, Action sendRadioCommand) => false;
+    /// <summary>The same, when other channels (<paramref name="followers"/>)
+    /// are fed this channel's samples: each one's shift changes to the value
+    /// given on the same sample as this channel's. False: nothing was
+    /// scheduled, and the caller changes every shift itself.</summary>
+    bool TryScheduleAlignedRetune(int channelId, int shiftHz, double leadMs, Action sendRadioCommand,
+        ReadOnlySpan<(int ChannelId, int ShiftHz)> followers) => false;
     /// <summary>Carry out a scheduled retune now.</summary>
     void FlushAlignedRetune(int channelId) { }
     void FeedIq(int channelId, ReadOnlySpan<double> interleavedIqSamples);
+    /// <summary>The same, with the position of the first sample in its
+    /// stream (complex samples; -1 when not known). Channels fed the same
+    /// samples must be given the same positions.</summary>
+    void FeedIq(int channelId, ReadOnlySpan<double> interleavedIqSamples, long streamPos) =>
+        FeedIq(channelId, interleavedIqSamples);
     void SetMode(int channelId, RxMode mode);
     void SetFilter(int channelId, int lowHz, int highHz);
     void SetVfoHz(int channelId, long vfoHz);
