@@ -972,6 +972,13 @@ public partial class DspPipelineService : BackgroundService,
         // Protocol 2 receive thread to drop stray frames for a slot that now
         // shares a stream.
         public volatile int SourceIndex = -1;
+        // A shared-stream receiver whose dial lies outside its source's
+        // captured span: silent until the span covers it again. Decided on
+        // the state path under _engineLock; read by Tick and RadioService.
+        public volatile bool OutOfSpan;
+        // Tick thread only: Tick has faded this receiver out for OutOfSpan
+        // and fades it back in when the flag clears.
+        public bool OutOfSpanSilenced;
         // Last values applied to this WDSP channel. Radio state notifications are
         // whole-state snapshots, so a VFO-B drag otherwise re-sends mode, filter,
         // AGC, NR, and squelch on every mouse move. In particular, SetMode clears
@@ -3570,6 +3577,7 @@ public partial class DspPipelineService : BackgroundService,
         _radio.Connected += OnRadioConnected;
         _radio.Disconnected += OnRadioDisconnected;
         _radio.StateChanged += OnRadioStateChanged;
+        _radio.SetOutOfSpanProbe(ri => (uint)ri < MaxReceivers && _secondaryRx[ri].OutOfSpan);
         _radio.PaSnapshotChanged += OnPaSnapshotChanged;
         // Audio front-end (external-audio-jacks re-port) — global per-radio.
         // RadioService can't reach the P2 client directly (ActiveClient is
@@ -3631,6 +3639,7 @@ public partial class DspPipelineService : BackgroundService,
             _radio.Connected -= OnRadioConnected;
             _radio.Disconnected -= OnRadioDisconnected;
             _radio.StateChanged -= OnRadioStateChanged;
+            _radio.SetOutOfSpanProbe(null);
             _radio.PaSnapshotChanged -= OnPaSnapshotChanged;
             _radio.AudioFrontEndChanged -= OnAudioFrontEndChanged;
             _radio.MoxChanged -= OnRadioMoxChanged;
@@ -6144,6 +6153,7 @@ public partial class DspPipelineService : BackgroundService,
             int source = SecondaryReceiverEnabled(ri, s) ? ReceiverSourceIndex(s, ri) ?? -1 : -1;
             if (rx.SourceIndex == source) continue;
             if (rx.SourceIndex >= 0) rx.LoInit = false;
+            if (source < 0) rx.OutOfSpan = false;
             rx.SourceIndex = source;
         }
         PublishSharers(ref _source0Sharers, 0);
@@ -7216,6 +7226,7 @@ public partial class DspPipelineService : BackgroundService,
         if (chan < 0) return;
         Volatile.Write(ref _secondaryRx[rxIndex].ChannelId, -1);
         Volatile.Write(ref _secondaryRx[rxIndex].FadeInSamplesRemaining, 0);
+        _secondaryRx[rxIndex].OutOfSpan = false;
         // NaN = "no value applied yet" — a future reopen snaps to the
         // operator's target instead of slewing from this stale value.
         _secondaryRx[rxIndex].ResetAppliedState();
@@ -7236,6 +7247,7 @@ public partial class DspPipelineService : BackgroundService,
         {
             Volatile.Write(ref _secondaryRx[i].ChannelId, -1);
             Volatile.Write(ref _secondaryRx[i].FadeInSamplesRemaining, 0);
+            _secondaryRx[i].OutOfSpan = false;
             // See SecondaryRx.AppliedAfGainDb — engine swap discards any
             // prior slewed state, so the new channel snaps to its target.
             _secondaryRx[i].ResetAppliedState();
@@ -7277,9 +7289,7 @@ public partial class DspPipelineService : BackgroundService,
         }
         var (mode, vfoHz, _, _, _) = SecondaryRxParams(s, rxIndex);
         long effB = CwOffset.EffectiveLoHz(mode, vfoHz);
-        long span = Volatile.Read(ref _sampleRateHz);
-        if (span <= 0) span = s.SampleRate > 0 ? s.SampleRate : SyntheticSampleRateHz;
-        long edge = (long)(span * 0.45); // recentre before the dial hits the DDC edge
+        long edge = DdcUsableHalfSpanHz(s); // recentre before the dial hits the DDC edge
         // CTUN off and the display dragged (RequestSecondaryLo): keep the
         // dragged centre until the dial moves, like RX1's panadapter.
         bool dragged = !s.CtunEnabled && rx.LoInit && rx.PannedAtDialHz == effB;
@@ -7289,6 +7299,15 @@ public partial class DspPipelineService : BackgroundService,
             rx.PannedAtDialHz = long.MinValue;
         }
         rx.LoInit = true;
+    }
+
+    // How far a dial may sit from a DDC centre and still be received well:
+    // just inside half the captured span at the current sample rate.
+    private long DdcUsableHalfSpanHz(StateDto s)
+    {
+        long span = Volatile.Read(ref _sampleRateHz);
+        if (span <= 0) span = s.SampleRate > 0 ? s.SampleRate : SyntheticSampleRateHz;
+        return (long)(span * 0.45);
     }
 
     /// <summary>
@@ -7416,7 +7435,14 @@ public partial class DspPipelineService : BackgroundService,
             vfoHz,
             rx.LoHz,
             protocol2: _p2Client is not null);
-        if (rx.AppliedCtunShiftHz != shiftHz)
+        // A shared-stream receiver tuned outside its source's span keeps its
+        // dial and goes silent. The shift is not applied out there, so the
+        // latch still holds the last in-span value and the right shift lands
+        // as soon as the dial is back inside.
+        bool outOfSpan = ReceiverSourceIndex(s, rxIndex) is not null
+            && Math.Abs(CwOffset.EffectiveLoHz(mode, vfoHz) - rx.LoHz) > DdcUsableHalfSpanHz(s);
+        if (rx.OutOfSpan != outOfSpan) rx.OutOfSpan = outOfSpan;
+        if (!outOfSpan && rx.AppliedCtunShiftHz != shiftHz)
         {
             engine.SetCtunShift(channelId, shiftHz);
             rx.AppliedCtunShiftHz = shiftHz;
@@ -8385,6 +8411,7 @@ public partial class DspPipelineService : BackgroundService,
                 receiverIndex = i,
                 channelId = Volatile.Read(ref _secondaryRx[i].ChannelId),
                 sourceReceiver = _secondaryRx[i].SourceIndex, // -1 = own DDC
+                outOfSpan = _secondaryRx[i].OutOfSpan,
                 routedFrames = _secondaryRx[i].RoutedFrames,
                 fedFrames = _secondaryRx[i].FedFrames,
             };
@@ -9955,7 +9982,7 @@ public partial class DspPipelineService : BackgroundService,
                     {
                         lock (rx.AutoAgcLock)
                         {
-                            if (RadioService.ReceiverAgcState(state, ri).AutoAgcEnabled && !_keyed
+                            if (RadioService.ReceiverAgcState(state, ri).AutoAgcEnabled && !_keyed && !rx.OutOfSpan
                                 && Volatile.Read(ref _rxPostTxMuteBlocksRemaining) == 0 && !_rxAudioSuppressedForTx)
                             {
                                 Array.Copy(rx.PanBuf, rx.AutoAgcBins, rx.PanBuf.Length);
@@ -10126,6 +10153,14 @@ public partial class DspPipelineService : BackgroundService,
             var sec = _secondaryRx[ri];
             int secChan = Volatile.Read(ref sec.ChannelId);
             if (secChan < 0) continue;
+            // Out of its source's span: drained but not heard. Back in span it
+            // fades in like a freshly opened channel.
+            bool outOfSpan = sec.OutOfSpan;
+            if (!outOfSpan && sec.OutOfSpanSilenced)
+            {
+                sec.OutOfSpanSilenced = false;
+                Volatile.Write(ref sec.FadeInSamplesRemaining, SecondaryRxOpenFadeInSamples);
+            }
 
             // RX1 is the audio clock-master: read at most audioSampleCount samples
             // from each secondary so the mixed stream is fed at exactly the RX
@@ -10144,7 +10179,7 @@ public partial class DspPipelineService : BackgroundService,
                 // so the fade ramps speech, not the OFDM modem signal. The data
                 // tap above stays raw. A non-owner keeps today's fade-then-publish
                 // order on its own buffer.
-                if (_freeDvOwnerIndex == ri && streamLocalRx && !freeDvSuppressed)
+                if (_freeDvOwnerIndex == ri && streamLocalRx && !freeDvSuppressed && !outOfSpan)
                     DecodeFreeDvBlock(
                         sec.AudioBuf.AsSpan(0, n),
                         EffectiveAfGainDb(state.RxAfGainDb, SecondaryRxParams(state, ri).afGainDb));
@@ -10160,11 +10195,21 @@ public partial class DspPipelineService : BackgroundService,
                         SecondaryRxOpenFadeInSamples);
                     Volatile.Write(ref sec.FadeInSamplesRemaining, fadeNext);
                 }
-                if (streamLocalRx)
+                if (streamLocalRx && !outOfSpan)
                     CaptureRxWaveform(engine, state, ri, sec.AudioBuf.AsSpan(0, n));
-                if (streamLocalRx)
+                if (streamLocalRx && !outOfSpan)
                     ReceiverAudioAvailable?.Invoke(
                         ri, AudioOutputRateHz, new ReadOnlyMemory<float>(sec.AudioBuf, 0, n));
+            }
+            if (outOfSpan)
+            {
+                // The first block after the flag is set ramps down to silence
+                // and still joins the mix; later blocks are left out.
+                if (sec.OutOfSpanSilenced) continue;
+                sec.OutOfSpanSilenced = true;
+                if (n <= 0) continue;
+                for (int i = 0; i < n; i++)
+                    sec.AudioBuf[i] *= 1f - (float)(i + 1) / n;
             }
             // A muted secondary is still drained above (so its ring can't back up)
             // but excluded from the mix entirely — it must neither add signal nor
@@ -10644,6 +10689,19 @@ public partial class DspPipelineService : BackgroundService,
                 if (!SecondaryReceiverEnabled(ri, state)) continue;
                 int secChan = Volatile.Read(ref _secondaryRx[ri].ChannelId);
                 if (secChan < 0) continue;
+                if (_secondaryRx[ri].OutOfSpan)
+                {
+                    // Nothing it hears is at its dial: no meter frame, and
+                    // auto-AGC holds its gain and re-converges on return.
+                    var silent = _secondaryRx[ri];
+                    lock (silent.AutoAgcLock)
+                    {
+                        silent.AutoAgcTracker.Reset();
+                        silent.AutoAgcWasEnabled = false;
+                        silent.AutoAgcPanMs = long.MinValue;
+                    }
+                    continue;
+                }
                 var (_, secVfoHz, _, _, _) = SecondaryRxParams(state, ri);
                 double secBaseCalOffsetDb = RadioCalibrations.RxMeterOffsetDb(
                     _radio.EffectiveBoardKind,

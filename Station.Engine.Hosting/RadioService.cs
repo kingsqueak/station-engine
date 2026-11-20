@@ -298,6 +298,13 @@ public sealed partial class RadioService : IDisposable
         public int? SourceReceiver;
     }
     private readonly ExtraReceiver[] _extraReceivers = CreateExtraReceivers();
+    // Whether a shared-stream receiver's dial is outside its source's span.
+    // Only the DSP pipeline knows the source's centre, so it supplies this
+    // lock-free probe; it reads one volatile flag per call.
+    private Func<int, bool>? _outOfSpanProbe;
+
+    internal void SetOutOfSpanProbe(Func<int, bool>? probe) =>
+        Volatile.Write(ref _outOfSpanProbe, probe);
     // Current SimpleHPSDR ordinary Protocol-1 ingest decodes one DDC stream and fans it
     // out only to RX1/RX2. The P1 wire and some gateware can carry more, but
     // advertising RX3+ before Protocol1Client has a variable-DDC parser produces
@@ -8039,20 +8046,25 @@ public sealed partial class RadioService : IDisposable
                 Nr = ReceiverNrConfig(s, 1),
             },
         };
-        // Extra DDC receivers (RX3+). Appended contiguously while enabled — the
-        // P2 multi-DDC path requires no DDC gaps, so the first disabled slot
-        // ends the run. Ordinary P1 deliberately projects no extras because its
-        // current ingest path only supplies RX1/RX2. SampleRate is the shared
-        // capture rate for now.
+        // Extra DDC receivers (RX3+). Ordinary P1 deliberately projects no
+        // extras because its current ingest path only supplies RX1/RX2.
+        // SampleRate is the shared capture rate for now. Rows stay positional
+        // (row k is receiver k) up to the highest enabled extra. Receivers with
+        // their own DDC are always contiguous (the P2 multi-DDC path has no DDC
+        // gaps); a shared-stream receiver can sit above a disabled slot, which
+        // is then projected as a disabled row.
+        int lastEnabled = 1;
         for (int i = 2; _activeClient is null &&
             i < Math.Min(_extraReceivers.Length, EffectiveMaxReceivers); i++)
+            if (_extraReceivers[i] is { Enabled: true }) lastEnabled = i;
+        for (int i = 2; i <= lastEnabled; i++)
         {
             var e = _extraReceivers[i];
-            if (e is null || !e.Enabled) break;
+            if (e is null) break;
             // A shared-stream receiver's samples come from its source's ADC.
             list.Add(new ReceiverDto(
-                Index: i, Enabled: true,
-                AdcSource: e.SourceReceiver is int source ? ReceiverAdcSource(s, source) : e.AdcSource,
+                Index: i, Enabled: e.Enabled,
+                AdcSource: e.Enabled && e.SourceReceiver is int source ? ReceiverAdcSource(s, source) : e.AdcSource,
                 VfoHz: e.VfoHz, Mode: e.Mode,
                 FilterLowHz: e.FilterLowHz, FilterHighHz: e.FilterHighHz,
                 FilterPresetName: e.FilterPresetName,
@@ -8061,7 +8073,9 @@ public sealed partial class RadioService : IDisposable
                 TxVfoHz: e.TxVfoHz, ZoomLevel: e.ZoomLevel, NrMode: e.NrMode,
                 Agc: e.Agc, AgcTopDb: e.AgcTopDb, AutoAgcEnabled: e.AutoAgcEnabled, AgcOffsetDb: e.AgcOffsetDb,
                 Nr: NormalizeNrConfig(e.Nr with { NrMode = e.NrMode }),
-                SourceReceiver: e.SourceReceiver));
+                SourceReceiver: e.Enabled ? e.SourceReceiver : null,
+                OutOfSpan: e.Enabled && e.SourceReceiver is not null
+                    && Volatile.Read(ref _outOfSpanProbe)?.Invoke(i) == true));
         }
         return list;
     }
