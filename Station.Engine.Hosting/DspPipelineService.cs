@@ -967,6 +967,11 @@ public partial class DspPipelineService : BackgroundService,
         public long IqRmsLogMs; // 1 Hz IQ RMS/peak probe gate
         public long RoutedFrames; // diag: IQ frames routed to this receiver index
         public long FedFrames;    // diag: IQ frames actually FeedIq'd (channel open)
+        // Receiver whose DDC stream feeds this one (0 or 1), or -1 when it has
+        // its own DDC. Written under _engineLock on the state path, read by the
+        // Protocol 2 receive thread to drop stray frames for a slot that now
+        // shares a stream.
+        public volatile int SourceIndex = -1;
         // Last values applied to this WDSP channel. Radio state notifications are
         // whole-state snapshots, so a VFO-B drag otherwise re-sends mode, filter,
         // AGC, NR, and squelch on every mouse move. In particular, SetMode clears
@@ -2974,12 +2979,16 @@ public partial class DspPipelineService : BackgroundService,
     }
 
     // RX3+ (full multi-DDC): the contiguous enabled receivers beyond RX2 in
-    // the canonical Receivers[] array — what SetExtraReceivers is given.
+    // the canonical Receivers[] array — what SetExtraReceivers is given. A
+    // receiver fed from another receiver's stream has no DDC of its own, so
+    // it ends the run.
     private static int OperatorExtraReceiverCount(StateDto s)
     {
         int extraCount = 0;
         if (s.Receivers is { } rcvrs)
-            for (int ri = 2; ri < rcvrs.Count && ri < MaxReceivers && rcvrs[ri].Enabled; ri++)
+            for (int ri = 2;
+                 ri < rcvrs.Count && ri < MaxReceivers && rcvrs[ri].Enabled && ReceiverSourceIndex(s, ri) is null;
+                 ri++)
                 extraCount++;
         return extraCount;
     }
@@ -6121,6 +6130,18 @@ public partial class DspPipelineService : BackgroundService,
             _lastPushedRx2LoHz = long.MinValue;
         }
 
+        // Publish which receivers share another receiver's stream before any
+        // channel opens, so the receive thread drops stray DDC frames for them.
+        // Leaving a shared stream recentres the receiver's own DDC on its dial.
+        for (int ri = 2; ri < MaxReceivers; ri++)
+        {
+            var rx = _secondaryRx[ri];
+            int source = SecondaryReceiverEnabled(ri, s) ? ReceiverSourceIndex(s, ri) ?? -1 : -1;
+            if (rx.SourceIndex == source) continue;
+            if (rx.SourceIndex >= 0) rx.LoInit = false;
+            rx.SourceIndex = source;
+        }
+
         var engine = _engine;
         int channel = _channelId;
         if (engine is null) return;
@@ -7085,10 +7106,21 @@ public partial class DspPipelineService : BackgroundService,
     // byte-exact; RX3+ (index >= 2) read the canonical StateDto.Receivers[]
     // (B3 projection / per-receiver store) so full multi-DDC lights up without
     // touching the proven RX1/RX2 path.
+    // A receiver fed from another receiver's stream is on only while that
+    // source is on: receiver 0 always is, receiver 1 follows Rx2Enabled.
     private static bool SecondaryReceiverEnabled(int rxIndex, StateDto s) =>
         rxIndex == 1
             ? s.Rx2Enabled
-            : rxIndex >= 2 && s.Receivers is { } rs && rxIndex < rs.Count && rs[rxIndex].Enabled;
+            : rxIndex >= 2 && s.Receivers is { } rs && rxIndex < rs.Count && rs[rxIndex].Enabled
+              && (ReceiverSourceIndex(s, rxIndex) != 1 || s.Rx2Enabled);
+
+    // The receiver (0 or 1) whose DDC stream feeds receiver rxIndex, or null
+    // when it has its own DDC. Only receivers 2 and up can share a stream.
+    private static int? ReceiverSourceIndex(StateDto s, int rxIndex) =>
+        rxIndex >= 2 && s.Receivers is { } rs && rxIndex < rs.Count
+            && rs[rxIndex].SourceReceiver is int source && (source == 0 || source == 1)
+            ? source
+            : null;
 
     // Per-RX audio mute (Thetis chkMUT / chkRX2Mute). Reads the projected
     // Receivers[] array, which RadioService keeps current on every Mutate.
@@ -7225,6 +7257,17 @@ public partial class DspPipelineService : BackgroundService,
             rx.LoInit = false; // re-enabling recentres from scratch
             return;
         }
+        // Shared stream: the centre is the source's DDC centre (receiver 0's
+        // is RadioLoHz; slot 0 of _secondaryRx is unused). Receiver 1's centre
+        // is already current here: OnRadioStateChanged updates it before any
+        // receiver from 2 up, and the display loop runs in index order.
+        if (ReceiverSourceIndex(s, rxIndex) is int source)
+        {
+            rx.LoHz = source == 0 ? s.RadioLoHz : _secondaryRx[1].LoHz;
+            rx.PannedAtDialHz = long.MinValue;
+            rx.LoInit = true;
+            return;
+        }
         var (mode, vfoHz, _, _, _) = SecondaryRxParams(s, rxIndex);
         long effB = CwOffset.EffectiveLoHz(mode, vfoHz);
         long span = Volatile.Read(ref _sampleRateHz);
@@ -7272,6 +7315,8 @@ public partial class DspPipelineService : BackgroundService,
         {
             var s = _radio.Snapshot();
             if (!SecondaryReceiverEnabled(rxIndex, s)) return;
+            // A shared-stream receiver's centre is its source's DDC centre.
+            if (ReceiverSourceIndex(s, rxIndex) is not null) return;
             var rx = _secondaryRx[rxIndex];
             if (rx.LoInit && rx.LoHz == clamped) return; // already centred there
             rx.LoHz = clamped;
@@ -8100,6 +8145,9 @@ public partial class DspPipelineService : BackgroundService,
                 int sc = Volatile.Read(ref _secondaryRx[i].ChannelId);
                 if (sc < 0) continue;
                 Volatile.Write(ref _secondaryRx[i].ChannelId, -1);
+                // The reopened channel starts at WDSP defaults: forget what was
+                // applied to the old one so the reopen re-applies everything.
+                _secondaryRx[i].ResetAppliedState();
                 try { engine.CloseChannel(sc); } catch { /* best-effort */ }
             }
             engine.CloseChannel(oldChannel);
@@ -8329,6 +8377,7 @@ public partial class DspPipelineService : BackgroundService,
             {
                 receiverIndex = i,
                 channelId = Volatile.Read(ref _secondaryRx[i].ChannelId),
+                sourceReceiver = _secondaryRx[i].SourceIndex, // -1 = own DDC
                 routedFrames = _secondaryRx[i].RoutedFrames,
                 fedFrames = _secondaryRx[i].FedFrames,
             };
@@ -8835,6 +8884,9 @@ public partial class DspPipelineService : BackgroundService,
                 if (ri < MaxReceivers)
                 {
                     var rx = _secondaryRx[ri];
+                    // A stray frame from a DDC this slot no longer owns: the
+                    // receiver is fed from another receiver's stream.
+                    if (rx.SourceIndex >= 0) return;
                     int secChan = Volatile.Read(ref rx.ChannelId);
                     rx.RoutedFrames++;
                     LogRxIqRms(ri, frame.InterleavedSamples.Span, ref rx.IqRmsLogMs);
