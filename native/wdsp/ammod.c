@@ -83,6 +83,58 @@ static double butterworth_q_ammod (int n, int k) {
   return 1.0 / (2.0 * cos (theta));
 }
 
+static void flush_limiter_ammod (AMMOD a) {
+  int i;
+
+  for (i = 0; i < AMMOD_LA_MAX; i++) {
+    a->la_buf[i] = 0.0;
+    a->la_g[i] = 1.0;
+  }
+
+  a->la_idx = 0;
+  a->la_hold = 0;
+  a->la_g1 = 1.0;
+  a->la_sum = (double)a->la_len;
+}
+
+// One sample through the look-ahead limiter: returns the sample from la_len
+// samples ago, turned down as far as any peak now inside the delay needs to
+// stay within [neg, pos] (neg is negative).
+static double limit_ammod (AMMOD a, double v, double neg, double pos) {
+  double need = 1.0;
+  double delayed;
+
+  if (v < neg) need = neg / v;
+  else if (v > pos) need = pos / v;
+
+  if (need <= a->la_g1) {
+    a->la_g1 = need;
+    a->la_hold = a->la_len;
+  } else if (a->la_hold > 0) {
+    a->la_hold--;
+  } else {
+    a->la_g1 += (1.0 - a->la_g1) * a->la_rel;
+  }
+
+  a->la_sum += a->la_g1 - a->la_g[a->la_idx];
+  a->la_g[a->la_idx] = a->la_g1;
+  delayed = a->la_buf[a->la_idx];
+  a->la_buf[a->la_idx] = v;
+
+  if (++a->la_idx >= a->la_len) {
+    // Once round the ring, add the gains up afresh so rounding can't build up.
+    int i;
+    double sum = 0.0;
+    a->la_idx = 0;
+
+    for (i = 0; i < a->la_len; i++) sum += a->la_g[i];
+
+    a->la_sum = sum;
+  }
+
+  return delayed * (a->la_sum / (double)a->la_len);
+}
+
 static void flush_bq_ammod (ammod_bq* bq, int count) {
   int i;
 
@@ -112,6 +164,18 @@ static void calc_ammod (AMMOD a) {
   double nyq_guard = 0.45 * (double)a->rate;
   int hp_run = a->rate > 0 && a->hpf_hz > 0.0 && a->hpf_hz < nyq_guard;
   int lp_run = a->rate > 0 && a->lpf_hz > 0.0 && a->lpf_hz < nyq_guard;
+  int la_len = (int)(AMMOD_LA_SECONDS * (double)a->rate + 0.5);
+
+  if (la_len < 8) la_len = 8;
+
+  if (la_len > AMMOD_LA_MAX) la_len = AMMOD_LA_MAX;
+
+  if (la_len != a->la_len) {
+    a->la_len = la_len;
+    flush_limiter_ammod (a);
+  }
+
+  a->la_rel = a->rate > 0 ? 1.0 - exp (-1.0 / (AMMOD_LA_RELEASE_SECONDS * (double)a->rate)) : 1.0;
 
   for (i = 0; i < AMMOD_HP_STAGES; i++) {
     int was = a->hp[i].run;
@@ -176,6 +240,7 @@ static void recover_ammod (AMMOD a) {
   flush_bq_ammod (a->hp, AMMOD_HP_STAGES);
   flush_bq_ammod (a->lp, AMMOD_LP_STAGES);
   a->pe_x1 = a->pe_y1 = 0.0;
+  flush_limiter_ammod (a);
 }
 
 /********************************************************************************************************
@@ -217,6 +282,7 @@ void flush_ammod (AMMOD a) {
   flush_bq_ammod (a->hp, AMMOD_HP_STAGES);
   flush_bq_ammod (a->lp, AMMOD_LP_STAGES);
   a->pe_x1 = a->pe_y1 = 0.0;
+  flush_limiter_ammod (a);
   EnterCriticalSection (&a->cs_peak);
   a->peak_pos = 0.0;
   a->peak_neg = 0.0;
@@ -261,13 +327,22 @@ void xammod (AMMOD a) {
 
           if (a->invert) x = -x;
 
-          m = clamp_ammod (x * pos, neg, pos);         // clipper
+          // Full-level audio (|x| = 1, as ALC leaves it) reaches the positive
+          // limit. Band-limit first, then let the limiter turn it down ahead of
+          // any peak that would pass either limit: nothing is clipped, so audio
+          // set up for SSB needs no change for AM. Lopsided audio keeps its
+          // taller upward peaks; even audio ends up at the negative limit both ways.
+          m = x * pos;
 
           if (lp_run) m = run_bq_ammod (a->lp, AMMOD_LP_STAGES, m);
 
           if (!finite_ammod (m)) { recover_ammod (a); m = 0.0; }
 
-          m = clamp_ammod (m, neg, pos);               // overshoot safety
+          m = limit_ammod (a, m, neg, pos);
+
+          if (!finite_ammod (m)) { recover_ammod (a); m = 0.0; }
+
+          m = clamp_ammod (m, neg, pos);               // rounding safety only
 
           if (m > blk_pos) blk_pos = m;
           if (m < blk_neg) blk_neg = m;
@@ -350,6 +425,7 @@ void setBroadcast_ammod (AMMOD a, int run, double pos_limit, double neg_limit, i
   if (restart) {
     flush_bq_ammod (a->lp, AMMOD_LP_STAGES);
     a->pe_x1 = a->pe_y1 = 0.0;
+    flush_limiter_ammod (a);
   }
 }
 

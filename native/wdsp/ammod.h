@@ -28,8 +28,11 @@ warren@wpratt.com
 // 4th-order Butterworth high-pass on the modulating signal and an optional
 // "broadcast" chain -- NRSC-style pre-emphasis, polarity invert, asymmetric
 // modulation (positive peaks up to pos_limit, negative peaks held at
-// -neg_limit so the carrier never pinches off), a clipper followed by an
-// 8th-order Butterworth brickwall low-pass, and a PEP-preserving carrier
+// -neg_limit so the carrier never pinches off), an 8th-order Butterworth
+// brickwall low-pass followed by a look-ahead peak limiter (which turns the
+// audio down smoothly ahead of a peak that would pass either limit, in
+// place of the clipper this used to have: audio levelled for SSB then fits
+// AM as it is, without clipping), and a PEP-preserving carrier
 // (c = 1 / (1 + pos_limit)). Modes 1 (DSB) and 2 (SSB w/carrier) are
 // unchanged.
 
@@ -38,6 +41,9 @@ warren@wpratt.com
 
 #define AMMOD_HP_STAGES 2
 #define AMMOD_LP_STAGES 4
+#define AMMOD_LA_MAX 1024               // look-ahead, samples (2.5 ms at 384 kHz is 960)
+#define AMMOD_LA_SECONDS 0.0025
+#define AMMOD_LA_RELEASE_SECONDS 0.100
 
 typedef struct _ammod_bq {
   int run;
@@ -67,6 +73,14 @@ typedef struct _ammod {
   ammod_bq lp[AMMOD_LP_STAGES];
   double pe_b0, pe_b1, pe_a1;           // first-order pre-emphasis shelf
   double pe_x1, pe_y1;
+  // Look-ahead limiter: the signal runs la_len samples late; the gain is the
+  // mean of the last la_len values of la_g1, which drops at once to what a
+  // peak needs, holds for la_len samples, then recovers slowly. By the time
+  // a peak leaves the delay the mean has come down to exactly what it needs.
+  int la_len, la_idx, la_hold;
+  double la_g1, la_sum, la_rel;
+  double la_buf[AMMOD_LA_MAX];
+  double la_g[AMMOD_LA_MAX];
   CRITICAL_SECTION cs_peak;
   double peak_pos;                      // max m since last GetTXAAMModPeaks
   double peak_neg;                      // min m since last GetTXAAMModPeaks
