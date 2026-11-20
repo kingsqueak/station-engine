@@ -1057,15 +1057,44 @@ public partial class DspPipelineService : BackgroundService,
     // One secondary-receiver audio block read during a Tick, paired with its
     // sample count. Used to feed the N-receiver "Both" mixer without per-tick
     // allocation (the scratch span below is reused every tick).
+    // PanSide: which side of the receive pan the slice is on: +1 with RX1,
+    // -1 opposite it, 0 in the middle whatever the pan.
     internal readonly record struct RxAudioSlice(
-        float[] Buffer, int Count, int FadeInSamplesRemaining = 0, bool PanOpposite = false);
+        float[] Buffer, int Count, int FadeInSamplesRemaining = 0, int PanSide = 0);
 
-    // Receive pan between RX1 and RX2: -1 = RX1 hard left and RX2 hard right,
-    // 0 = both in both ears, +1 = RX1 hard right and RX2 hard left. The mono
-    // mix is unchanged; the pan rides beside it as a side signal
-    // (left = mix + side, right = mix - side) that only stereo outputs use.
-    // Held in memory only: the app sends it on connect and on every change.
+    // Receive pan between two groups of receivers: -1 = RX1's group hard left
+    // and the opposite group hard right, 0 = all in both ears, +1 the other
+    // way round. The mono mix is unchanged; the pan rides beside it as a side
+    // signal (left = mix + side, right = mix - side) that only stereo outputs
+    // use. Held in memory only: the app sends it on connect and on every change.
     private double _rxPan;
+    // Each receiver's side of the pan (+1 with RX1, -1 opposite, 0 centred).
+    // The app sets it to match its layout (the panadapters against each
+    // other, or one panadapter's two slices); without that, RX1 against RX2.
+    // Replaced whole, never changed in place.
+    private static readonly int[] DefaultRxPanSides = BuildRxPanSides(null);
+    private int[] _rxPanSides = DefaultRxPanSides;
+    public IReadOnlyList<int> RxPanSides => Volatile.Read(ref _rxPanSides);
+
+    private static int[] BuildRxPanSides(IReadOnlyList<int>? sides)
+    {
+        var built = new int[MaxReceivers];
+        built[0] = 1;
+        if (sides is null)
+        {
+            built[1] = -1;
+            return built;
+        }
+        for (int i = 1; i < built.Length && i < sides.Count; i++) built[i] = Math.Sign(sides[i]);
+        return built;
+    }
+
+    /// <summary>Set the pan and, when given, each receiver's side of it.</summary>
+    public double SetRxPan(double pan, IReadOnlyList<int>? sides)
+    {
+        if (sides is not null) Volatile.Write(ref _rxPanSides, BuildRxPanSides(sides));
+        return SetRxPan(pan);
+    }
     // The pan the last mixed block ended on (0 when it played centred). Audio tick only.
     private float _rxPanApplied;
     private readonly float[] _rxSideBuf = new float[AudioDrainCapacity];
@@ -9492,10 +9521,10 @@ public partial class DspPipelineService : BackgroundService,
         count = Math.Min(count, rx1.Length);
         if (count == 0 || availableStreams == 0) return 0;
 
-        // The pan's side signal: (RX1 - the opposite receiver) scaled like the
-        // mix, so at full pan left is RX1 alone and right is the other. A
-        // sample with only one of the pair stays centred, and the side follows
-        // the other receiver's open fade. The pan moves from the last
+        // The pan's side signal: (RX1's group - the opposite group) scaled
+        // like the mix, so at full pan left is RX1's group alone and right is
+        // the other. A sample with only one of the groups stays centred, and
+        // the side follows a receiver's open fade. The pan moves from the last
         // block's value to this one's along the block, so a turn of the
         // control or the pan coming on is a glide and not a step.
         float panStart = panFrom ?? pan;
@@ -9506,13 +9535,14 @@ public partial class DspPipelineService : BackgroundService,
             float sum = 0f;
             float contributorWeight = 0f;
             float diff = 0f;
-            float pairWeight = 0f;
+            float withWeight = 0f, oppositeWeight = 0f;
             bool rx1Here = rx1Contributes && i < rx1Count;
             if (rx1Here)
             {
                 sum = rx1[i];
                 diff = sum;
                 contributorWeight += 1f;
+                withWeight = 1f;
             }
             foreach (var s in slices)
             {
@@ -9521,18 +9551,23 @@ public partial class DspPipelineService : BackgroundService,
                 sum += s.Buffer[i];
                 float weight = RxFadeInGain(s.FadeInSamplesRemaining, SecondaryRxOpenFadeInSamples, i);
                 contributorWeight += weight;
-                if (s.PanOpposite)
+                if (s.PanSide < 0)
                 {
                     diff -= s.Buffer[i];
-                    pairWeight = weight;
+                    oppositeWeight = Math.Max(oppositeWeight, weight);
+                }
+                else if (s.PanSide > 0)
+                {
+                    diff += s.Buffer[i];
+                    withWeight = Math.Max(withWeight, weight);
                 }
             }
             // Keep a lone secondary's fade intact instead of dividing it away.
             float divisor = Math.Max(1f, contributorWeight);
             rx1[i] = sum / divisor;
             if (wantSide)
-                side[i] = rx1Here && pairWeight > 0f
-                    ? -(panStart + panStep * (i + 1)) * pairWeight * diff / divisor
+                side[i] = withWeight > 0f && oppositeWeight > 0f
+                    ? -(panStart + panStep * (i + 1)) * Math.Min(withWeight, oppositeWeight) * diff / divisor
                     : 0f;
         }
         return count;
@@ -10250,6 +10285,7 @@ public partial class DspPipelineService : BackgroundService,
         // (incl. muted) so no WDSP audio ring can back up and trip the rx-ingest
         // "consumer behind" selfcheck (IQ ingest stays lossless regardless).
         int mixSliceCount = 0;
+        int[] panSides = Volatile.Read(ref _rxPanSides);
         for (int ri = 1; ri < MaxReceivers; ri++)
         {
             if (!SecondaryReceiverEnabled(ri, state)) continue;
@@ -10322,7 +10358,7 @@ public partial class DspPipelineService : BackgroundService,
             if (IsReceiverMuted(state, ri)
                 || (suppressRxAudioForTx && !allowLocalRxDuringSuppression))
                 continue;
-            _mixSlices[mixSliceCount++] = new RxAudioSlice(sec.AudioBuf, n, fadeRemaining, PanOpposite: ri == 1);
+            _mixSlices[mixSliceCount++] = new RxAudioSlice(sec.AudioBuf, n, fadeRemaining, PanSide: panSides[ri]);
         }
 
         // RX1's own samples were already zeroed above when it is muted or TX
@@ -10331,7 +10367,7 @@ public partial class DspPipelineService : BackgroundService,
         float rxPan = (float)Volatile.Read(ref _rxPan);
         // True while _rxSideBuf holds this block's pan and is still in step
         // with every gain applied to the mix below.
-        bool rxPanned = (rxPan != 0f || _rxPanApplied != 0f) && mixSliceCount > 0 && !rx1Muted;
+        bool rxPanned = (rxPan != 0f || _rxPanApplied != 0f) && mixSliceCount > 0;
         audioSampleCount = MixRxAudioN(
             audioBuf, audioSampleCount, _mixSlices.AsSpan(0, mixSliceCount),
             rx1Muted: rx1Muted,
