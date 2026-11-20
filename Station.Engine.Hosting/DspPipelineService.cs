@@ -1047,6 +1047,11 @@ public partial class DspPipelineService : BackgroundService,
     // the receive thread reads a snapshot, so a published array never changes.
     private int[] _source0Sharers = [];
     private int[] _source1Sharers = [];
+    // Receiver 1's DDC centre as the state path last decided it. Receivers
+    // sharing its stream take their centre from here, not from
+    // _secondaryRx[1].LoHz, which a Tick still holding an older state
+    // snapshot can briefly write back.
+    private long _rx1StateCentreHz;
     private int _sampleRateHz;
 
     // One secondary-receiver audio block read during a Tick, paired with its
@@ -6065,7 +6070,7 @@ public partial class DspPipelineService : BackgroundService,
         // Tune RX2's DDC to its (CTUN-frozen) centre, not the raw dial, so the
         // panel holds still while VFO B roams under CTUN. The WDSP shift in
         // ApplyStateToRx2Channel moves the dial within that window.
-        UpdateRxLo(1, s);
+        Volatile.Write(ref _rx1StateCentreHz, UpdateRxLo(1, s));
         p2?.SetVfoBHz(_radio.ToHardwareFrequencyHz(
             _secondaryRx[1].LoHz));
 
@@ -7268,24 +7273,27 @@ public partial class DspPipelineService : BackgroundService,
     /// stand-in for RX1's band-button SetRadioLo, which RX2 has no UI for).
     /// Idempotent and deterministic, so it can run from several tick paths.
     /// </summary>
-    private void UpdateRxLo(int rxIndex, StateDto s)
+    // Returns the centre it settled on, for callers that go on to compute
+    // with it: re-reading rx.LoHz could see another thread's write.
+    private long UpdateRxLo(int rxIndex, StateDto s)
     {
         var rx = _secondaryRx[rxIndex];
         if (!SecondaryReceiverEnabled(rxIndex, s))
         {
             rx.LoInit = false; // re-enabling recentres from scratch
-            return;
+            return rx.LoHz;
         }
         // Shared stream: the centre is the source's DDC centre (receiver 0's
-        // is RadioLoHz; slot 0 of _secondaryRx is unused). Receiver 1's centre
-        // is already current here: OnRadioStateChanged updates it before any
-        // receiver from 2 up, and the display loop runs in index order.
+        // is RadioLoHz; slot 0 of _secondaryRx is unused). Receiver 1's is
+        // the one the state path decided, which OnRadioStateChanged records
+        // before it reaches any receiver from 2 up.
         if (ReceiverSourceIndex(s, rxIndex) is int source)
         {
-            rx.LoHz = source == 0 ? s.RadioLoHz : _secondaryRx[1].LoHz;
+            long sourceCentre = source == 0 ? s.RadioLoHz : Volatile.Read(ref _rx1StateCentreHz);
+            rx.LoHz = sourceCentre;
             rx.PannedAtDialHz = long.MinValue;
             rx.LoInit = true;
-            return;
+            return sourceCentre;
         }
         var (mode, vfoHz, _, _, _) = SecondaryRxParams(s, rxIndex);
         long effB = CwOffset.EffectiveLoHz(mode, vfoHz);
@@ -7293,12 +7301,15 @@ public partial class DspPipelineService : BackgroundService,
         // CTUN off and the display dragged (RequestSecondaryLo): keep the
         // dragged centre until the dial moves, like RX1's panadapter.
         bool dragged = !s.CtunEnabled && rx.LoInit && rx.PannedAtDialHz == effB;
-        if (!rx.LoInit || (!s.CtunEnabled && !dragged) || Math.Abs(effB - rx.LoHz) > edge)
+        long lo = rx.LoHz;
+        if (!rx.LoInit || (!s.CtunEnabled && !dragged) || Math.Abs(effB - lo) > edge)
         {
-            rx.LoHz = effB;
+            lo = effB;
+            rx.LoHz = lo;
             rx.PannedAtDialHz = long.MinValue;
         }
         rx.LoInit = true;
+        return lo;
     }
 
     // How far a dial may sit from a DDC centre and still be received well:
@@ -7423,7 +7434,8 @@ public partial class DspPipelineService : BackgroundService,
             engine.SetVfoHz(channelId, vfoHz);
             rx.AppliedVfoHz = vfoHz;
         }
-        UpdateRxLo(rxIndex, s);
+        long centreHz = UpdateRxLo(rxIndex, s);
+        if (rxIndex == 1) Volatile.Write(ref _rx1StateCentreHz, centreHz);
         // P2 true-DDC: the secondary's hardware DDC sits at rx.LoHz, so the WDSP
         // shift roams the dial within that window — EffectiveLoHz(vfo) − rx.LoHz.
         // Under CTUN off, rx.LoHz == EffectiveLoHz(vfo) so the shift is 0 and the
@@ -7433,14 +7445,14 @@ public partial class DspPipelineService : BackgroundService,
             s,
             mode,
             vfoHz,
-            rx.LoHz,
+            centreHz,
             protocol2: _p2Client is not null);
         // A shared-stream receiver tuned outside its source's span keeps its
         // dial and goes silent. The shift is not applied out there, so the
         // latch still holds the last in-span value and the right shift lands
         // as soon as the dial is back inside.
         bool outOfSpan = ReceiverSourceIndex(s, rxIndex) is not null
-            && Math.Abs(CwOffset.EffectiveLoHz(mode, vfoHz) - rx.LoHz) > DdcUsableHalfSpanHz(s);
+            && Math.Abs(CwOffset.EffectiveLoHz(mode, vfoHz) - centreHz) > DdcUsableHalfSpanHz(s);
         if (rx.OutOfSpan != outOfSpan) rx.OutOfSpan = outOfSpan;
         if (!outOfSpan && rx.AppliedCtunShiftHz != shiftHz)
         {
