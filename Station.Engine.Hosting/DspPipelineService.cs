@@ -3022,8 +3022,9 @@ public partial class DspPipelineService : BackgroundService,
         int baseDdc = SimpleHPSDR.Protocol2.Protocol2Client.RxBaseDdc(_radio.EffectiveBoardKind);
         bool diversitySource = state.Diversity is { Enabled: true, SourceRx: 1 };
 
-        // Same extras count OnRadioStateChanged pushes to the radio (not gated
-        // on RX2: the client composes RX2's DDC whenever extras exist).
+        // Same extras count OnRadioStateChanged pushes to the radio, idle DDCs
+        // included (not gated on RX2: the client composes RX2's DDC whenever
+        // extras exist).
         return P2WidebandZoomPolicy.ResolveDetailSource(
             baseDdc,
             state.Rx2Enabled,
@@ -3035,20 +3036,23 @@ public partial class DspPipelineService : BackgroundService,
             ddcCapacity: _p2Client?.RxDdcCapacity ?? SimpleHPSDR.Protocol2.Protocol2Client.StandardRxDdcCapacity);
     }
 
-    // RX3+ (full multi-DDC): the contiguous enabled receivers beyond RX2 in
-    // the canonical Receivers[] array — what SetExtraReceivers is given. A
-    // receiver fed from another receiver's stream has no DDC of its own, so
-    // it ends the run.
+    // RX3+ (full multi-DDC): how many DDCs beyond RX2 the radio streams, up to
+    // the highest enabled receiver with its own DDC in the canonical
+    // Receivers[] array — what SetExtraReceivers is given. A receiver inside
+    // that run that is off, or fed from another receiver's stream, keeps its
+    // DDC streaming but unused (an idle DDC).
     private static int OperatorExtraReceiverCount(StateDto s)
     {
         int extraCount = 0;
-        if (s.Receivers is { } rcvrs)
-            for (int ri = 2;
-                 ri < rcvrs.Count && ri < MaxReceivers && rcvrs[ri].Enabled && ReceiverSourceIndex(s, ri) is null;
-                 ri++)
-                extraCount++;
+        for (int ri = 2; ri < MaxReceivers; ri++)
+            if (ExtraReceiverUsesOwnDdc(s, ri)) extraCount = ri - 1;
         return extraCount;
     }
+
+    // Whether extra receiver ri (2..1+extra count) has its own DDC in use.
+    // The others inside the run are idle DDCs.
+    private static bool ExtraReceiverUsesOwnDdc(StateDto s, int ri) =>
+        s.Receivers is { } rcvrs && ri < rcvrs.Count && rcvrs[ri].Enabled && ReceiverSourceIndex(s, ri) is null;
 
     private bool ReconcileWidebandDetailSource(IDspEngine engine, StateDto state)
     {
@@ -6084,6 +6088,11 @@ public partial class DspPipelineService : BackgroundService,
             && _lastSentP2LoHw != long.MinValue && loHw != _lastSentP2LoHw
             && (ctunShiftForRetune != _appliedCtunOffsetHz || SharerOfRx0NeedsShift(s));
         _retuneFollowers.Clear();
+        // An idle DDC (RX2 off while extras stream, or an extra inside the run
+        // that is off) still counts in the radio's receive-filter choice, so
+        // it is parked on RX1's ADC and on the centre this pass gives RX1.
+        int extraCount = OperatorExtraReceiverCount(s);
+        bool rx2Idle = !s.Rx2Enabled && extraCount > 0;
         if (!alignRetune && !retuneStillScheduled)
         {
             // An older retune still waiting for its block boundary goes out
@@ -6091,10 +6100,14 @@ public partial class DspPipelineService : BackgroundService,
             // centre and leave the radio on the old one.
             if (Interlocked.Exchange(ref _alignedRetuneDeadlineTicks, 0) != 0)
                 FlushAlignedRetunes(Volatile.Read(ref _engine));
+            // Store an idle RX2's parked centre first, so the packet that
+            // moves RX1 already carries it.
+            if (rx2Idle) p2?.SetVfoBHz(loHw);
             p2?.SetVfoAHz(loHw);
             if (p2 is not null) _lastSentP2LoHw = loHw;
         }
-        p2?.SetReceiverAdcSources(ReceiverAdcSource(s, 0), ReceiverAdcSource(s, 1));
+        p2?.SetReceiverAdcSources(
+            ReceiverAdcSource(s, 0), ReceiverAdcSource(s, rx2Idle ? 0 : 1));
         var diversity = s.Diversity ?? new DiversityConfig();
         bool diversityEnabled = diversity.Enabled && BoardCapabilitiesTable
             .For(_radio.EffectiveBoardKind, _radio.EffectiveOrionMkIIVariant).RxAdcCount > 1;
@@ -6113,9 +6126,10 @@ public partial class DspPipelineService : BackgroundService,
         p2?.SetRx2Enabled(s.Rx2Enabled);
         // Tune RX2's DDC to its (CTUN-frozen) centre, not the raw dial, so the
         // panel holds still while VFO B roams under CTUN. The WDSP shift in
-        // ApplyStateToRx2Channel moves the dial within that window.
+        // ApplyStateToRx2Channel moves the dial within that window. An idle
+        // RX2 is parked on RX1's centre instead; its own centre is kept.
         Volatile.Write(ref _rx1StateCentreHz, UpdateRxLo(1, s));
-        p2?.SetVfoBHz(_radio.ToHardwareFrequencyHz(
+        p2?.SetVfoBHz(rx2Idle ? loHw : _radio.ToHardwareFrequencyHz(
             _secondaryRx[1].LoHz));
 
         // Protocol 2 has independent RX DDC and TX DUC NCOs. Always program the
@@ -6213,26 +6227,32 @@ public partial class DspPipelineService : BackgroundService,
         if (engine is null) return;
         int rx2Channel = EnsureSecondaryRxChannel(engine, 1, s);
 
-        // RX3+ (full multi-DDC): count the contiguous enabled receivers beyond
-        // RX2 from the canonical Receivers[] array, push their DDC enable + NCO
-        // tunes to the radio (P2 only), then ensure each WDSP channel. The
-        // RX1/RX2 wire path above is unchanged; extras never touch the PureSignal
-        // DDC0/1 pair (SetExtraReceivers uses the N-receiver composer which keeps
-        // the PS branch intact).
-        int extraCount = OperatorExtraReceiverCount(s);
+        // RX3+ (full multi-DDC): push the DDC run beyond RX2 (extraCount, up to
+        // the highest receiver on its own DDC) and each DDC's NCO to the radio
+        // (P2 only), then ensure each WDSP channel. An idle DDC inside the run
+        // is parked like an idle RX2 above and gets no channel. Extras never
+        // touch the PureSignal DDC0/1 pair (SetExtraReceivers uses the
+        // N-receiver composer which keeps the PS branch intact).
         if (p2 is not null)
         {
             if (extraCount > 0)
             {
                 var adc = new byte[extraCount];
-                for (int k = 0; k < extraCount; k++) adc[k] = s.Receivers![2 + k].AdcSource;
+                for (int k = 0; k < extraCount; k++)
+                    adc[k] = ExtraReceiverUsesOwnDdc(s, 2 + k)
+                        ? s.Receivers![2 + k].AdcSource
+                        : ReceiverAdcSource(s, 0);
                 p2.SetExtraReceivers(extraCount, adc);
                 for (int ri = 2; ri <= 1 + extraCount; ri++)
                 {
+                    // Off: forgets its centre, so it recentres on its own
+                    // dial when it comes back on.
                     UpdateRxLo(ri, s);
                     p2.SetExtraReceiverFreqHz(
                         ri,
-                        _radio.ToHardwareFrequencyHz(_secondaryRx[ri].LoHz));
+                        ExtraReceiverUsesOwnDdc(s, ri)
+                            ? _radio.ToHardwareFrequencyHz(_secondaryRx[ri].LoHz)
+                            : loHw);
                 }
             }
             else
@@ -8493,8 +8513,11 @@ public partial class DspPipelineService : BackgroundService,
 
         // Pipeline's raw per-receiver WDSP channel ids (not gated on health
         // emission like `channels` above). -1 = receiver not open. Lets the
-        // diagnostics distinguish "DDC streaming but no channel" (a wiring bug)
-        // from "channel open but starved".
+        // diagnostics distinguish "DDC streaming but no channel" from "channel
+        // open but starved". routedFrames rising with fedFrames flat is an idle
+        // DDC when the receiver is off (RX2 off while extras stream, or an
+        // extra below a higher one that is on); with the receiver on it is a
+        // wiring fault.
         var secondaryIds = new object[MaxReceivers - 1];
         for (int i = 1; i < MaxReceivers; i++)
             secondaryIds[i - 1] = new
