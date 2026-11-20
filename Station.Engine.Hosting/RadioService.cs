@@ -2416,10 +2416,9 @@ public sealed partial class RadioService : IDisposable
     /// store (RX3+) and re-projects + broadcasts so DspPipelineService opens the
     /// WDSP channel and the P2 client is told to stream the new DDC. Only the
     /// supplied fields change.
-    /// <para>Extra receivers are contiguous (the P2 DDC run has no gaps):
-    /// enabling RX(n) implicitly enables RX2..RX(n−1); disabling RX(n) disables
-    /// RX(n+1).. . Enabling any extra also turns RX2 on. This never touches the
-    /// PureSignal DDC0/1 pair.</para>
+    /// <para>Enabling or disabling an extra receiver changes only that
+    /// receiver. Receiver 3 on its own DDC needs RX2 on: enabling it while RX2
+    /// is off is refused. Extras never touch the PureSignal DDC0/1 pair.</para>
     /// </summary>
     public StateDto SetReceiver(
         int index,
@@ -2437,11 +2436,11 @@ public sealed partial class RadioService : IDisposable
         NrConfig? nr = null,
         int? sourceReceiver = null)
     {
-        // A refused shared-stream enable must change nothing, including the AGC
-        // and noise settings applied below before the main lock is taken.
+        // A refused enable must change nothing, including the AGC and noise
+        // settings applied below before the main lock is taken.
         if (index >= 2 && index < _extraReceivers.Length && enabled == true)
             lock (_sync)
-                if (SharedStreamEnableRefusedLocked(index, EnablingSourceLocked(index, sourceReceiver)))
+                if (ReceiverEnableRefusedLocked(index, EnablingSourceLocked(index, sourceReceiver)))
                     return Snapshot();
         if (agc is not null || agcTopDb is not null || autoAgcEnabled is not null)
             SetReceiverAgc(index, agc, agcTopDb, autoAgcEnabled);
@@ -2515,7 +2514,6 @@ public sealed partial class RadioService : IDisposable
                 nameof(index), index, $"receiver index out of range (0..{_extraReceivers.Length - 1})");
 
         bool enabling = enabled == true;
-        bool sharer;
         lock (_sync)
         {
             // Do not expose a receiver without a reachable hardware DDC.
@@ -2526,14 +2524,10 @@ public sealed partial class RadioService : IDisposable
             // The source is chosen when a receiver comes on; an enable sent to
             // a receiver that is already on never changes its kind.
             if (enabling) sourceReceiver = EnablingSourceLocked(index, sourceReceiver);
-            if (enabling && SharedStreamEnableRefusedLocked(index, sourceReceiver))
+            if (enabling && ReceiverEnableRefusedLocked(index, sourceReceiver))
                 return Snapshot();
 
             var e = _extraReceivers[index];
-            // A receiver fed from another receiver's stream has no DDC of its
-            // own, so it neither fills the DDC run below it, cascades above it
-            // when disabled, nor needs RX2's DDC turned on.
-            sharer = enabling ? sourceReceiver is not null : e.SourceReceiver is not null;
             if (vfoHz is long v) e.VfoHz = ClampTuningFrequency(v);
             if (adcSource is byte a) e.AdcSource = a;
             if (mode is RxMode m) e.Mode = m;
@@ -2548,32 +2542,19 @@ public sealed partial class RadioService : IDisposable
             {
                 e.Enabled = en;
                 e.SourceReceiver = en ? sourceReceiver : null;
-                if (!sharer)
-                {
-                    if (en)
-                        for (int j = 2; j < index; j++) _extraReceivers[j].Enabled = true;       // contiguity below
-                    else
-                        for (int j = index + 1; j < _extraReceivers.Length; j++) _extraReceivers[j].Enabled = false; // cascade above
-                }
             }
         }
         // Re-project + broadcast (StateChanged → DspPipelineService opens channels
         // and pushes SetExtraReceivers/SetExtraReceiverFreqHz to the radio).
-        // Enabling an extra DDC requires RX2 (no DDC gap), so turn it on. If the
-        // disable cascade just removed the receiver the operator was transmitting
+        // If this just turned off the receiver the operator was transmitting
         // on, fall the TX target back to RX1 (never key a receiver that stopped
         // streaming).
         Mutate(s =>
-        {
-            var next = enabling && !sharer && !s.Rx2Enabled ? s with { Rx2Enabled = true } : s;
-            if (next.TxReceiverIndex >= 2 &&
-                (next.TxReceiverIndex >= _extraReceivers.Length
-                 || _extraReceivers[next.TxReceiverIndex] is not { Enabled: true }))
-            {
-                next = next with { TxReceiverIndex = 0, TxVfo = TxVfo.A };
-            }
-            return next;
-        });
+            s.TxReceiverIndex >= 2 &&
+            (s.TxReceiverIndex >= _extraReceivers.Length
+             || _extraReceivers[s.TxReceiverIndex] is not { Enabled: true })
+                ? s with { TxReceiverIndex = 0, TxVfo = TxVfo.A }
+                : s);
         return Snapshot();
     }
 
@@ -2586,15 +2567,17 @@ public sealed partial class RadioService : IDisposable
 
     // Caller holds _sync. Shared-stream receivers (index 2 or 3, fed from
     // receiver 0 or 1) and extra receivers with their own DDC never run
-    // together, and a receiver fed from RX2's stream needs RX2 on. The slot
-    // being enabled is not counted against itself, so it may change kind.
-    private bool SharedStreamEnableRefusedLocked(int index, int? sourceReceiver)
+    // together. A receiver fed from RX2's stream needs RX2 on, and so does
+    // receiver 3 on its own DDC. The slot being enabled is not counted
+    // against itself, so it may change kind.
+    private bool ReceiverEnableRefusedLocked(int index, int? sourceReceiver)
     {
         if (sourceReceiver is int source)
         {
             if (index is not (2 or 3) || source is not (0 or 1)) return true;
             if (source == 1 && !_state.Rx2Enabled) return true;
         }
+        else if (index == 3 && !_state.Rx2Enabled) return true;
         for (int j = 2; j < _extraReceivers.Length; j++)
         {
             if (j == index || _extraReceivers[j] is not { Enabled: true } other) continue;
@@ -2624,20 +2607,23 @@ public sealed partial class RadioService : IDisposable
             var next = WithRx2(
                 s with { Rx2Enabled = nextEnabled, Rx2AudioMode = nextMode },
                 r => r with { VfoHz = nextVfoB, AfGainDb = nextGain });
-            // Receivers fed from RX2's stream go off with it.
-            bool txOnRx2Sharer = false;
+            // Receivers fed from RX2's stream go off with it, and so does
+            // receiver 3 on its own DDC.
+            bool txOnRx2Dependent = false;
             if (!nextEnabled)
                 for (int i = 2; i < _extraReceivers.Length; i++)
                 {
-                    if (_extraReceivers[i] is not { Enabled: true, SourceReceiver: 1 } sharer) continue;
-                    sharer.Enabled = false;
-                    sharer.SourceReceiver = null;
-                    txOnRx2Sharer |= next.TxReceiverIndex == i;
+                    if (_extraReceivers[i] is not { Enabled: true } dependent
+                        || (dependent.SourceReceiver != 1 && !(i == 3 && dependent.SourceReceiver is null)))
+                        continue;
+                    dependent.Enabled = false;
+                    dependent.SourceReceiver = null;
+                    txOnRx2Dependent |= next.TxReceiverIndex == i;
                 }
             // A hidden receiver must never remain the TX target after MULTI RX
             // collapses. RX3+ already enforce this in SetReceiver; RX2 needs the
             // same invariant because its legacy setter follows a separate path.
-            return !nextEnabled && (next.TxReceiverIndex == 1 || txOnRx2Sharer)
+            return !nextEnabled && (next.TxReceiverIndex == 1 || txOnRx2Dependent)
                 ? next with { TxReceiverIndex = 0, TxVfo = TxVfo.A }
                 : next;
         });
@@ -8049,10 +8035,8 @@ public sealed partial class RadioService : IDisposable
         // Extra DDC receivers (RX3+). Ordinary P1 deliberately projects no
         // extras because its current ingest path only supplies RX1/RX2.
         // SampleRate is the shared capture rate for now. Rows stay positional
-        // (row k is receiver k) up to the highest enabled extra. Receivers with
-        // their own DDC are always contiguous (the P2 multi-DDC path has no DDC
-        // gaps); a shared-stream receiver can sit above a disabled slot, which
-        // is then projected as a disabled row.
+        // (row k is receiver k) up to the highest enabled extra; a disabled
+        // slot below it is projected as a disabled row.
         int lastEnabled = 1;
         for (int i = 2; _activeClient is null &&
             i < Math.Min(_extraReceivers.Length, EffectiveMaxReceivers); i++)
