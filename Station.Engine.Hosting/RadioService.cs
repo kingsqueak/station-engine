@@ -293,6 +293,9 @@ public sealed partial class RadioService : IDisposable
         public double AgcTopDb = 90.0;
         public bool AutoAgcEnabled;
         public double AgcOffsetDb;
+        // Receiver (0 or 1) whose DDC stream this one is fed from, or null for
+        // its own DDC. Set when the receiver is turned on; null while it is off.
+        public int? SourceReceiver;
     }
     private readonly ExtraReceiver[] _extraReceivers = CreateExtraReceivers();
     // Current SimpleHPSDR ordinary Protocol-1 ingest decodes one DDC stream and fans it
@@ -2424,8 +2427,15 @@ public sealed partial class RadioService : IDisposable
         int? zoomLevel = null,
         NrMode? nrMode = null,
         AgcConfig? agc = null, double? agcTopDb = null, bool? autoAgcEnabled = null,
-        NrConfig? nr = null)
+        NrConfig? nr = null,
+        int? sourceReceiver = null)
     {
+        // A refused shared-stream enable must change nothing, including the AGC
+        // and noise settings applied below before the main lock is taken.
+        if (index >= 2 && index < _extraReceivers.Length && enabled == true)
+            lock (_sync)
+                if (SharedStreamEnableRefusedLocked(index, EnablingSourceLocked(index, sourceReceiver)))
+                    return Snapshot();
         if (agc is not null || agcTopDb is not null || autoAgcEnabled is not null)
             SetReceiverAgc(index, agc, agcTopDb, autoAgcEnabled);
         if (nr is not null)
@@ -2498,6 +2508,7 @@ public sealed partial class RadioService : IDisposable
                 nameof(index), index, $"receiver index out of range (0..{_extraReceivers.Length - 1})");
 
         bool enabling = enabled == true;
+        bool sharer;
         lock (_sync)
         {
             // Do not expose a receiver without a reachable hardware DDC.
@@ -2505,8 +2516,17 @@ public sealed partial class RadioService : IDisposable
             // configuration can be used after reconnecting a higher-capacity board.
             if (enabling && index >= EffectiveMaxReceivers)
                 return Snapshot();
+            // The source is chosen when a receiver comes on; an enable sent to
+            // a receiver that is already on never changes its kind.
+            if (enabling) sourceReceiver = EnablingSourceLocked(index, sourceReceiver);
+            if (enabling && SharedStreamEnableRefusedLocked(index, sourceReceiver))
+                return Snapshot();
 
             var e = _extraReceivers[index];
+            // A receiver fed from another receiver's stream has no DDC of its
+            // own, so it neither fills the DDC run below it, cascades above it
+            // when disabled, nor needs RX2's DDC turned on.
+            sharer = enabling ? sourceReceiver is not null : e.SourceReceiver is not null;
             if (vfoHz is long v) e.VfoHz = ClampTuningFrequency(v);
             if (adcSource is byte a) e.AdcSource = a;
             if (mode is RxMode m) e.Mode = m;
@@ -2520,10 +2540,14 @@ public sealed partial class RadioService : IDisposable
             if (enabled is bool en)
             {
                 e.Enabled = en;
-                if (en)
-                    for (int j = 2; j < index; j++) _extraReceivers[j].Enabled = true;       // contiguity below
-                else
-                    for (int j = index + 1; j < _extraReceivers.Length; j++) _extraReceivers[j].Enabled = false; // cascade above
+                e.SourceReceiver = en ? sourceReceiver : null;
+                if (!sharer)
+                {
+                    if (en)
+                        for (int j = 2; j < index; j++) _extraReceivers[j].Enabled = true;       // contiguity below
+                    else
+                        for (int j = index + 1; j < _extraReceivers.Length; j++) _extraReceivers[j].Enabled = false; // cascade above
+                }
             }
         }
         // Re-project + broadcast (StateChanged → DspPipelineService opens channels
@@ -2534,7 +2558,7 @@ public sealed partial class RadioService : IDisposable
         // streaming).
         Mutate(s =>
         {
-            var next = enabling && !s.Rx2Enabled ? s with { Rx2Enabled = true } : s;
+            var next = enabling && !sharer && !s.Rx2Enabled ? s with { Rx2Enabled = true } : s;
             if (next.TxReceiverIndex >= 2 &&
                 (next.TxReceiverIndex >= _extraReceivers.Length
                  || _extraReceivers[next.TxReceiverIndex] is not { Enabled: true }))
@@ -2544,6 +2568,32 @@ public sealed partial class RadioService : IDisposable
             return next;
         });
         return Snapshot();
+    }
+
+    // Caller holds _sync. The source an enabling request gives this receiver:
+    // the requested one when it is off, its current one when it is already on
+    // (so a repeated enable that omits the source cannot quietly turn a
+    // shared-stream receiver into one that wants its own DDC).
+    private int? EnablingSourceLocked(int index, int? requested) =>
+        _extraReceivers[index] is { Enabled: true } on ? on.SourceReceiver : requested;
+
+    // Caller holds _sync. Shared-stream receivers (index 2 or 3, fed from
+    // receiver 0 or 1) and extra receivers with their own DDC never run
+    // together, and a receiver fed from RX2's stream needs RX2 on. The slot
+    // being enabled is not counted against itself, so it may change kind.
+    private bool SharedStreamEnableRefusedLocked(int index, int? sourceReceiver)
+    {
+        if (sourceReceiver is int source)
+        {
+            if (index is not (2 or 3) || source is not (0 or 1)) return true;
+            if (source == 1 && !_state.Rx2Enabled) return true;
+        }
+        for (int j = 2; j < _extraReceivers.Length; j++)
+        {
+            if (j == index || _extraReceivers[j] is not { Enabled: true } other) continue;
+            if ((other.SourceReceiver is null) != (sourceReceiver is null)) return true;
+        }
+        return false;
     }
 
     public StateDto SetRx2(Rx2SetRequest req)
@@ -2567,10 +2617,20 @@ public sealed partial class RadioService : IDisposable
             var next = WithRx2(
                 s with { Rx2Enabled = nextEnabled, Rx2AudioMode = nextMode },
                 r => r with { VfoHz = nextVfoB, AfGainDb = nextGain });
+            // Receivers fed from RX2's stream go off with it.
+            bool txOnRx2Sharer = false;
+            if (!nextEnabled)
+                for (int i = 2; i < _extraReceivers.Length; i++)
+                {
+                    if (_extraReceivers[i] is not { Enabled: true, SourceReceiver: 1 } sharer) continue;
+                    sharer.Enabled = false;
+                    sharer.SourceReceiver = null;
+                    txOnRx2Sharer |= next.TxReceiverIndex == i;
+                }
             // A hidden receiver must never remain the TX target after MULTI RX
             // collapses. RX3+ already enforce this in SetReceiver; RX2 needs the
             // same invariant because its legacy setter follows a separate path.
-            return !nextEnabled && next.TxReceiverIndex == 1
+            return !nextEnabled && (next.TxReceiverIndex == 1 || txOnRx2Sharer)
                 ? next with { TxReceiverIndex = 0, TxVfo = TxVfo.A }
                 : next;
         });
@@ -7989,8 +8049,10 @@ public sealed partial class RadioService : IDisposable
         {
             var e = _extraReceivers[i];
             if (e is null || !e.Enabled) break;
+            // A shared-stream receiver's samples come from its source's ADC.
             list.Add(new ReceiverDto(
-                Index: i, Enabled: true, AdcSource: e.AdcSource,
+                Index: i, Enabled: true,
+                AdcSource: e.SourceReceiver is int source ? ReceiverAdcSource(s, source) : e.AdcSource,
                 VfoHz: e.VfoHz, Mode: e.Mode,
                 FilterLowHz: e.FilterLowHz, FilterHighHz: e.FilterHighHz,
                 FilterPresetName: e.FilterPresetName,
@@ -7998,7 +8060,8 @@ public sealed partial class RadioService : IDisposable
                 Muted: e.Muted, SplitEnabled: e.SplitEnabled,
                 TxVfoHz: e.TxVfoHz, ZoomLevel: e.ZoomLevel, NrMode: e.NrMode,
                 Agc: e.Agc, AgcTopDb: e.AgcTopDb, AutoAgcEnabled: e.AutoAgcEnabled, AgcOffsetDb: e.AgcOffsetDb,
-                Nr: NormalizeNrConfig(e.Nr with { NrMode = e.NrMode })));
+                Nr: NormalizeNrConfig(e.Nr with { NrMode = e.NrMode }),
+                SourceReceiver: e.SourceReceiver));
         }
         return list;
     }

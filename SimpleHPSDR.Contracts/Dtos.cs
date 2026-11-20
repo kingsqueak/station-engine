@@ -1793,8 +1793,9 @@ public sealed record ReceiverSetRequest(
     // set only through NrMode above. Index 0 updates StateDto.Nr.
     NrConfig? Nr = null,
     // Shared-stream receiver (index 2 or 3 only): feed it from receiver 0's or
-    // 1's DDC stream, not a DDC of its own. Read on every Enabled: true
-    // request, where null means "own DDC"; ignored otherwise.
+    // 1's DDC stream, not a DDC of its own. Read when Enabled: true turns the
+    // receiver on, where null means "own DDC"; ignored otherwise (turn it off
+    // and on again to change it).
     int? SourceReceiver = null);
 
 /// <summary>Operator settings for the POTA/SOTA Spots feature. Persisted in

@@ -45,6 +45,8 @@ public static class ReceiverControlEndpoints
                 return Results.BadRequest(new { error = "AGC gain must be finite" });
             if (req.Nr is { } nr && (!Enum.IsDefined(nr.NbMode) || !double.IsFinite(nr.NbThreshold)))
                 return Results.BadRequest(new { error = "invalid noise configuration" });
+            if (req.SourceReceiver is int source && (index is not (2 or 3) || source is not (0 or 1)))
+                return Results.BadRequest(new { error = "only receivers 2 and 3 can share receiver 0's or 1's stream" });
 
             log.LogInformation(
                 "api.receivers index={Index} enabled={Enabled} vfoHz={VfoHz} adc={Adc} mode={Mode}",
@@ -66,7 +68,8 @@ public static class ReceiverControlEndpoints
                 zoomLevel: req.ZoomLevel,
                 nrMode: req.NrMode,
                 agc: req.Agc, agcTopDb: req.AgcTopDb, autoAgcEnabled: req.AutoAgcEnabled,
-                nr: req.Nr));
+                nr: req.Nr,
+                sourceReceiver: req.SourceReceiver));
         });
 
         endpoints.MapPost("/api/receivers/{index:int}/mute", (
