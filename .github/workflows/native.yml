@@ -14,6 +14,9 @@ name: Native libraries
 on:
   workflow_dispatch:
   push:
+    # Branch pushes only. GitHub does not apply the path filter to a pushed
+    # tag, so without this every release tag started a full run of its own.
+    branches: ['**']
     paths:
       - 'native/miniaudio/**'
       - 'native/radae/**'
