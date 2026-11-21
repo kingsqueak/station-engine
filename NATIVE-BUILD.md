@@ -88,13 +88,15 @@ cp native/build-x64/libwdsp.dylib SimpleHPSDR.Dsp/runtimes/osx-x64/native/libwds
 The committed WDSP libraries come from CI, built on clean machines, never from
 a developer's machine. The `Native libraries` workflow
 (`.github/workflows/native.yml`) builds all six whenever `native/wdsp`,
-`native/rnnoise` or `native/libspecbleach` changes: linux-x64 and linux-arm64
+`native/rnnoise` or `native/libspecbleach` changes on the `simplehpsdr` branch
+(on any other branch, start it by hand): linux-x64 and linux-arm64
 (Debian bookworm, `$ORIGIN` runpath, the committed FFTW 3.3.10 beside it),
 win-x64 and win-arm64 (the Visual Studio ClangCL and vcpkg recipe below), and
 osx-arm64 (macOS 14.0 minimum) and osx-x64 (macOS 12.0 minimum), both linking
 the committed FFTW through `@loader_path`. Copy all six `wdsp-<rid>` artifacts
 of one run into `SimpleHPSDR.Dsp/runtimes/<rid>/native/` and commit them
-together. The recipes here are for a local test build only; for macOS arm64
+together; that commit does not start another run. The recipes here are for a
+local test build only; for macOS arm64
 add `-DCMAKE_OSX_DEPLOYMENT_TARGET=14.0`, or the library targets the build
 machine's macOS.
 

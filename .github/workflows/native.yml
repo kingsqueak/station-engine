@@ -14,9 +14,13 @@ name: Native libraries
 on:
   workflow_dispatch:
   push:
-    # Branch pushes only. GitHub does not apply the path filter to a pushed
-    # tag, so without this every release tag started a full run of its own.
-    branches: ['**']
+    # Only the simplehpsdr branch: a run on any other branch is started by
+    # hand. Naming a branch also keeps pushed tags out, which GitHub does not
+    # hold to the path filter, so every release tag used to start a full run.
+    branches: [simplehpsdr]
+    # Only what a build is made from. The committed wdspWisdom01.seed is made
+    # by a run, so committing it does not start another; the wisdom job checks
+    # the committed file on every run.
     paths:
       - 'native/miniaudio/**'
       - 'native/radae/**'
@@ -25,8 +29,13 @@ on:
       - 'native/rnnoise/**'
       - 'native/libspecbleach/**'
       - 'SimpleHPSDR.Dsp/runtimes/linux-arm64/native/libfftw3*'
-      - 'SimpleHPSDR.Dsp/runtimes/linux-arm64/native/wdspWisdom01.seed'
       - '.github/workflows/native.yml'
+
+# One run per branch: a newer push or a second start by hand replaces the run
+# still going, so two never build the same branch side by side.
+concurrency:
+  group: native-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   # WDSP links the committed FFTW (libfftw3.so.3 / libfftw3f.so.3, FFTW 3.3.10,
