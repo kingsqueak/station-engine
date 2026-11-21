@@ -8266,12 +8266,21 @@ public partial class DspPipelineService : BackgroundService,
     // window is safe even though it isn't atomic with _channelId.
     private void RerateRxChannelForP2(int rateHz)
     {
-        var p2 = _p2Client;
-        if (p2 is null) return; // disconnected between post and drain
-        var engine = Volatile.Read(ref _engine);
-        if (engine is null) return;
-
-        RerateRxChannelForP2Locked(p2, engine, rateHz);
+        IDspEngine? engine;
+        // Under the engine lock, as every other open and close of a receiver
+        // channel is. A settings change on another thread (the app sends its
+        // zoom right after the rate) otherwise finds a secondary's channel
+        // closed part-way through here and opens one of its own: two channels
+        // for one receiver, and the one that stays is left at WDSP's defaults
+        // (USB, 0 dB AF) because the other already took the settings.
+        lock (_engineLock)
+        {
+            var p2 = _p2Client;
+            if (p2 is null) return; // disconnected between post and drain
+            engine = Volatile.Read(ref _engine);
+            if (engine is null) return;
+            RerateRxChannelForP2Locked(p2, engine, rateHz);
+        }
         ReconcileCwNoiseReductionAfterRerate(engine);
     }
 
