@@ -5787,6 +5787,7 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
         // tone and injected-audio bypass skip it so those paths stay
         // bit-identical; disabled DEXP costs one volatile read.
         ProcessDexpBlock(iin, skipTxAudioPlugins);
+        ProcessSimpleExpanderBlock(iin, skipTxAudioPlugins);
 
         Span<float> qin = stackalloc float[inSize];
         qin.Clear();

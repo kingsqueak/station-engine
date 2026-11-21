@@ -533,6 +533,53 @@ public sealed class DspSettingsStore : IDisposable
         }
     }
 
+    // SimpleExpander: stored like DEXP, nullable scalars behind a set marker.
+    public SimpleExpanderConfig? GetSimpleExpander(string profileId = "default")
+    {
+        var e = _entries.FindOne(x => x.ProfileId == profileId);
+        if (e is null || e.SimpleExpanderSet is not true) return null;
+        var def = SimpleExpanderConfig.Default;
+        return new SimpleExpanderConfig(
+            Enabled: e.SimpleExpanderEnabled ?? def.Enabled,
+            ThresholdDb: e.SimpleExpanderThresholdDb ?? def.ThresholdDb,
+            Ratio: e.SimpleExpanderRatio ?? def.Ratio,
+            RangeDb: e.SimpleExpanderRangeDb ?? def.RangeDb,
+            AttackMs: e.SimpleExpanderAttackMs ?? def.AttackMs,
+            HoldMs: e.SimpleExpanderHoldMs ?? def.HoldMs,
+            ReleaseMs: e.SimpleExpanderReleaseMs ?? def.ReleaseMs);
+    }
+
+    public void Upsert(SimpleExpanderConfig config, string profileId = "default")
+    {
+        ArgumentNullException.ThrowIfNull(config);
+        var existing = _entries.FindOne(x => x.ProfileId == profileId);
+        bool insert = existing is null;
+        if (existing is null)
+        {
+            var nrSeed = new NrConfig();
+            existing = new DspSettingsEntry
+            {
+                ProfileId = profileId,
+                NrMode = nrSeed.NrMode,
+                AnfEnabled = nrSeed.AnfEnabled,
+                SnbEnabled = nrSeed.SnbEnabled,
+                NbpNotchesEnabled = nrSeed.NbpNotchesEnabled,
+                NbMode = nrSeed.NbMode,
+                NbThreshold = nrSeed.NbThreshold,
+            };
+        }
+        existing.SimpleExpanderSet = true;
+        existing.SimpleExpanderEnabled = config.Enabled;
+        existing.SimpleExpanderThresholdDb = config.ThresholdDb;
+        existing.SimpleExpanderRatio = config.Ratio;
+        existing.SimpleExpanderRangeDb = config.RangeDb;
+        existing.SimpleExpanderAttackMs = config.AttackMs;
+        existing.SimpleExpanderHoldMs = config.HoldMs;
+        existing.SimpleExpanderReleaseMs = config.ReleaseMs;
+        existing.UpdatedUtc = DateTime.UtcNow;
+        if (insert) _entries.Insert(existing); else _entries.Update(existing);
+    }
+
     private static void ApplyDexpToEntry(DspSettingsEntry e, DexpConfig c)
     {
         e.DexpSet = true;
@@ -1125,6 +1172,14 @@ public sealed class DspSettingsEntry
     public bool? TxPhaseRotatorAutoMode { get; set; }
     // DEXP (downward expander / noise gate). DexpSet null on legacy rows →
     // GetDexp() returns null → RadioService uses DexpConfig.Default (OFF).
+    public bool? SimpleExpanderSet { get; set; }
+    public bool? SimpleExpanderEnabled { get; set; }
+    public double? SimpleExpanderThresholdDb { get; set; }
+    public double? SimpleExpanderRatio { get; set; }
+    public double? SimpleExpanderRangeDb { get; set; }
+    public double? SimpleExpanderAttackMs { get; set; }
+    public double? SimpleExpanderHoldMs { get; set; }
+    public double? SimpleExpanderReleaseMs { get; set; }
     public bool? DexpSet { get; set; }
     public bool? DexpEnabled { get; set; }
     public double? DexpThresholdDbv { get; set; }

@@ -177,6 +177,16 @@ public partial class DspPipelineService : BackgroundService,
         }
     }
 
+    // SimpleHPSDR: the MON preview idle silencer (TxAudioIngest), operator's choice.
+    private volatile bool _txMonitorIdleSilence;
+    public bool TxMonitorIdleSilence => _txMonitorIdleSilence;
+    public bool SetTxMonitorIdleSilence(bool on)
+    {
+        _txMonitorSettingsStore?.SetIdleSilence(on);
+        _txMonitorIdleSilence = on;
+        return on;
+    }
+
     internal struct RxAudioLevelerState
     {
         public double GainDb;
@@ -1660,6 +1670,7 @@ public partial class DspPipelineService : BackgroundService,
     // engine also caches the config itself so a push before TXA opens lands
     // when the dexp instance is created.
     private DexpConfig _appliedDexp = DexpConfig.Default;
+    private SimpleExpanderConfig _appliedSimpleExpander = SimpleExpanderConfig.Default;
 
     // RX front-end (step attenuator + Mercury preamp). Mirrored to a live
     // Protocol2Client when the value moves; on P1 these go through
@@ -2066,6 +2077,7 @@ public partial class DspPipelineService : BackgroundService,
         _txMonitorSettingsStore = txMonitorSettingsStore;
         _txMonitorVolumeDb = txMonitorSettingsStore?.VolumeDb
             ?? TxMonitorSettingsStore.DefaultVolumeDb;
+        _txMonitorIdleSilence = txMonitorSettingsStore?.IdleSilence ?? false;
         _sMeterCalibrationStore = sMeterCalibrationStore;
         if (_sMeterCalibrationStore is not null)
         {
@@ -3891,6 +3903,15 @@ public partial class DspPipelineService : BackgroundService,
         lock (_engineLock)
         {
             return CurrentEngine?.GetDexpMeter() ?? DexpMeterDto.Inactive;
+        }
+    }
+
+    /// <summary>Live SimpleExpander reading from the current engine.</summary>
+    public virtual SimpleExpanderMeterDto GetSimpleExpanderMeter()
+    {
+        lock (_engineLock)
+        {
+            return CurrentEngine?.GetSimpleExpanderMeter() ?? SimpleExpanderMeterDto.Inactive;
         }
     }
 
@@ -6745,6 +6766,12 @@ public partial class DspPipelineService : BackgroundService,
             engine.SetDexpConfig(dexp);
             _appliedDexp = dexp;
         }
+        var simpleExpander = s.SimpleExpander ?? SimpleExpanderConfig.Default;
+        if (resync || simpleExpander != _appliedSimpleExpander)
+        {
+            engine.SetSimpleExpanderConfig(simpleExpander);
+            _appliedSimpleExpander = simpleExpander;
+        }
 
         // ---- RX step attenuator (operator + auto-ATT offset) -----------
         // Issue #126. Mirror RadioService's effective-atten composition
@@ -7160,6 +7187,8 @@ public partial class DspPipelineService : BackgroundService,
         engine.SetCfcConfig(cfc);
         var dexp = s.Dexp ?? DexpConfig.Default;
         engine.SetDexpConfig(dexp);
+        var simpleExpander = s.SimpleExpander ?? SimpleExpanderConfig.Default;
+        engine.SetSimpleExpanderConfig(simpleExpander);
         // Manual notches: feed the LO first (notch positioning reference), then
         // re-apply the operator's notch set onto the fresh engine. A reconnect
         // builds a brand-new engine whose notch DB is empty; RadioService holds
@@ -7205,6 +7234,7 @@ public partial class DspPipelineService : BackgroundService,
         _appliedTxPhaseRotator = txPhaseRotator;
         _appliedCfc = cfc;
         _appliedDexp = dexp;
+        _appliedSimpleExpander = simpleExpander;
         _appliedRxBandpassWindow = s.RxFilterWindow;
         _appliedTxBandpassWindow = s.TxFilterWindow;
         _appliedRxFilterPhase = s.RxFilterPhase;

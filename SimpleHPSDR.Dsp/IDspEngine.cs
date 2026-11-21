@@ -634,6 +634,17 @@ public interface IDspEngine : IDisposable
     /// detector runs on a copy of the mic while DEXP is OFF) for ~2 s.</summary>
     DexpMeterDto GetDexpMeter() => DexpMeterDto.Inactive;
 
+    // ----------------- SimpleExpander (managed downward expander) ---------
+    // Runs on the TX mic block next to DEXP, as its alternative. Default
+    // no-op for engines without a mic path.
+
+    /// <summary>Apply the operator SimpleExpander configuration (clamped).</summary>
+    void SetSimpleExpanderConfig(SimpleExpanderConfig cfg) { }
+
+    /// <summary>Live SimpleExpander reading. Polling keeps the detector
+    /// running for ~2 s while the expander is OFF.</summary>
+    SimpleExpanderMeterDto GetSimpleExpanderMeter() => SimpleExpanderMeterDto.Inactive;
+
     // ----------------- TX Monitor (preview path, issue #106 follow-up) ----
     // Lets the operator hear the post-bandpass / post-CFIR TX audio on a local
     // audio sink — with or without keying — so they can dial in the

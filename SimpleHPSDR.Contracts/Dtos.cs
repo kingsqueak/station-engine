@@ -1656,7 +1656,11 @@ public sealed record StateDto(
     FmConfig? Fm = null,
     LegacyTxEqConfig? LegacyTxEq = null,
     // SimpleHPSDR: the operator's receive EQ for RX1 and RX2. Null = RxEqConfig.Default.
-    RxEqConfig? RxEq = null);
+    RxEqConfig? RxEq = null,
+    // SimpleExpander: the managed downward expander on the TX mic block, the
+    // alternative to DEXP. Null = SimpleExpanderConfig.Default (OFF). Only one
+    // of the two is ever enabled; RadioService turns the other off.
+    SimpleExpanderConfig? SimpleExpander = null);
 
 /// <summary>Canonical CW constants shared between backend and wire DTOs.
 /// Single source of truth — CwOffset (server-side) and StateDto both
@@ -3277,6 +3281,78 @@ public sealed record DexpConfig(
 }
 
 public sealed record DexpSetRequest(DexpConfig Config);
+
+/// <summary>SimpleExpander: a downward expander on the TX mic block, ahead of
+/// TXA, offered next to WDSP's DEXP gate. Below <c>ThresholdDb</c> the signal
+/// is turned down by <c>Ratio</c> (each dB under the threshold becomes Ratio
+/// dB), through a soft knee, to at most <c>RangeDb</c> of cut. The level is
+/// the mic's peak envelope after mic gain, in dB below full scale, so the
+/// threshold sits on the same scale as the TX mic meter. No look-ahead: it
+/// adds no delay to the TX chain. Setting changes never reset its state.</summary>
+public sealed record SimpleExpanderConfig(
+    bool Enabled,
+    double ThresholdDb,
+    double Ratio,
+    double RangeDb,
+    double AttackMs,
+    double HoldMs,
+    double ReleaseMs)
+{
+    public const double MinThresholdDb = -80.0;
+    public const double MaxThresholdDb = 0.0;
+    public const double MinRatio = 1.0;
+    public const double MaxRatio = 10.0;
+    public const double MinRangeDb = 0.0;
+    public const double MaxRangeDb = 60.0;
+    public const double MinAttackMs = 0.5;
+    public const double MaxAttackMs = 100.0;
+    public const double MinHoldMs = 0.0;
+    public const double MaxHoldMs = 2000.0;
+    public const double MinReleaseMs = 10.0;
+    public const double MaxReleaseMs = 2000.0;
+
+    public static SimpleExpanderConfig Default => new(
+        Enabled: false,
+        ThresholdDb: -34.0,
+        Ratio: 3.0,
+        RangeDb: 30.0,
+        AttackMs: 3.0,
+        HoldMs: 225.0,
+        ReleaseMs: 225.0);
+
+    /// <summary>Clamp every value into its range; non-finite values fall back
+    /// to the default.</summary>
+    public SimpleExpanderConfig Clamped()
+    {
+        var d = Default;
+        static double C(double v, double min, double max, double fallback) =>
+            double.IsFinite(v) ? Math.Clamp(v, min, max) : fallback;
+        return this with
+        {
+            ThresholdDb = C(ThresholdDb, MinThresholdDb, MaxThresholdDb, d.ThresholdDb),
+            Ratio = C(Ratio, MinRatio, MaxRatio, d.Ratio),
+            RangeDb = C(RangeDb, MinRangeDb, MaxRangeDb, d.RangeDb),
+            AttackMs = C(AttackMs, MinAttackMs, MaxAttackMs, d.AttackMs),
+            HoldMs = C(HoldMs, MinHoldMs, MaxHoldMs, d.HoldMs),
+            ReleaseMs = C(ReleaseMs, MinReleaseMs, MaxReleaseMs, d.ReleaseMs),
+        };
+    }
+}
+
+public sealed record SimpleExpanderSetRequest(SimpleExpanderConfig Config);
+
+/// <summary>Live SimpleExpander reading for <c>GET /api/tx/simple-expander/meter</c>.
+/// <c>LevelDb</c> is the highest detector level over the last TX block (dB
+/// below full scale, after mic gain; floored at -120). <c>GainReductionDb</c>
+/// is the cut being applied (0 = none); while the expander is OFF it is the
+/// cut it WOULD apply. <c>Active</c> is false when no TX block was metered
+/// recently (not keyed or monitoring, or a digital mode). Polling keeps the
+/// detector running for about 2 s while the expander is OFF, without touching
+/// the audio.</summary>
+public sealed record SimpleExpanderMeterDto(double? LevelDb, double GainReductionDb, bool Active)
+{
+    public static SimpleExpanderMeterDto Inactive { get; } = new(null, 0.0, false);
+}
 
 /// <summary>Live DEXP detector reading for <c>GET /api/tx/dexp/meter</c>.
 /// <c>PeakDbv</c> is the smoothed detector peak over the last TX block (dBV =

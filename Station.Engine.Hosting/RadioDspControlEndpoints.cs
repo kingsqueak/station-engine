@@ -255,6 +255,22 @@ public static class RadioDspControlEndpoints
         endpoints.MapGet("/api/tx/dexp/meter", (DspPipelineService dsp) =>
             Results.Ok(dsp.GetDexpMeter()));
 
+        // SimpleExpander: the managed downward expander, the alternative to
+        // DEXP. Replace-style; values are clamped by RadioService. Enabling
+        // one of the two turns the other off.
+        endpoints.MapPost("/api/tx/simple-expander", (SimpleExpanderSetRequest req, RadioService r) =>
+        {
+            if (req?.Config is not { } cfg)
+                return Results.BadRequest(new { error = "config required" });
+            log.LogInformation(
+                "api.tx.simpleExpander enabled={Enabled} thresh={Thresh:F1}dB ratio={Ratio:F1} range={Range:F1}dB attack={Attack}ms hold={Hold}ms release={Release}ms",
+                cfg.Enabled, cfg.ThresholdDb, cfg.Ratio, cfg.RangeDb, cfg.AttackMs, cfg.HoldMs, cfg.ReleaseMs);
+            return Results.Ok(r.SetSimpleExpander(cfg));
+        });
+
+        endpoints.MapGet("/api/tx/simple-expander/meter", (DspPipelineService dsp) =>
+            Results.Ok(dsp.GetSimpleExpanderMeter()));
+
         return endpoints;
     }
 

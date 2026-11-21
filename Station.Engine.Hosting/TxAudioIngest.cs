@@ -813,7 +813,13 @@ public sealed class TxAudioIngest : IDisposable
                audioModem: audioModem,
                cwId: cwId)
     {
+        _monitorIdleSilence = () => pipeline.TxMonitorIdleSilence;
     }
+
+    // SimpleHPSDR: the off-air MON preview's idle silencer is the operator's
+    // choice (TX Audio page), off unless asked for, so the preview carries the
+    // room noise that would go on the air and the mic expander can be set by ear.
+    private readonly Func<bool> _monitorIdleSilence = static () => false;
 
     /// <summary>Test-only constructor that wires the engine + MOX lookups
     /// through plain delegates so unit tests don't need a live pipeline.
@@ -2048,7 +2054,7 @@ public sealed class TxAudioIngest : IDisposable
         // below. Fully open blocks pass bit-identical; fully closed are zeros.
         float previewGainStart = 1f;
         float previewGainEnd = 1f;
-        if (monitorOn && !moxNow
+        if (monitorOn && !moxNow && _monitorIdleSilence()
             && source is MicBlockSource.Host or MicBlockSource.BrowserMic or MicBlockSource.RadioMic or MicBlockSource.VirtualCable)
         {
             (previewGainStart, previewGainEnd) = AdvanceIdleMonitorPreviewGate(samples);

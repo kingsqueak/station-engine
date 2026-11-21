@@ -328,6 +328,10 @@ public sealed class OfflinePreviewDspEngine : IDspEngine, ITxAudioPluginHost, IT
 
     public DexpMeterDto GetDexpMeter() => _tx.GetDexpMeter();
 
+    public void SetSimpleExpanderConfig(SimpleExpanderConfig cfg) => _tx.SetSimpleExpanderConfig(cfg);
+
+    public SimpleExpanderMeterDto GetSimpleExpanderMeter() => _tx.GetSimpleExpanderMeter();
+
     public void SetTxMonitorEnabled(bool enabled) => _tx.SetTxMonitorEnabled(enabled);
 
     public int ReadTxMonitorAudio(Span<float> output) => _tx.ReadTxMonitorAudio(output);

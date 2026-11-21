@@ -756,6 +756,8 @@ public sealed partial class RadioService : IDisposable
         // legacy DB row falls back to DexpConfig.Default (OFF) so the TX mic
         // path is unchanged until the operator enables it.
         var persistedDexp = (_dspSettingsStore.GetDexp() ?? DexpConfig.Default).Clamped();
+        var persistedSimpleExpander =
+            (_dspSettingsStore.GetSimpleExpander() ?? SimpleExpanderConfig.Default).Clamped();
         // SSB bandpass "rectangularity" (issue #871). Null on a fresh install
         // falls back to BandpassWindow.Normal, which resolves to the WDSP
         // open-time tap count (nc = max(2048, dsp_size)), so first-connect audio
@@ -1078,6 +1080,10 @@ public sealed partial class RadioService : IDisposable
         {
             TxPhaseRotator = persistedTxPhaseRotator,
             Dexp = persistedDexp,
+            // Only one mic expander runs: DEXP wins if both were stored on.
+            SimpleExpander = persistedDexp.Enabled
+                ? persistedSimpleExpander with { Enabled = false }
+                : persistedSimpleExpander,
             AmBroadcast = persistedAmBroadcast,
             AmCarrierLevelPercent = persistedAmCarrierLevel,
             TxLowCutHz = _ssbTxFilter.LoAbs,
@@ -7320,11 +7326,40 @@ public sealed partial class RadioService : IDisposable
                 "sideChannelLowHz must be below sideChannelHighHz", nameof(cfg));
         }
         var clamped = cfg.Clamped();
-        Mutate(s => s with { Dexp = clamped });
+        // Only one mic expander runs: enabling DEXP turns SimpleExpander off.
+        SimpleExpanderConfig? otherOff = null;
+        Mutate(s =>
+        {
+            if (clamped.Enabled && s.SimpleExpander is { Enabled: true } other)
+                otherOff = other with { Enabled = false };
+            return s with { Dexp = clamped, SimpleExpander = otherOff ?? s.SimpleExpander };
+        });
         _dspSettingsStore.Upsert(clamped);
+        if (otherOff is not null) _dspSettingsStore.Upsert(otherOff);
         _log.LogInformation(
             "radio.setDexp enabled={Enabled} thresh={Thresh:F1}dBV exp={Exp:F1}dB hyst={Hyst:F1}dB",
             clamped.Enabled, clamped.ThresholdDbv, clamped.ExpansionDb, clamped.HysteresisDb);
+        return Snapshot();
+    }
+
+    // SimpleExpander (managed downward expander), the alternative to DEXP.
+    // Replace-style and clamped. Enabling it turns DEXP off.
+    public StateDto SetSimpleExpander(SimpleExpanderConfig cfg)
+    {
+        ArgumentNullException.ThrowIfNull(cfg);
+        var clamped = cfg.Clamped();
+        DexpConfig? otherOff = null;
+        Mutate(s =>
+        {
+            if (clamped.Enabled && s.Dexp is { Enabled: true } other)
+                otherOff = other with { Enabled = false };
+            return s with { SimpleExpander = clamped, Dexp = otherOff ?? s.Dexp };
+        });
+        _dspSettingsStore.Upsert(clamped);
+        if (otherOff is not null) _dspSettingsStore.Upsert(otherOff);
+        _log.LogInformation(
+            "radio.setSimpleExpander enabled={Enabled} thresh={Thresh:F1}dB ratio={Ratio:F1} range={Range:F1}dB",
+            clamped.Enabled, clamped.ThresholdDb, clamped.Ratio, clamped.RangeDb);
         return Snapshot();
     }
 

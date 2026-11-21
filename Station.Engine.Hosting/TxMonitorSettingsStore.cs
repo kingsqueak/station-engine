@@ -45,6 +45,33 @@ public sealed class TxMonitorSettingsStore : IDisposable
         }
     }
 
+    /// <summary>SimpleHPSDR: silence the off-air MON preview while the mic is
+    /// idle. False unless the operator turned it on.</summary>
+    public bool IdleSilence
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _settings.FindAll().FirstOrDefault()?.IdleSilence ?? false;
+            }
+        }
+    }
+
+    public bool SetIdleSilence(bool on)
+    {
+        lock (_sync)
+        {
+            var entry = _settings.FindAll().FirstOrDefault()
+                ?? new TxMonitorSettingsEntry { VolumeDb = DefaultVolumeDb };
+            entry.IdleSilence = on;
+            entry.UpdatedUtc = DateTime.UtcNow;
+            if (entry.Id == 0) _settings.Insert(entry);
+            else _settings.Update(entry);
+        }
+        return on;
+    }
+
     public double SetVolumeDb(double volumeDb)
     {
         var normalized = Normalize(volumeDb);
@@ -75,5 +102,6 @@ public sealed class TxMonitorSettingsEntry
 {
     public int Id { get; set; }
     public double VolumeDb { get; set; }
+    public bool? IdleSilence { get; set; }
     public DateTime UpdatedUtc { get; set; }
 }

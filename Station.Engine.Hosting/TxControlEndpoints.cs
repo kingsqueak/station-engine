@@ -456,6 +456,7 @@ public static class TxControlEndpoints
                 meterOnly = enabled && pipe.TxMonitorMeterOnly,
                 monitorOnTransmit = tx.MonitorOnTransmit,
                 volumeDb = pipe.TxMonitorVolumeDb,
+                idleSilence = pipe.TxMonitorIdleSilence,
             });
         }
 
@@ -476,6 +477,7 @@ public static class TxControlEndpoints
                 meterOnly = state.MeterOnly,
                 monitorOnTransmit = state.MonitorOnTransmit,
                 volumeDb = pipe.TxMonitorVolumeDb,
+                idleSilence = pipe.TxMonitorIdleSilence,
             });
         }
 
@@ -494,6 +496,13 @@ public static class TxControlEndpoints
             DspPipelineService pipe) => Results.Ok(new
             {
                 volumeDb = pipe.SetTxMonitorVolumeDb(body.VolumeDb),
+            }));
+
+        endpoints.MapPut("/api/tx-audio-suite/monitor-idle-silence", (
+            MonitorIdleSilenceSetRequest body,
+            DspPipelineService pipe) => Results.Ok(new
+            {
+                idleSilence = pipe.SetTxMonitorIdleSilence(body.Enabled),
             }));
 
         // Preview-path toggle. The engine call lives in
@@ -662,6 +671,7 @@ internal sealed record PreviewSetRequest(
     bool? MonitorOnTransmit = null);
 
 internal sealed record MonitorVolumeSetRequest(double VolumeDb);
+internal sealed record MonitorIdleSilenceSetRequest(bool Enabled);
 
 /// <summary>PUT body for /api/tx/audio-profile-selection.</summary>
 internal sealed record TxAudioProfileSelectionRequest(string? ProfileId, string? AutoProfileId);
