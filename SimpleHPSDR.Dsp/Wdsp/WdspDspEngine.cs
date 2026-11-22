@@ -5782,6 +5782,10 @@ public sealed partial class WdspDspEngine : IDspEngine, ITxAudioPluginHost
             }
         }
 
+        // SimpleStudio, the operator's effects chain, has the mic first. Off,
+        // it costs two volatile reads; it shares the plugin bypass.
+        ProcessSimpleStudioBlock(iin, skipTxAudioPlugins);
+
         // DEXP (downward expander / noise gate) runs in place on the mic block
         // right before TXA, like Thetis xdexp ahead of fexchange0. Digital,
         // tone and injected-audio bypass skip it so those paths stay

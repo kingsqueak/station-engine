@@ -758,6 +758,8 @@ public sealed partial class RadioService : IDisposable
         var persistedDexp = (_dspSettingsStore.GetDexp() ?? DexpConfig.Default).Clamped();
         var persistedSimpleExpander =
             (_dspSettingsStore.GetSimpleExpander() ?? SimpleExpanderConfig.Default).Clamped();
+        var persistedSimpleStudio =
+            (_dspSettingsStore.GetSimpleStudio() ?? SimpleStudioConfig.Default).Normalized();
         // SSB bandpass "rectangularity" (issue #871). Null on a fresh install
         // falls back to BandpassWindow.Normal, which resolves to the WDSP
         // open-time tap count (nc = max(2048, dsp_size)), so first-connect audio
@@ -1084,6 +1086,7 @@ public sealed partial class RadioService : IDisposable
             SimpleExpander = persistedDexp.Enabled
                 ? persistedSimpleExpander with { Enabled = false }
                 : persistedSimpleExpander,
+            SimpleStudio = persistedSimpleStudio,
             AmBroadcast = persistedAmBroadcast,
             AmCarrierLevelPercent = persistedAmCarrierLevel,
             TxLowCutHz = _ssbTxFilter.LoAbs,
@@ -7362,6 +7365,25 @@ public sealed partial class RadioService : IDisposable
             clamped.Enabled, clamped.ThresholdDb, clamped.Ratio, clamped.RangeDb);
         return Snapshot();
     }
+
+    // SimpleStudio (the operator's mic effects chain). Replace-style; the
+    // config is made valid (unknown effects dropped, values in range).
+    public StateDto SetSimpleStudio(SimpleStudioConfig cfg)
+    {
+        ArgumentNullException.ThrowIfNull(cfg);
+        var valid = cfg.Normalized();
+        Mutate(s => s with { SimpleStudio = valid });
+        _dspSettingsStore.Upsert(valid);
+        _log.LogInformation(
+            "radio.setSimpleStudio enabled={Enabled} effects={Effects}",
+            valid.Enabled, SimpleStudioSummary(valid));
+        return Snapshot();
+    }
+
+    internal static string SimpleStudioSummary(SimpleStudioConfig cfg) =>
+        cfg.Effects is { Count: > 0 } effects
+            ? string.Join(">", effects.Select(e => e.Enabled ? e.Type : $"({e.Type})"))
+            : "none";
 
     // ---------------- PureSignal ----------------
     // SetPs flips master arm and cal-mode in a single mutate so the engine

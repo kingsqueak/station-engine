@@ -271,6 +271,21 @@ public static class RadioDspControlEndpoints
         endpoints.MapGet("/api/tx/simple-expander/meter", (DspPipelineService dsp) =>
             Results.Ok(dsp.GetSimpleExpanderMeter()));
 
+        // SimpleStudio: the operator's chain of mic effects, first on the TX
+        // mic block. Replace-style: the whole chain each time; RadioService
+        // makes it valid. See StudioCatalogue (Contracts) for the effects.
+        endpoints.MapPost("/api/tx/simple-studio", (SimpleStudioSetRequest req, RadioService r) =>
+        {
+            if (req?.Config is not { } cfg)
+                return Results.BadRequest(new { error = "config required" });
+            if (cfg.Effects is { Count: > StudioCatalogue.MaxEffects })
+                return Results.BadRequest(new { error = $"at most {StudioCatalogue.MaxEffects} effects" });
+            return Results.Ok(r.SetSimpleStudio(cfg));
+        });
+
+        endpoints.MapGet("/api/tx/simple-studio/meters", (DspPipelineService dsp) =>
+            Results.Ok(dsp.GetSimpleStudioMeters()));
+
         return endpoints;
     }
 

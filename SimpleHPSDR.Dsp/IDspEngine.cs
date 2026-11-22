@@ -645,6 +645,18 @@ public interface IDspEngine : IDisposable
     /// running for ~2 s while the expander is OFF.</summary>
     SimpleExpanderMeterDto GetSimpleExpanderMeter() => SimpleExpanderMeterDto.Inactive;
 
+    // ----------------- SimpleStudio (the operator's mic effects chain) ----
+    // Runs first on the TX mic block, ahead of DEXP and SimpleExpander.
+    // Default no-op for engines without a mic path.
+
+    /// <summary>Apply the SimpleStudio chain (made valid). Effects already
+    /// running keep their state, matched by id.</summary>
+    void SetSimpleStudioConfig(SimpleStudioConfig cfg) { }
+
+    /// <summary>Live SimpleStudio readings. Polling keeps the level
+    /// measurement on for ~2 s.</summary>
+    SimpleStudioMetersDto GetSimpleStudioMeters() => SimpleStudioMetersDto.Inactive;
+
     // ----------------- TX Monitor (preview path, issue #106 follow-up) ----
     // Lets the operator hear the post-bandpass / post-CFIR TX audio on a local
     // audio sink — with or without keying — so they can dial in the

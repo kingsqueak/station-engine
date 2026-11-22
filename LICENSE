@@ -16,7 +16,12 @@ License, version 3 or (at your option) any later version (GPL-3.0-or-later). Its
 provenance and licensing record are documented in
 Station.Engine.Hosting/SpeTaurus/SOURCE.md.
 
-Because the engine combines both, an engine distribution without the optional
+The SimpleStudio mic effects under SimpleHPSDR.Dsp/Studio/, with
+SimpleHPSDR.Contracts/SimpleStudio.cs and SimpleHPSDR.Dsp.Tests/, are a port of
+Patch Prime's effects and are licensed under GPL-3.0-or-later as well; see
+ATTRIBUTIONS.md.
+
+Because the engine combines these, an engine distribution without the optional
 ASIO host bridge is conveyed under the GNU General Public License, version 3 or
 (at your option) any later version. Windows distributions that include the
 Steinberg ASIO SDK-derived host bridge select the SDK's GPL version 3 option,

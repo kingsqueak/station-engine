@@ -1660,7 +1660,10 @@ public sealed record StateDto(
     // SimpleExpander: the managed downward expander on the TX mic block, the
     // alternative to DEXP. Null = SimpleExpanderConfig.Default (OFF). Only one
     // of the two is ever enabled; RadioService turns the other off.
-    SimpleExpanderConfig? SimpleExpander = null);
+    SimpleExpanderConfig? SimpleExpander = null,
+    // SimpleStudio: the operator's chain of mic effects, first thing on the TX
+    // mic block. Null = SimpleStudioConfig.Default (off, empty).
+    SimpleStudioConfig? SimpleStudio = null);
 
 /// <summary>Canonical CW constants shared between backend and wire DTOs.
 /// Single source of truth — CwOffset (server-side) and StateDto both

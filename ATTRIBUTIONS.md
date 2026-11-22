@@ -581,6 +581,21 @@ names and street-address text before the response reaches the UI. Plotted
 coordinates represent license mailing addresses, not verified transmitter
 locations.
 
+## SimpleStudio mic effects (Patch Prime)
+
+The SimpleStudio effects chain (`SimpleHPSDR.Dsp/Studio/`,
+`SimpleHPSDR.Contracts/SimpleStudio.cs`, `SimpleHPSDR.Dsp.Tests/`) is a C#
+port, for one channel, of the built-in effects of
+[Patch Prime](https://github.com/kingsqueak/patch-prime) (`engine/src/`,
+commit 2608d58), copyright 2026 KC2RGW Chris, GPL-3.0-or-later; the ported
+files keep that licence. Ported: parametric EQ, compressor, de-esser,
+multiband compressor, noise gate, expander, broadcast leveler, safety limiter,
+reverb and gain. The designs they use are published ones: the biquads follow
+Robert Bristow-Johnson's "Audio EQ Cookbook", the loudness weighting and the
+true-peak interpolator follow ITU-R BS.1770-4 (K-weighting coefficients as
+computed in libebur128, MIT), and the reverb's diffuser lengths follow
+Schroeder/Freeverb practice.
+
 ## Per-file header format
 
 Every first-party Zeus source file begins with an SPDX identifier,

@@ -533,6 +533,47 @@ public sealed class DspSettingsStore : IDisposable
         }
     }
 
+    // SimpleStudio: the chain is a list, so it is stored as one JSON text.
+    // Text that no longer reads (a hand edit, a format from the future) counts
+    // as not stored.
+    public SimpleStudioConfig? GetSimpleStudio(string profileId = "default")
+    {
+        var e = _entries.FindOne(x => x.ProfileId == profileId);
+        if (e is null || string.IsNullOrWhiteSpace(e.SimpleStudioJson)) return null;
+        try
+        {
+            return System.Text.Json.JsonSerializer.Deserialize<SimpleStudioConfig>(e.SimpleStudioJson);
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return null;
+        }
+    }
+
+    public void Upsert(SimpleStudioConfig config, string profileId = "default")
+    {
+        ArgumentNullException.ThrowIfNull(config);
+        var existing = _entries.FindOne(x => x.ProfileId == profileId);
+        bool insert = existing is null;
+        if (existing is null)
+        {
+            var nrSeed = new NrConfig();
+            existing = new DspSettingsEntry
+            {
+                ProfileId = profileId,
+                NrMode = nrSeed.NrMode,
+                AnfEnabled = nrSeed.AnfEnabled,
+                SnbEnabled = nrSeed.SnbEnabled,
+                NbpNotchesEnabled = nrSeed.NbpNotchesEnabled,
+                NbMode = nrSeed.NbMode,
+                NbThreshold = nrSeed.NbThreshold,
+            };
+        }
+        existing.SimpleStudioJson = System.Text.Json.JsonSerializer.Serialize(config);
+        existing.UpdatedUtc = DateTime.UtcNow;
+        if (insert) _entries.Insert(existing); else _entries.Update(existing);
+    }
+
     // SimpleExpander: stored like DEXP, nullable scalars behind a set marker.
     public SimpleExpanderConfig? GetSimpleExpander(string profileId = "default")
     {
@@ -1172,6 +1213,8 @@ public sealed class DspSettingsEntry
     public bool? TxPhaseRotatorAutoMode { get; set; }
     // DEXP (downward expander / noise gate). DexpSet null on legacy rows →
     // GetDexp() returns null → RadioService uses DexpConfig.Default (OFF).
+    // SimpleStudio: the whole chain as one JSON text. Null on older rows.
+    public string? SimpleStudioJson { get; set; }
     public bool? SimpleExpanderSet { get; set; }
     public bool? SimpleExpanderEnabled { get; set; }
     public double? SimpleExpanderThresholdDb { get; set; }

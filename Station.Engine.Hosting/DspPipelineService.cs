@@ -1671,6 +1671,8 @@ public partial class DspPipelineService : BackgroundService,
     // when the dexp instance is created.
     private DexpConfig _appliedDexp = DexpConfig.Default;
     private SimpleExpanderConfig _appliedSimpleExpander = SimpleExpanderConfig.Default;
+    // Compared by reference: RadioService swaps in a new record on every set.
+    private SimpleStudioConfig _appliedSimpleStudio = SimpleStudioConfig.Default;
 
     // RX front-end (step attenuator + Mercury preamp). Mirrored to a live
     // Protocol2Client when the value moves; on P1 these go through
@@ -3903,6 +3905,15 @@ public partial class DspPipelineService : BackgroundService,
         lock (_engineLock)
         {
             return CurrentEngine?.GetDexpMeter() ?? DexpMeterDto.Inactive;
+        }
+    }
+
+    /// <summary>Live SimpleStudio readings from the current engine.</summary>
+    public virtual SimpleStudioMetersDto GetSimpleStudioMeters()
+    {
+        lock (_engineLock)
+        {
+            return CurrentEngine?.GetSimpleStudioMeters() ?? SimpleStudioMetersDto.Inactive;
         }
     }
 
@@ -6772,6 +6783,12 @@ public partial class DspPipelineService : BackgroundService,
             engine.SetSimpleExpanderConfig(simpleExpander);
             _appliedSimpleExpander = simpleExpander;
         }
+        var simpleStudio = s.SimpleStudio ?? SimpleStudioConfig.Default;
+        if (resync || !ReferenceEquals(simpleStudio, _appliedSimpleStudio))
+        {
+            engine.SetSimpleStudioConfig(simpleStudio);
+            _appliedSimpleStudio = simpleStudio;
+        }
 
         // ---- RX step attenuator (operator + auto-ATT offset) -----------
         // Issue #126. Mirror RadioService's effective-atten composition
@@ -7189,6 +7206,8 @@ public partial class DspPipelineService : BackgroundService,
         engine.SetDexpConfig(dexp);
         var simpleExpander = s.SimpleExpander ?? SimpleExpanderConfig.Default;
         engine.SetSimpleExpanderConfig(simpleExpander);
+        var simpleStudio = s.SimpleStudio ?? SimpleStudioConfig.Default;
+        engine.SetSimpleStudioConfig(simpleStudio);
         // Manual notches: feed the LO first (notch positioning reference), then
         // re-apply the operator's notch set onto the fresh engine. A reconnect
         // builds a brand-new engine whose notch DB is empty; RadioService holds
@@ -7235,6 +7254,7 @@ public partial class DspPipelineService : BackgroundService,
         _appliedCfc = cfc;
         _appliedDexp = dexp;
         _appliedSimpleExpander = simpleExpander;
+        _appliedSimpleStudio = simpleStudio;
         _appliedRxBandpassWindow = s.RxFilterWindow;
         _appliedTxBandpassWindow = s.TxFilterWindow;
         _appliedRxFilterPhase = s.RxFilterPhase;
