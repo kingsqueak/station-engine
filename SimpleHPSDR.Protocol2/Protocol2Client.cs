@@ -804,6 +804,7 @@ public sealed partial class Protocol2Client : IDisposable, IAsyncDisposable
         IPEndPoint endpoint,
         bool requireImmediate = false)
     {
+        if (SpikeDiagOn) SpikeDiagNoteSend(endpoint.Port);
         bool gateTaken = false;
         bool txIq = requireImmediate && endpoint.Port == 1029;
         bool admissionRejected = false;
@@ -6066,6 +6067,7 @@ public sealed partial class Protocol2Client : IDisposable, IAsyncDisposable
     private void HandleDdcPacket(byte[] buf, int ddcIndex, bool paired)
     {
         var seq = BinaryPrimitives.ReadUInt32BigEndian(buf);
+        if (SpikeDiagOn) SpikeDiagScan(buf, ddcIndex, seq, paired);
         if (paired || ddcIndex == RxDiagDdc(_boardKind))
         {
             if (_haveFirstRxDiagSeq && _lastRxDiagDdc == ddcIndex && seq != unchecked(_lastRxDiagSeq + 1))
